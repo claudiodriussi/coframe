@@ -1,0 +1,107 @@
+---
+# The system recognize all the types defined in SQLAlchemy, but from them you
+# can define your own types with specific characteristics even only for semantic
+# reasons. You can define single fields or groups of fields that are often used
+# together as mixins. The attributes defined can be overloaded in the tables.
+types:
+
+  ID:
+    inherit: Integer
+    primary_key: True
+    autoincrement: True
+    title: "Unique Identifier"
+    help: |
+      The primary key for the table
+
+  ShortID:
+    inherit: String
+    length: 32
+    primary_key: True
+    title: "Unique Identifier"
+    help: |
+      The primary key for the table
+
+  ShortStr:
+    inherit: String
+    length: 32
+
+  SKU:
+    inherit: ShortStr
+    nullable: False
+
+  Description:
+    inherit: String
+    nullable: False
+
+  Name:
+    inherit: Description
+    index: True
+
+  Password:
+    inherit: String
+    nullable: False
+    title: "Password"
+    help: |
+      Please insert a robust password and keep it safe
+
+  Email:
+    inherit: String
+    validate: email_validator
+
+  Json:
+    inherit: JSON
+    default: {}
+    nullable: True
+
+  Markdown:
+    inherit: Text
+
+  TimeStamp:
+    - name: created_at
+      type: DateTime
+      default: now
+      nullable: False
+    - name: updated_at
+      type: DateTime
+      default: now
+      nullable: False
+
+  Address:
+    - name: address
+      type: String
+    - name: city
+      type: String
+    - name: state
+      type: String
+    - name: zip
+      type: String
+    - name: country
+      type: String
+
+tables:
+
+  Config:
+    name: configs
+    title: "Configuration"
+    help: |
+      Wide app configuration file
+    tags: [short]
+
+    columns:
+      - name: id
+        type: ShortID
+
+      - name: description
+        type: Description
+
+      - name: group
+        type: ShortStr
+
+      - name: help
+        type: Markdown
+
+      - name: value
+        type: String
+
+      - name: values
+        type: Json

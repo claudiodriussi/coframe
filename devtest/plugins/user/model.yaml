@@ -1,0 +1,57 @@
+---
+
+tables:
+
+  User:
+    name: users
+    title: "User"
+    help: |
+      The user table contains the user information
+    tags: [anag]
+    mixins: [TimeStamp]
+    columns:
+      - name: id
+        type: ID
+
+      - name: name
+        type: Name
+        index: False
+
+      - name: username
+        type: String
+        unique: True
+        nullable: False
+
+      - name: password
+        type: Password
+
+      - name: email
+        type: Email
+        nullable: False
+
+      - name: address
+        type: Address
+
+      - name: is_active
+        title: "Active"
+        type: Boolean
+        default: True
+
+  UserLog:
+    name: user_logs
+    mixins: [TimeStamp]
+    columns:
+      - name: id
+        type: ID
+
+      - name: level
+        type: String
+
+      - name: message
+        type: String
+
+      - name: user_id
+        type: User.id
+
+      - name: endpoint
+        type: Json

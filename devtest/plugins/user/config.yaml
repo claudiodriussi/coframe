@@ -1,0 +1,15 @@
+---
+config:
+  name: user
+  version: 0.0.1
+  description: User management plugin
+  license: MIT
+  author: "Claudio Driussi"
+  url: https://claudiodriussi.it
+  release_date:
+  depends_on: [common]
+
+# - tags
+# - thumb
+# - requirements
+# - update_db : no, auto, revised

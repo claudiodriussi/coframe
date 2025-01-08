@@ -1,0 +1,18 @@
+---
+# qui la configurazione generale.
+config:
+  name: mytestapp
+  version: 0.0.1
+  description: "A simple test app"
+  license: MIT
+  author: "Claudio Driussi"
+
+  # cartelle che contengono i plugins
+  plugins: [plugins]
+
+  # engine della app, forse si possono forzare le configurazioni per test o altro
+  db_engine: "sqlite:///:memory:"
+
+  # quando si entra con queste credenziali si possono fare operazioni sui databases
+  admin_user: "admin"
+  admin_passwd: "not needed"

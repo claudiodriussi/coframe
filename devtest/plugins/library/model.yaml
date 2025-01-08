@@ -1,0 +1,10 @@
+---
+
+tables:
+
+  User:
+
+    columns:
+      - name: is_student
+        title: "Student"
+        type: Boolean
