@@ -40,14 +40,6 @@ class App:
         and check if they are plugins, since plugins dir are added to the python
         path, all plugins must have a unique name. All plugins are added to a
         dict of plugins.
-
-        Then we sort them by dependencies and
-
-        La lista delle cartelle di plugin le prendo dalla configurazione.
-        faccio l'aggiunta dinamica della cartella al pythonpath
-        scarto le cartelle che non hanno il file config.yaml
-        genero un oggetto per ogni plugin trovato
-        eseguo l'ordinamento
         """
         self.plugins = {}
         for plugins_dir in self.config['plugins']:
@@ -116,7 +108,7 @@ class App:
         for t in type_classes:
             try:
                 py_type = t().python_type
-                self.types[t.__name__] = Type(t.__name__, python_type=py_type)
+                self.types[t.__name__] = Type(t.__name__, "", python_type=py_type)
             except Exception:
                 # when the type does not have a python_type
                 continue
@@ -129,7 +121,7 @@ class App:
                 for name, value in types.items():
                     if name in self.types:
                         raise ValueError(f"Type already defined: {name}")
-                    self.types[name] = Type(name, attributes=value)
+                    self.types[name] = Type(name, plugin.name, attributes=value)
 
         # resolve inheritance of types
         for name in self.types:
@@ -172,23 +164,45 @@ class Plugin:
 
 class Type:
 
-    def __init__(self, name, attributes={}, python_type=None):
+    def __init__(self, name, plugin, attributes={}, python_type=None):
+        """a Type is a class that defines a type of data. It can be a standard
+        type from sqlalchemy or a custom type defined in a plugin.
+        Types can inherit from other types, in this case the attributes of the
+        inherited type are copied to the inheriting type. Attributes are
+        defaulted in fields of tables
+
+        Args:
+            name (str): the name of the type
+            plugin (str): the name of the plugin that defines the type
+            attributes (dict, optional): attributes of the type. Defaults to {}.
+            python_type (obj, optional): the final python type. Defaults to None.
+        """
         self.name = name
+        self.plugin = plugin
         self.python_type = python_type
         self.attributes = attributes
-        self.ineritance = []
+        self.inheritance = []
+        self.columns = attributes.get('columns', [])
 
     def resolve(self, types):
-        if self.python_type:
-            # already resolved
-            return
-        if 'inherits' in self.attributes:
-            if self.name not in types:
-                raise ValueError(f"Type {self.name} not found")
-            # resolve recursively
-        else:
-            # is a combo type
-            pass
+        """Resolve inheritance of types recursively. If a type inherits from
+        another type, then the attributes of the inherited type are copied to
+        the inheriting type. The inheritance is resolved recursively until the
+        type does not have any more inheritance.
+
+        Args:
+            types (dict): a dictionary of all types
+        """
+        type = self
+        while 'inherits' in type.attributes:
+            if type.name not in types:
+                raise ValueError(f"Type {type.name} not found")
+            type = types[type.attributes['inherits']]
+            self.inheritance.append(type.name)
+            attr = type.attributes.copy()
+            attr.update(self.attributes)
+            self.attributes = attr
+        self.python_type = type.python_type
 
 
 class BaseApp:

@@ -6,7 +6,7 @@
 types:
 
   ID:
-    inherit: Integer
+    inherits: Integer
     primary_key: True
     autoincrement: True
     title: "Unique Identifier"
@@ -14,7 +14,7 @@ types:
       The primary key for the table
 
   ShortID:
-    inherit: String
+    inherits: String
     length: 32
     primary_key: True
     title: "Unique Identifier"
@@ -22,61 +22,66 @@ types:
       The primary key for the table
 
   ShortStr:
-    inherit: String
+    inherits: String
     length: 32
 
   SKU:
-    inherit: ShortStr
+    inherits: ShortStr
     nullable: False
 
   Description:
-    inherit: String
+    inherits: String
     nullable: False
 
   Name:
-    inherit: Description
+    inherits: Description
     index: True
 
   Password:
-    inherit: String
+    inherits: String
     nullable: False
     title: "Password"
     help: |
       Please insert a robust password and keep it safe
 
   Email:
-    inherit: String
+    inherits: String
     validate: email_validator
 
   Json:
-    inherit: JSON
+    inherits: JSON
     default: {}
     nullable: True
 
   Markdown:
-    inherit: Text
+    inherits: Text
 
   TimeStamp:
-    - name: created_at
-      type: DateTime
-      default: now
-      nullable: False
-    - name: updated_at
-      type: DateTime
-      default: now
-      nullable: False
+    title: "Timestamp"
+    columns:
+      - name: created_at
+        type: DateTime
+        default: now
+        nullable: False
+      - name: updated_at
+        type: DateTime
+        default: now
+        nullable: False
 
   Address:
-    - name: address
-      type: String
-    - name: city
-      type: String
-    - name: state
-      type: String
-    - name: zip
-      type: String
-    - name: country
-      type: String
+    title: "Address"
+    columns:
+      - name: address
+        type: String
+        nullable: False
+      - name: city
+        type: String
+      - name: state
+        type: String
+      - name: zip
+        type: String
+      - name: country
+        type: String
 
 tables:
 
