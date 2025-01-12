@@ -1,6 +1,5 @@
 import sys
 import inspect
-from typing import Dict, Set
 from pathlib import Path
 import yaml
 from sqlalchemy.ext.declarative import declarative_base
@@ -17,7 +16,7 @@ class App:
         self.tables = {}
         self.tables_list = []
 
-    def load_config(self, config="config.yaml"):
+    def load_config(self, config: str = "config.yaml"):
         defaults = {
             "name": "myapp",
             "version": '',
@@ -66,7 +65,7 @@ class App:
         """Sort plugins by dependencies using Kahn's algorithm"""
 
         # Build the graph of dependencies
-        dependencies: Dict[str, Set[str]] = {}
+        dependencies = {}
         for name, value in self.plugins.items():
             deps = value.config.get('depends_on', [])
             if isinstance(deps, str):
@@ -100,7 +99,10 @@ class App:
         self.sorted = result
 
     def _calc_types(self):
-        """"""
+        """Calculate all types from plugins and sqlalchemy.types. Resolve
+        inheritance of types. The types are stored in a dict with the name as
+        key and the Type object as value.
+        """
 
         # find all standard types in sqlalchemy.types
         self.types = {}
@@ -132,10 +134,29 @@ class App:
         self.tables = {}
         self.tables_list = []
 
+        # find all tables in plugins
+        for name in self.sorted:
+            plugin = self.plugins[name]
+            for data in plugin.data:
+                tables = data.get('tables', {})
+                for name, value in tables.items():
+                    if name in self.tables:
+                        self.tables[name].update(value, self)
+                    else:
+                        table = Table(name, plugin.name, value, self)
+                        self.tables[name] = table
+                        self.tables_list.append(name)
+
 
 class Plugin:
 
     def __init__(self, plugin_dir: Path):
+        """A plugin is a folder that contains a config.yaml file plus other yaml
+        files, python files and if needed other type of files.
+
+        Args:
+            plugin_dir (Path): the dir of the plugin
+        """
         defaults = {
             "name": plugin_dir.name,
             "version": '0.0.1',
@@ -153,18 +174,21 @@ class Plugin:
         # load data from yaml files and get list of python files
         self.data = []
         self.sources = []
+        self.files = []
         for file in plugin_dir.iterdir():
             if file.is_file():
                 if file.suffix.lower() == '.py':
                     self.sources.append(file.stem)
-                if file.suffix.lower() == '.yaml' and file.stem != 'config':
+                elif file.suffix.lower() == '.yaml' and file.stem != 'config':
                     with open(file) as f:
                         self.data.append(yaml.safe_load(f))
+                else:
+                    self.files.append(file)
 
 
 class Type:
 
-    def __init__(self, name, plugin, attributes={}, python_type=None):
+    def __init__(self, name: str, plugin: str, attributes: dict = {}, python_type: object = None):
         """a Type is a class that defines a type of data. It can be a standard
         type from sqlalchemy or a custom type defined in a plugin.
         Types can inherit from other types, in this case the attributes of the
@@ -184,7 +208,7 @@ class Type:
         self.inheritance = []
         self.columns = attributes.get('columns', [])
 
-    def resolve(self, types):
+    def resolve(self, types: dict):
         """Resolve inheritance of types recursively. If a type inherits from
         another type, then the attributes of the inherited type are copied to
         the inheriting type. The inheritance is resolved recursively until the
@@ -203,6 +227,24 @@ class Type:
             attr.update(self.attributes)
             self.attributes = attr
         self.python_type = type.python_type
+
+
+class Table:
+
+    def __init__(self, name: str, plugin: str, attributes: dict, app: App):
+        self.name = attributes.get('name', name.lower())
+        self.plugin = plugin
+        self.attributes = attributes
+        self.columns = []
+        self.update(attributes, app)
+
+    def update(self, attributes: dict, app: App):
+        for column in attributes['columns']:
+            self.columns.append(column)
+        attr = attributes.copy()
+        attr.update(self.attributes)
+        self.attributes = attr
+        self.attributes.pop('columns', None)
 
 
 class BaseApp:
