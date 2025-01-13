@@ -123,7 +123,7 @@ class App:
                 for name, value in types.items():
                     if name in self.types:
                         raise ValueError(f"Type already defined: {name}")
-                    self.types[name] = Type(name, plugin.name, attributes=value)
+                    self.types[name] = Type(name, plugin, attributes=value)
 
         # resolve inheritance of types
         for name in self.types:
@@ -141,11 +141,29 @@ class App:
                 tables = data.get('tables', {})
                 for name, value in tables.items():
                     if name in self.tables:
-                        self.tables[name].update(value, self)
+                        self.tables[name].update(value, plugin)
                     else:
-                        table = Table(name, plugin.name, value, self)
+                        table = Table(name, plugin, value)
                         self.tables[name] = table
                         self.tables_list.append(name)
+
+        # resolve the field type of columns
+        for name in self.tables:
+            for column in self.tables[name].columns:
+                if column['type'] not in self.types:
+                    # TODO we have to handle many2many fields.
+                    try:
+                        table, id = column['type'].split('.')
+                        foreign = self.tables[table]
+                        column['foreign_key'] = foreign
+                        column['foreign_id'] = id
+                        # TODO search id field in foreign table
+                    except Exception:
+                        raise ValueError(f"Column \"{column['name']}\" in table \"{name}\" has wrong type")
+                    continue
+                _resolve_column(column, self.types)
+
+        return
 
 
 class Plugin:
@@ -188,7 +206,7 @@ class Plugin:
 
 class Type:
 
-    def __init__(self, name: str, plugin: str, attributes: dict = {}, python_type: object = None):
+    def __init__(self, name: str, plugin: Plugin, attributes: dict = {}, python_type: object = None):
         """a Type is a class that defines a type of data. It can be a standard
         type from sqlalchemy or a custom type defined in a plugin.
         Types can inherit from other types, in this case the attributes of the
@@ -197,7 +215,7 @@ class Type:
 
         Args:
             name (str): the name of the type
-            plugin (str): the name of the plugin that defines the type
+            plugin (Plugin): the plugin that defines the type
             attributes (dict, optional): attributes of the type. Defaults to {}.
             python_type (obj, optional): the final python type. Defaults to None.
         """
@@ -213,14 +231,21 @@ class Type:
         another type, then the attributes of the inherited type are copied to
         the inheriting type. The inheritance is resolved recursively until the
         type does not have any more inheritance.
+        If the type is composed by "columns" is treated as the columns of tables
+        and the fields are resolved.
 
         Args:
             types (dict): a dictionary of all types
         """
+        if 'columns' in self.attributes:
+            for column in self.attributes['columns']:
+                # TODO we have to handle foreign keys and many
+                _resolve_column(column, types)
+            return
         type = self
         while 'inherits' in type.attributes:
             if type.name not in types:
-                raise ValueError(f"Type {type.name} not found")
+                raise ValueError(f"Type \"{type.name}\" declared in \"{type.plugin.name}\" is not found")
             type = types[type.attributes['inherits']]
             self.inheritance.append(type.name)
             attr = type.attributes.copy()
@@ -231,20 +256,45 @@ class Type:
 
 class Table:
 
-    def __init__(self, name: str, plugin: str, attributes: dict, app: App):
-        self.name = attributes.get('name', name.lower())
-        self.plugin = plugin
+    def __init__(self, name: str, plugin: Plugin, attributes: dict):
+        self.name = name
+        self.table_name = attributes.get('name', name.lower())
+        self.plugins = []
         self.attributes = attributes
         self.columns = []
-        self.update(attributes, app)
+        self.update(attributes, plugin)
 
-    def update(self, attributes: dict, app: App):
+    def update(self, attributes: dict, plugin: Plugin):
         for column in attributes['columns']:
+            for d in self.columns:
+                if column['name'] == d['name']:
+                    raise ValueError(f"Column \"{column['name']}\" in \"{plugin.name}\" "
+                                     f"plugin already defined in \"{d['plugin'].name}\" plugin")
+            column['plugin'] = plugin
             self.columns.append(column)
+        # merge table attributes
         attr = attributes.copy()
         attr.update(self.attributes)
         self.attributes = attr
+        # add this plugin to the list
+        self.plugins.append(plugin)
+        # cleanup columns already imported
         self.attributes.pop('columns', None)
+
+
+def _resolve_column(column: dict, types: dict):
+    """Utility function, resolve the type of field for the columns of tables
+    and the composite types
+
+    Args:
+        column (dict): the column to resolve
+        types (dict): a dictionary of all types
+    """
+    attr = types[column['type']].attributes
+    for key, value in attr.items():
+        if key not in column:
+            column[key] = value
+    column['field_type'] = types[column['type']]
 
 
 class BaseApp:
