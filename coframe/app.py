@@ -9,14 +9,48 @@ import sqlalchemy.types
 class App:
 
     def __init__(self):
+        """
+        The `App` class is a singleton available for all `Table` classes
+        defined in the "coframe" framework.
+
+        Tables and column types are declared in YAML files within a plugin
+        system. The `load_config` and `load_plugins` methods load everything
+        needed.
+
+        A source generator writes a Python script with all the models for
+        SQLAlchemy.
+
+        Then, using SQLAlchemy, all tables are augmented with attributes
+        declared in the plugins. A typical app starts with these commands:
+
+        ```python
+        import coframe
+        app = coframe.app.Base.__app__
+        app.load_config("config.yaml")
+        app.load_plugins()
+        ```
+        """
         self.config = {}
-        self.plugins = []
+        """dict: global configuration"""
+        self.plugins = {}
+        """dict: all defined plugins"""
         self.sorted = []
+        """list: plugins sorted by dependency to avoid forward declarations."""
         self.types = {}
+        """dict: columns types"""
         self.tables = {}
+        """dict: the defined tables"""
         self.tables_list = []
+        """list: tables ordered by definition"""
 
     def load_config(self, config: str = "config.yaml"):
+        """
+        This method is called once at application startup, and it loads global
+        configuration from a YAML file.
+
+        Args:
+            config (str, optional): The file with configuration. Defaults to "config.yaml".
+        """
         defaults = {
             "name": "myapp",
             "version": '',
@@ -35,17 +69,21 @@ class App:
         self.config.update(data)
 
     def load_plugins(self):
-        """Get all plugins dir from config. For each folder read all subfolders
-        and check if they are plugins, since plugins dir are added to the python
-        path, all plugins must have a unique name. All plugins are added to a
-        dict of plugins.
+        """
+        Gets all plugin directories from the configuration. For each folder, it
+        reads subfolders and checks if they are plugins. Since plugin directories
+        are added to the Python path, all plugins must have a unique name. All
+        plugins are added to a dictionary of plugins.
+
+        After the plugins are read, the system calculates the types, the tables,
+        and resolves the columns. If something is wrong, an exception is thrown.
         """
         self.plugins = {}
         for plugins_dir in self.config['plugins']:
             plugins_dir = Path(plugins_dir)
             if not plugins_dir.exists():
                 raise ValueError(f"The plugins folder: {plugins_dir} does not exist")
-            # the plugins dir is added to the python path, so all plugins can be imported
+            # The plugins directory is added to the Python path, so all plugins can be imported.
             sys.path.append(str(Path.cwd() / plugins_dir.name))
             for plugin_dir in plugins_dir.iterdir():
                 if plugin_dir.is_dir():
@@ -60,9 +98,12 @@ class App:
         self._sort_dependencies()
         self._calc_types()
         self._calc_tables()
+        self._calc_columns()
 
     def _sort_dependencies(self):
-        """Sort plugins by dependencies using Kahn's algorithm"""
+        """
+        Support method: sorts plugins by dependencies using Kahn's algorithm.
+        """
 
         # Build the graph of dependencies
         dependencies = {}
@@ -99,12 +140,13 @@ class App:
         self.sorted = result
 
     def _calc_types(self):
-        """Calculate all types from plugins and sqlalchemy.types. Resolve
-        inheritance of types. The types are stored in a dict with the name as
-        key and the Type object as value.
+        """
+        Support method: calculates all types from plugins and `sqlalchemy.types`.
+        Resolves type inheritance. The types are stored in a dictionary with
+        the name as key and the `Type` object as value.
         """
 
-        # find all standard types in sqlalchemy.types
+        # Find all standard types in `sqlalchemy.types`.
         self.types = {}
         type_classes = [obj for name, obj in inspect.getmembers(sqlalchemy.types) if isinstance(obj, type)]
         for t in type_classes:
@@ -125,12 +167,17 @@ class App:
                         raise ValueError(f"Type already defined: {name}")
                     self.types[name] = Type(name, plugin, attributes=value)
 
-        # resolve inheritance of types
+        # resolve type inheritance
         for name in self.types:
             self.types[name].resolve(self.types)
 
     def _calc_tables(self):
-        """"""
+        """
+        Support method: calculates all tables from plugins. The tables are
+        stored in a dictionary with the name as key and the `Table` object as
+        value. Tables are also stored in a list ordered by definition to
+        avoid forward references.
+        """
         self.tables = {}
         self.tables_list = []
 
@@ -147,33 +194,57 @@ class App:
                         self.tables[name] = table
                         self.tables_list.append(name)
 
+    def _calc_columns(self):
+        """
+        Support method: after calculating types and tables, the columns of
+        composite types and tables are calculated to link the correct type and
+        resolve foreign keys.
+        """
+        # resolve the field type of composite types
+        for name in self.types:
+            if 'columns' in self.types[name].attributes:
+                for column in self.types[name].attributes['columns']:
+                    self._resolve_column(column, f"type: {name}")
         # resolve the field type of columns
         for name in self.tables:
             for column in self.tables[name].columns:
-                if column['type'] not in self.types:
-                    # TODO we have to handle many2many fields.
-                    try:
-                        table, id = column['type'].split('.')
-                        foreign = self.tables[table]
-                        column['foreign_key'] = foreign
-                        column['foreign_id'] = id
-                        # TODO search id field in foreign table
-                    except Exception:
-                        raise ValueError(f"Column \"{column['name']}\" in table \"{name}\" has wrong type")
-                    continue
-                _resolve_column(column, self.types)
+                self._resolve_column(column, f"table: {name}")
 
-        return
+    def _resolve_column(self, column: dict, caller: str):
+        """Support method: Resolve the type of fields for the columns of tables
+        and composite types.
+
+        Args:
+            column (dict): the column to resolve
+            caller (str): description of caller in case of errors
+        """
+        if column['type'] not in self.types:
+            # TODO we have to handle many2many fields.
+            try:
+                table, id = column['type'].split('.')
+                foreign = self.tables[table]
+                column['foreign_key'] = foreign
+                column['foreign_id'] = id
+                # TODO search id field in foreign table
+            except Exception:
+                raise ValueError(f"Column: {column['name']} in {caller} has wrong type")
+            return
+        attr = self.types[column['type']].attributes
+        for key, value in attr.items():
+            if key not in column:
+                column[key] = value
+        column['field_type'] = self.types[column['type']]
 
 
 class Plugin:
 
     def __init__(self, plugin_dir: Path):
-        """A plugin is a folder that contains a config.yaml file plus other yaml
-        files, python files and if needed other type of files.
+        """
+        A plugin is a folder that contains a `config.yaml` file plus other
+        YAML files, Python files, and other types of files if needed.
 
         Args:
-            plugin_dir (Path): the dir of the plugin
+            plugin_dir (Path): the directory of the plugin.
         """
         defaults = {
             "name": plugin_dir.name,
@@ -189,7 +260,8 @@ class Plugin:
         self.config.update(data['config'])
         self.name = self.config['name']
         self.plugin_dir = plugin_dir
-        # load data from yaml files and get list of python files
+
+        # Load data from YAML files and get a list of Python files.
         self.data = []
         self.sources = []
         self.files = []
@@ -207,17 +279,18 @@ class Plugin:
 class Type:
 
     def __init__(self, name: str, plugin: Plugin, attributes: dict = {}, python_type: object = None):
-        """a Type is a class that defines a type of data. It can be a standard
-        type from sqlalchemy or a custom type defined in a plugin.
-        Types can inherit from other types, in this case the attributes of the
-        inherited type are copied to the inheriting type. Attributes are
-        defaulted in fields of tables
+        """
+        A `Type` is a class that defines a column type. It can be a standard
+        SQLAlchemy type or a custom type defined in a plugin. Types can inherit
+        from other types. In this case, the attributes of the inherited type
+        are copied to the inheriting type. Attributes are defaulted in table
+        fields.
 
         Args:
-            name (str): the name of the type
-            plugin (Plugin): the plugin that defines the type
+            name (str): the name of the type.
+            plugin (Plugin): the plugin that defines the type.
             attributes (dict, optional): attributes of the type. Defaults to {}.
-            python_type (obj, optional): the final python type. Defaults to None.
+            python_type (obj, optional): the final Python type. Defaults to None.
         """
         self.name = name
         self.plugin = plugin
@@ -227,21 +300,15 @@ class Type:
         self.columns = attributes.get('columns', [])
 
     def resolve(self, types: dict):
-        """Resolve inheritance of types recursively. If a type inherits from
-        another type, then the attributes of the inherited type are copied to
-        the inheriting type. The inheritance is resolved recursively until the
-        type does not have any more inheritance.
-        If the type is composed by "columns" is treated as the columns of tables
-        and the fields are resolved.
+        """
+        Resolves type inheritance recursively. If a type inherits from another
+        type, then the attributes of the inherited type are copied to the
+        inheriting type. Inheritance is resolved recursively until the type
+        no longer has any inheritance.
 
         Args:
-            types (dict): a dictionary of all types
+            types (dict): a dictionary of all types.
         """
-        if 'columns' in self.attributes:
-            for column in self.attributes['columns']:
-                # TODO we have to handle foreign keys and many
-                _resolve_column(column, types)
-            return
         type = self
         while 'inherits' in type.attributes:
             if type.name not in types:
@@ -257,14 +324,41 @@ class Type:
 class Table:
 
     def __init__(self, name: str, plugin: Plugin, attributes: dict):
+        """
+        A table is the representation of an SQLAlchemy table. It can be used
+        to generate the source code of SQLAlchemy models and can be accessed
+        at runtime to obtain additional information.
+
+        Args:
+            name (str): Name of the table class.
+            plugin (Plugin): the first plugin that defines the table.
+            attributes (dict): attributes of the table.
+        """
         self.name = name
+        """str: name of the table class."""
         self.table_name = attributes.get('name', name.lower())
+        """str: name of the table in the DB."""
         self.plugins = []
-        self.attributes = attributes
+        """list: list of plugins that defined the table."""
+        self.attributes = {}
+        """dict: attributes are additional information for the table used to
+        generate the model source code and that can be used by clients and
+        servers."""
         self.columns = []
+        """list: list of columns in order of definition. Usually the first
+        column is the ID and the second is the main description field."""
+
         self.update(attributes, plugin)
 
     def update(self, attributes: dict, plugin: Plugin):
+        """
+        Updates the list of columns with the ones coming from the plugin.
+        Attributes are merged with the existing ones.
+
+        Args:
+            attributes (dict): attributes of the table.
+            plugin (Plugin): the plugin where they were found.
+        """
         for column in attributes['columns']:
             for d in self.columns:
                 if column['name'] == d['name']:
@@ -272,32 +366,18 @@ class Table:
                                      f"plugin already defined in \"{d['plugin'].name}\" plugin")
             column['plugin'] = plugin
             self.columns.append(column)
-        # merge table attributes
+        # Merge table attributes.
         attr = attributes.copy()
         attr.update(self.attributes)
         self.attributes = attr
-        # add this plugin to the list
+        # Add this plugin to the list.
         self.plugins.append(plugin)
-        # cleanup columns already imported
+        # Clean up columns already imported.
         self.attributes.pop('columns', None)
 
 
-def _resolve_column(column: dict, types: dict):
-    """Utility function, resolve the type of field for the columns of tables
-    and the composite types
-
-    Args:
-        column (dict): the column to resolve
-        types (dict): a dictionary of all types
-    """
-    attr = types[column['type']].attributes
-    for key, value in attr.items():
-        if key not in column:
-            column[key] = value
-    column['field_type'] = types[column['type']]
-
-
 class BaseApp:
+    """Each table in the system knows all about Coframe tables, types, etc."""
     __app__ = App()
 
 
