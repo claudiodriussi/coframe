@@ -9,3 +9,5 @@ print(coframe.app.Base.__app__.config)
 print(sys.path)
 import plugins.library as library # noqa E402
 library.test.ok()
+generator = coframe.source.Generator(app)
+generator.generate()
