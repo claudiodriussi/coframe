@@ -1,18 +1,18 @@
-from coframe.app import App
+from coframe.db import DB, Field
 
 
 class Generator:
 
-    def __init__(self, app: App):
-        self.app = app
+    def __init__(self, db: DB):
+        self.db = db
 
     def generate(self, filename="model.py"):
         self.tables = {}
         self.imports = ""
 
-        for name in self.app.tables_list:
+        for name in self.db.tables_list:
             base = []
-            table = self.app.tables[name]
+            table = self.db.tables[name]
             source = f"class {name}(Base@base):\n"
             source += " "*4 + f"__tablename__ = '{table.table_name}'\n"
             for column in table.columns:
@@ -20,31 +20,33 @@ class Generator:
                 # source += " "*4 + f"{column['name']}\n"
                 # print(column['name'])
                 # print(column['field_type'].python_type.__name__)
-            source.replace("@base", ', '.join(base))
-            source += "\n\n"
+            source = source.replace("@base", ', '.join(base))
+            source += "\n"
             self.tables[name] = source
             print(source)
 
-    def _gen_column(self, column: dict):
+    def _gen_column(self, column: Field):
         s = " "*4
-        try:
-            t = column['field_type']
-            py_type = t.python_type.__name__
-            sa_type = t.name
-            if t.inheritance:
-                sa_type = t.inheritance[-1]
-            length = column.get("length", 0)
-            if length:
-                sa_type = f"{sa_type}({length})"
-            args = [""]
-            if column.get("primary_key", False):
-                args.append("primary_key=True")
-            if not column.get("nullable", True):
-                args.append("nullable=False")
 
-            s += f"{column['name']}: Mapped[{py_type}] = mapped_column({sa_type}{', '.join(args)})\n"
-        except Exception:
-            return "Field error"
+        if not column.type:
+            s += f"Error: undefined type for {column.name}\n"
+            return s
+
+        t = column.type
+        py_type = t.python_type.__name__
+        sa_type = t.name
+        if t.inheritance:
+            sa_type = t.inheritance[-1]
+        length = column.attributes.get("length", 0)
+        if length:
+            sa_type = f"{sa_type}({length})"
+        args = [""]
+        # if column.get("primary_key", False):
+        #     args.append("primary_key=True")
+        # if not column.get("nullable", True):
+        #     args.append("nullable=False")
+
+        s += f"{column.name}: Mapped[{py_type}] = mapped_column({sa_type}{', '.join(args)})\n"
 
         return s
 

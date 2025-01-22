@@ -30,7 +30,7 @@ tables:
         nullable: False
 
       - name: address
-        prefix: a_
+        # prefix: a_
         type: Address
 
       - name: is_active

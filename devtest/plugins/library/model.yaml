@@ -8,3 +8,52 @@ tables:
       - name: is_student
         title: "Student"
         type: Boolean
+
+  Author:
+    name: authors
+    tags: [anag]
+    columns:
+      - name: id
+        type: ID
+
+      - name: name
+        type: Name
+        index: True
+
+      - name: birth_date
+        type: Date
+        default: null
+
+      - name: natinality
+        type: String
+        length: 50
+
+      - name: m2m.BookAuthor
+        type: Book.id
+
+  Book:
+    name: books
+    tags: [anag]
+    columns:
+      - name: id
+        type: ID
+
+      - name: title
+        type: Description
+        index: True
+
+      - name: isbn
+        type: String
+        length: 50
+        nullable: false
+        unique: true
+
+      - name: publication_date
+        type: Date
+        default: null
+
+      - name: price
+        type: Price
+
+      - name: m2m.BookAuthor
+        type: Author.id

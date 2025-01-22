@@ -48,6 +48,11 @@ types:
     inherits: String
     validate: email_validator
 
+  Price:
+    inherits: Numeric
+    length: 10
+    decimals: 4
+
   Json:
     inherits: JSON
     default: {}
