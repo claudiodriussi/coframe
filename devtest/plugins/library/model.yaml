@@ -24,7 +24,7 @@ tables:
         type: Date
         default: null
 
-      - name: natinality
+      - name: nationality
         type: String
         length: 50
 

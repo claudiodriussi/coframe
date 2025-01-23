@@ -283,9 +283,10 @@ class Field:
         self.attributes = attributes
         self.name = attributes['name']
         self.type = None
-        self.attr_field = None
-        self.attr_type = None
-        self.attr_relation = None
+        self.attr_field = {}
+        self.attr_type = {}
+        self.attr_relation = {}
+        self.attr_other = {}
 
     def resolve(self, caller: str):
         """
@@ -304,6 +305,20 @@ class Field:
             ValueError: If type resolution fails or references are invalid
         """
         cur_type = self.attributes['type']
+
+        # split attributes types
+        field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default']
+        type_keys = ['length', 'precision', 'scale', 'timezone']
+        relation_keys = ['onupdate', 'ondelete']
+        for key, value in self.attributes.items():
+            if key in field_keys:
+                self.attr_field[key] = value
+            elif key in type_keys:
+                self.attr_type[key] = value
+            elif key in relation_keys:
+                self.attr_relation[key] = value
+            else:
+                self.attr_other[key] = value
 
         # Handle foreign key references
         if cur_type not in self.db.types:

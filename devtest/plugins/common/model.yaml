@@ -50,8 +50,8 @@ types:
 
   Price:
     inherits: Numeric
-    length: 10
-    decimals: 4
+    precision: 10
+    scale: 4
 
   Json:
     inherits: JSON
@@ -66,11 +66,11 @@ types:
     columns:
       - name: created_at
         type: DateTime
-        default: now
+        default: datetime.now()
         nullable: False
       - name: updated_at
         type: DateTime
-        default: now
+        default: datetime.now()
         nullable: False
 
   Address:

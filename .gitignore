@@ -7,6 +7,8 @@ dist/
 wheels/
 *.egg-info
 
+model*.py
+
 # Virtual environments
 .venv
 .vscode

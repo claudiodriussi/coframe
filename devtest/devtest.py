@@ -22,6 +22,7 @@ library.test.ok()
 generator = coframe.source.Generator(app)
 generator.generate()
 
+
 # generator = coframe.modelgenerator.SQLAlchemyModelGenerator(app)
 # generator.generate_model_file("db")
 

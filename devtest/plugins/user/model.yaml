@@ -53,6 +53,8 @@ tables:
 
       - name: user_id
         type: User.id
+        onupdate: "'SET NULL'"
+        nullable: true
 
       - name: endpoint
         type: Json
