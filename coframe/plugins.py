@@ -69,7 +69,7 @@ class PluginsManager:
         with open(config) as f:
             data = yaml.safe_load(f)
         self.config = defaults.copy()
-        self.config.update(data)
+        self.config.update(data.get('config', {}))
 
     def load_plugins(self):
         """

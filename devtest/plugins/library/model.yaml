@@ -9,51 +9,49 @@ tables:
         title: "Student"
         type: Boolean
 
-  Author:
-    name: authors
-    tags: [anag]
+  Review:
+    name: reviews
+    tags: [journal]
+    mixins: [TimeStamp]
     columns:
       - name: id
         type: ID
 
-      - name: name
-        type: Name
-        index: True
+      - name: rating
+        type: Integer
 
-      - name: birth_date
-        type: Date
-        default: null
+      - name: comment
+        type: Text
 
-      - name: nationality
-        type: String
-        length: 50
+      - name: user_id
+        type: User.id
 
-      - name: m2m.BookAuthor
+      - name: book_id
         type: Book.id
 
-  Book:
-    name: books
-    tags: [anag]
+  Loan:
+    name: loans
+    tags: [journal]
+    mixins: [TimeStamp]
     columns:
       - name: id
         type: ID
 
-      - name: title
-        type: Description
-        index: True
-
-      - name: isbn
-        type: String
-        length: 50
+      - name: borrowed_at
+        type: DateTime
+        default: datetime.now
         nullable: false
-        unique: true
 
-      - name: publication_date
-        type: Date
-        default: null
+      - name: due_date
+        type: DateTime
+        nullable: false
 
-      - name: price
-        type: Price
+      - name: returned_at
+        type: DateTime
+        nullable: true
 
-      - name: m2m.BookAuthor
-        type: Author.id
+      - name: user_id
+        type: User.id
+
+      - name: book_id
+        type: Book.id

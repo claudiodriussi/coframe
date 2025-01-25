@@ -16,6 +16,12 @@ class Generator:
         self.import_orm.add("Mapped")
         self.import_orm.add("mapped_column")
 
+        for imp in self.db.pm.config.get('source_imports', []):
+            self.imports.add(imp)
+        for key, data in self.db.pm.plugins.items():
+            for imp in data.config.get('source_imports', []):
+                self.imports.add(imp)
+
     def generate(self, filename="model.py"):
         self.relations = {}
         self.back_relations = {}
@@ -54,6 +60,13 @@ class Generator:
             for row in value:
                 self.tables[key] += row
 
+        mixin_source = ""
+        for mixin in self.mixins:
+            table = self.db.types[mixin]
+            mixin_source = f"class {mixin}:\n"
+            for column in table.columns:
+                mixin_source += self._gen_column(column, table)
+
         self.source += '\n'.join(self.imports)
         self.source += '\n\n'
         self.source += f"from sqlalchemy import {', '.join(self.import_fields)}"
@@ -63,21 +76,18 @@ class Generator:
         self.source += 'from coframe.db import Base\n'
         self.source += '\n\n'
 
-        for mixin in self.mixins:
-            table = self.db.types[mixin]
-            source = f"class {mixin}:\n"
-            for column in table.columns:
-                source += self._gen_column(column, table)
-            self.source += source
+        if mixin_source:
+            self.source += mixin_source
             self.source += '\n\n'
 
         for name in self.db.tables_list:
             self.source += self.tables[name]
             self.source += '\n\n'
 
+        self.source += self.db.pm.config.get('source_add', '')
+
         with open(filename, 'w') as f:
             f.write(self.source)
-        print(self.source)
 
     def _gen_column(self, column: Field, table: Table):
         indent = " "*4
@@ -109,7 +119,8 @@ class Generator:
             args = [""]
             for a in column.attr_relation:
                 args.append(f"{a}={column.attr_relation[a]}")
-            foreign = f", ForeignKey({fk.table_name}.{fid}{', '.join(args)})"
+            foreign = f", ForeignKey('{fk.table_name}.{fid}'{', '.join(args)})"
+            self.import_fields.add('ForeignKey')
 
         # column args
         args = [""]
@@ -119,6 +130,10 @@ class Generator:
         s += f"{column.name}: Mapped[{py_type}] = mapped_column({sa_type}{foreign}{', '.join(args)})\n"
         if py_type == 'datetime':
             self.imports.add("from datetime import datetime")
+        if py_type == 'date':
+            self.imports.add("from datetime import date")
+        if py_type == 'time':
+            self.imports.add("from datetime import time")
         if py_type == 'Decimal':
             self.imports.add("from decimal import Decimal")
 

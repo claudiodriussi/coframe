@@ -3,4 +3,4 @@ config:
   name: library
   version: 0.0.1
   description: Library app
-  depends_on: [common, user]
+  depends_on: [common, users, books]

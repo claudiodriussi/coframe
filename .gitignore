@@ -7,7 +7,7 @@ dist/
 wheels/
 *.egg-info
 
-model*.py
+devtest/model*.py
 
 # Virtual environments
 .venv

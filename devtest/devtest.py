@@ -20,7 +20,7 @@ import plugins.library as library # type: ignore # noqa E402
 library.test.ok()
 
 generator = coframe.source.Generator(app)
-generator.generate()
+generator.generate(filename="model.py")
 
 
 # generator = coframe.modelgenerator.SQLAlchemyModelGenerator(app)

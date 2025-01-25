@@ -306,6 +306,14 @@ class Field:
         """
         cur_type = self.attributes['type']
 
+        # Inherit attributes from type definition
+        if cur_type in self.db.types:
+            attr = self.db.types[cur_type].attributes
+            for key, value in attr.items():
+                if key not in self.attributes:
+                    self.attributes[key] = value
+            self.type = self.db.types[cur_type]
+
         # split attributes types
         field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default']
         type_keys = ['length', 'precision', 'scale', 'timezone']
@@ -342,13 +350,6 @@ class Field:
             except Exception:
                 raise ValueError(f"Field: {self.name} in {caller} has invalid type")
             return
-
-        # Inherit attributes from type definition
-        attr = self.db.types[cur_type].attributes
-        for key, value in attr.items():
-            if key not in self.attributes:
-                self.attributes[key] = value
-        self.type = self.db.types[cur_type]
 
 
 class BaseApp:

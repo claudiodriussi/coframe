@@ -1,5 +1,5 @@
 ---
-# qui la configurazione generale.
+# configuration for the app
 config:
   name: mytestapp
   version: 0.0.1
@@ -7,12 +7,26 @@ config:
   license: MIT
   author: "Claudio Driussi"
 
-  # cartelle che contengono i plugins
+  # folders which contain plugins
   plugins: [plugins]
 
-  # engine della app, forse si possono forzare le configurazioni per test o altro
+  # db engine for sqlalchemy
   db_engine: "sqlite:///:memory:"
 
-  # quando si entra con queste credenziali si possono fare operazioni sui databases
+  # admin credentials
   admin_user: "admin"
   admin_passwd: "not needed"
+
+  # addiction imports for the source code generator
+  # source_imports: ['import sys', 'import os']
+  source_add: |
+    def initialize_db(db_url: str):
+        from sqlalchemy import create_engine
+        engine = create_engine(db_url)
+        Base.metadata.create_all(engine)
+        return engine
+
+
+    if __name__ == "__main__":
+        initialize_db('sqlite:///:memory:')
+
