@@ -8,7 +8,7 @@ config:
   author: "Claudio Driussi"
 
   # folders which contain plugins
-  plugins: [plugins]
+  plugins: [plugins, plugins/libapp]
 
   # db engine for sqlalchemy
   db_engine: "sqlite:///:memory:"

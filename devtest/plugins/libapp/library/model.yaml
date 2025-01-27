@@ -3,11 +3,17 @@
 tables:
 
   User:
-
     columns:
       - name: is_student
         title: "Student"
         type: Boolean
+
+  Book:
+    columns:
+      - name: status
+        type: String
+        length: 1
+        default: "'A'"
 
   Review:
     name: reviews

@@ -1,4 +1,5 @@
 import sys
+import os
 from pathlib import Path
 import yaml
 from typing import Dict, List
@@ -95,7 +96,7 @@ class PluginsManager:
                 raise ValueError(f"The plugins folder: {plugins_dir} does not exist")
 
             # Add plugin directory to Python path for imports
-            sys.path.append(str(Path.cwd() / plugins_dir.name))
+            sys.path.append(str(Path.cwd() / str(plugins_dir)))
 
             # Scan for plugin directories
             for plugin_dir in plugins_dir.iterdir():
@@ -296,18 +297,34 @@ class PluginsManager:
 
     def print_history(self):
         """
-        Display the complete history of key definitions across all plugins.
-
-        Output includes:
-        - Key paths in dot notation
-        - List of plugins that defined each key
-        - Sorted by key path for readability
+        Display the complete history of key definitions across all plugins.Path
         """
         format_str = coframe.set_formatter(self.logger, '%(name)s|%(message)s')
         self.logger.info("Definition History:")
         for key_path, plugins in sorted(self.history.items()):
             self.logger.info(f"{key_path}: defined in {sorted(plugins)}")
         coframe.set_formatter(self.logger, format_str)
+
+    def export_pythonpath(self, windows: bool = os.name == 'nt') -> str:
+        """
+        Prepare a string for environment settings for linux/mac or windows
+
+        Args:
+            windows (bool): True for windows settings, (default export the string for the os in use)
+
+        Returns:
+            str: the string for environment script
+        """
+        env = ""
+        for plugins_dir in self.config['plugins']:
+            plugins_dir = Path(plugins_dir)
+            if windows:
+                s = f'set PYTHONPATH="{str(Path.cwd() / str(plugins_dir))}";%PYTHONPATH%\n'
+                env += s.replace("/", "\\")
+            else:
+                s = f'export PYTHONPATH="{str(Path.cwd() / str(plugins_dir))}:$PYTHONPATH"\n'
+                env += s.replace("\\", "/")
+        return env
 
 
 class Plugin:

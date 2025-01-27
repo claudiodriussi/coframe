@@ -12,6 +12,7 @@ class Generator:
 
         self.mixins = set()  # all mixin found
         self.tables = {}  # the tables
+        self.many2many = {}  # many2many intermediate tables
 
         self.import_orm.add("Mapped")
         self.import_orm.add("mapped_column")
@@ -80,6 +81,9 @@ class Generator:
             self.source += mixin_source
             self.source += '\n\n'
 
+        for m2m_class in self.many2many:
+            self.resolve_m2m(m2m_class)
+
         for name in self.db.tables_list:
             self.source += self.tables[name]
             self.source += '\n\n'
@@ -89,13 +93,66 @@ class Generator:
         with open(filename, 'w') as f:
             f.write(self.source)
 
+    def resolve_m2m(self, m2m_class: str):
+        m2m = self.many2many[m2m_class]
+        if len(m2m) != 2:
+            raise ValueError(f"many2many class: {m2m_class} must be declare in exactly 2 tables")
+
+        # to be consistent, the first table name must be equal to the first part of m2m class name, if not we swap tables
+        if not m2m_class.startswith(m2m[0][0].name):
+            m2m[0], m2m[1] = m2m[1], m2m[0]
+        table1 = m2m[0][0]
+        col1 = m2m[0][1]
+        table2 = m2m[1][0]
+        col2 = m2m[1][1]
+
+        indent = " "*4
+        s = ""
+        s += f"class {m2m_class}(Base):\n"
+        s += f"{indent}__tablename__ = '{table1.table_name}_{table2.table_name}'\n"
+
+        print(s)
+        """
+
+class BookAuthors(Base):
+    __tablename__ = 'book_authors'
+    book_id: Mapped[int] = mapped_column(Integer, ForeignKey('books.id'), primary_key=True)
+    author_id: Mapped[int] = mapped_column(Integer, ForeignKey('authors.id'), primary_key=True)
+    book: Mapped["Book"] = relationship("Book", overlaps="authors")
+    author: Mapped["Author"] = relationship("Author", overlaps="books")
+
+class Author:
+    books: Mapped[List["Book"]] = relationship(secondary="book_authors", back_populates="authors", overlaps="book")
+
+class Book:
+    authors: Mapped[List["Author"]] = relationship(secondary="book_authors", back_populates="books", overlaps="author")
+
+
+  Author:
+    columns:
+      - name: m2m.BookAuthor
+        type: Book.id
+
+  Book:
+    columns:
+      - name: m2m.BookAuthor
+        type: Author.id
+
+__tablename__ = books_authors # from'm2m_class' table.name + table.name, the first table is found from class name
+
+        """
+
     def _gen_column(self, column: Field, table: Table):
         indent = " "*4
         s = indent
 
-        if not column.type:
-            s += f"Error: undefined type for {column.name}\n"
-            return s
+        # save m2m for later resolution
+        if 'm2m_class' in column.attributes:
+            m2m_class = column.attributes['m2m_class']
+            m2m = self.many2many.get(m2m_class, [])
+            m2m.append([table, column])
+            self.many2many[m2m_class] = m2m
+            return ""
 
         # column type
         t = column.type
@@ -140,8 +197,14 @@ class Generator:
         if foreign:
             self.relations[table.name] = self.relations.get(table.name, [])
             self.back_relations[fk.name] = self.back_relations.get(table.name, [])
-            self.relations[table.name].append(f"{indent}{fk.table_name}: Mapped[{py_type}] = relationship('{fk.name}', back_populates='{table.table_name}') \n")
-            self.back_relations[fk.name].append(f"{indent}{table.table_name}: Mapped[List['{table.name}']] = relationship('{table.name}', back_populates='{fk.table_name}')\n")
+            self.relations[table.name].append(
+                f"{indent}{fk.table_name}: Mapped[{py_type}] = "
+                f"relationship('{fk.name}', back_populates='{table.table_name}')\n"
+            )
+            self.back_relations[fk.name].append(
+                f"{indent}{table.table_name}: Mapped[List['{table.name}']] = "
+                f"relationship('{table.name}', back_populates='{fk.table_name}')\n"
+            )
             self.import_orm.add("relationship")
             self.imports.add("from typing import List")
 

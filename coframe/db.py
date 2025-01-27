@@ -148,6 +148,11 @@ class DB:
                         if c1.name == c2.name:
                             raise ValueError(f'Duplicated column "{c1.name}" in table "{table_name}"')
 
+        # resolve foreign keys
+        for table_name in self.tables:
+            for col in self.tables[table_name].columns:
+                col.resolve_foreign(f"table: {table_name}")
+
 
 class Type:
     """
@@ -330,26 +335,42 @@ class Field:
 
         # Handle foreign key references
         if cur_type not in self.db.types:
-            if self.name.startswith('m2m.'):
-                # TODO Many-to-many relationships not yet implemented
-                return
-
             try:
                 table, id = self.attributes['type'].split('.')
                 foreign = self.db.tables[table]
                 self.attributes['foreign_key'] = foreign
                 self.attributes['foreign_id'] = id
 
-                # Find the referenced column type
-                for col in foreign.columns:
-                    if id == col.name:
-                        self.type = col.type
-                if not self.type:
-                    raise ValueError(f"Field: {self.name} has invalid foreign reference")
+                # many2many intermediate table
+                if self.name.startswith('m2m.'):
+                    self.attributes['m2m_class'] = self.name.split('.')[1]
 
             except Exception:
                 raise ValueError(f"Field: {self.name} in {caller} has invalid type")
             return
+
+    def resolve_foreign(self, caller: str):
+        """
+        Resolve foreign relationships. It is done after all columns resolution
+        to avoid forward resolutions in case of m2m relationships
+
+        Args:
+            caller (str): Context information for error messages
+
+        Raises:
+            ValueError: If type resolution fails or references are invalid
+        """
+        foreign = self.attributes.get('foreign_key', None)
+        if not foreign:
+            return
+        id = self.attributes['foreign_id']
+
+        # Find the referenced column type
+        for col in foreign.columns:
+            if id == col.name:
+                self.type = col.type
+        if not self.type:
+            raise ValueError(f"Field: {self.name} has invalid foreign reference")
 
 
 class BaseApp:

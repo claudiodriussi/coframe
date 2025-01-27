@@ -43,16 +43,11 @@ tables:
         type: String
         length: 50
         nullable: false
-        unique: true
+        unique: false
 
       - name: publication_date
         type: Date
         default: null
-
-      - name: status
-        type: String
-        length: 1
-        default: "'A'"
 
       - name: price
         type: Price

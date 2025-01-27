@@ -13,10 +13,13 @@ plugins.load_plugins()
 
 # plugins.print_history()
 
+print(plugins.export_pythonpath())
+print(plugins.export_pythonpath(windows=True))
+
 app = coframe.db.Base.__app__
 app.calc_db(plugins)
 
-import plugins.library as library # type: ignore # noqa E402
+import plugins.libapp.library as library # type: ignore # noqa E402
 library.test.ok()
 
 generator = coframe.source.Generator(app)
