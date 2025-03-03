@@ -1,7 +1,9 @@
 import inspect
+from typing import Dict, List, Any, Optional, Union
 import sqlalchemy.types
 from sqlalchemy.ext.declarative import declarative_base
 from coframe.plugins import PluginsManager, Plugin
+import coframe
 
 
 class DB:
@@ -15,7 +17,7 @@ class DB:
     - Resolving type inheritance and foreign key relationships
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the database schema manager.
         - self.pm: Plugin manager instance
@@ -23,12 +25,12 @@ class DB:
         - self.tables: Dictionary of all defined tables
         - self.tables_list: Ordered list of table names
         """
-        self.pm = None
-        self.types = {}
-        self.tables = {}
-        self.tables_list = []
+        self.pm: Optional[PluginsManager] = None
+        self.types: Dict[str, DbType] = {}
+        self.tables: Dict[str, DbTable] = {}
+        self.tables_list: List[str] = []
 
-    def calc_db(self, plugins: PluginsManager):
+    def calc_db(self, plugins: PluginsManager) -> None:
         """
         Build the complete database schema from plugin definitions.
 
@@ -38,14 +40,14 @@ class DB:
         3. Process and validate column definitions
 
         Args:
-            plugins (PluginsManager): Instance containing all loaded plugins
+            plugins: Instance containing all loaded plugins
         """
         self.pm = plugins
         self._calc_types()
         self._calc_tables()
         self._calc_columns()
 
-    def _calc_types(self):
+    def _calc_types(self) -> None:
         """
         Process and validate all type definitions. This includes:
         1. Loading built-in SQLAlchemy types
@@ -62,7 +64,7 @@ class DB:
         for t in type_classes:
             try:
                 py_type = t().python_type
-                self.types[t.__name__] = Type(t.__name__, "", python_type=py_type)
+                self.types[t.__name__] = DbType(t.__name__, "", python_type=py_type)
             except Exception:
                 # Skip types that don't have a python_type equivalent
                 continue
@@ -75,13 +77,13 @@ class DB:
                 for type_name, value in types.items():
                     if type_name in self.types:
                         raise ValueError(f"Type already defined: {type_name}")
-                    self.types[type_name] = Type(type_name, plugin, attributes=value)
+                    self.types[type_name] = DbType(type_name, plugin, attributes=value)
 
         # Resolve inheritance relationships
         for type_name in self.types:
             self.types[type_name].resolve(self.types)
 
-    def _calc_tables(self):
+    def _calc_tables(self) -> None:
         """
         Process all table definitions from plugins.
 
@@ -101,11 +103,11 @@ class DB:
                     if table_name in self.tables:
                         self.tables[table_name].update(value, plugin)
                     else:
-                        table = Table(table_name, plugin, value)
+                        table = DbTable(table_name, plugin, value)
                         self.tables[table_name] = table
                         self.tables_list.append(table_name)
 
-    def _calc_columns(self):
+    def _calc_columns(self) -> None:
         """
         Process and validate all column definitions.
 
@@ -120,41 +122,44 @@ class DB:
         """
         # Process composite type columns
         for type_name in self.types:
-            for column in self.types[type_name].col_def:
-                col = Field(column, self)
+            for column in self.types[type_name].attributes.get('columns', []):
+                col = DbColumn(column, self)
                 col.resolve(f"type: {type_name}")
                 self.types[type_name].columns.append(col)
 
         # Process table columns
         for table_name in self.tables:
-            for column in self.tables[table_name].col_def:
-                col = Field(column, self)
+            for column in self.tables[table_name]._columns:
+                col = DbColumn(column, self)
                 col.resolve(f"table: {table_name}")
 
                 # Handle composite types
-                if col.type and col.type.columns:
+                if col.db_type and col.db_type.columns:
                     prefix = column.get('prefix', "")
-                    for type_column in col.type.columns:
-                        composed_col = Field(type_column.attributes, self)
+                    for type_column in col.db_type.columns:
+                        composed_col = DbColumn(type_column.attributes, self)
                         composed_col.name = prefix + composed_col.name
                         composed_col.resolve(f"table: {table_name}")
                         self.tables[table_name].columns.append(composed_col)
                 else:
                     self.tables[table_name].columns.append(col)
 
-                # Check for duplicate column names
+                # Check for duplicate column names after composite types integration
                 for i, c1 in enumerate(self.tables[table_name].columns):
                     for c2 in self.tables[table_name].columns[i+1:]:
                         if c1.name == c2.name:
                             raise ValueError(f'Duplicated column "{c1.name}" in table "{table_name}"')
 
-        # resolve foreign keys
+            # No need for _column variable anymore
+            delattr(self.tables[table_name], '_columns')
+
+        # Resolve foreign keys
         for table_name in self.tables:
             for col in self.tables[table_name].columns:
                 col.resolve_foreign(f"table: {table_name}")
 
 
-class Type:
+class DbType:
     """
     Represents a database column type, either built-in SQLAlchemy type or custom.
 
@@ -164,25 +169,28 @@ class Type:
     - Automatic attribute inheritance from parent types
     """
 
-    def __init__(self, name: str, plugin: Plugin, attributes: dict = None, python_type: object = None):
+    def __init__(self,
+                 name: str,
+                 plugin: Union[Plugin, str],
+                 attributes: Optional[Dict[str, Any]] = None,
+                 python_type: Optional[object] = None) -> None:
         """
         Initialize a new type definition.
 
         Args:
-            name (str): Type name
-            plugin (Plugin): Plugin that defines this type
-            attributes (dict, optional): Type attributes and configuration
-            python_type (object, optional): Corresponding Python type
+            name: Type name
+            plugin: Plugin that defines this type
+            attributes: Type attributes and configuration
+            python_type: Corresponding Python type
         """
-        self.name = name
-        self.plugin = plugin
-        self.python_type = python_type
-        self.attributes = attributes or {}
-        self.inheritance = []
-        self.col_def = attributes.get('columns', []) if attributes else []
-        self.columns = []
+        self.name: str = name
+        self.plugin: Union[Plugin, str] = plugin
+        self.python_type: Optional[object] = python_type
+        self.attributes: Dict[str, Any] = attributes or {}
+        self.inheritance: List[str] = []
+        self.columns: List['DbColumn'] = []
 
-    def resolve(self, types: dict):
+    def resolve(self, types: Dict[str, 'DbType']) -> None:
         """
         Resolve type inheritance chain and merge attributes.
 
@@ -190,27 +198,23 @@ class Type:
         into the current type's attributes.
 
         Args:
-            types (dict): Dictionary of all available types
+            types: Dictionary of all available types
 
         Raises:
             ValueError: If an inherited type is not found
         """
         type_obj = self
-        while 'inherits' in type_obj.attributes:
+        while 'base' in type_obj.attributes:
             if type_obj.name not in types:
                 raise ValueError(f'Type "{type_obj.name}" declared in "{type_obj.plugin.name}" is not found')
-            type_obj = types[type_obj.attributes['inherits']]
+            type_obj = types[type_obj.attributes['base']]
             self.inheritance.append(type_obj.name)
-
-            # Merge attributes, giving preference to current type's attributes
-            attr = type_obj.attributes.copy()
-            attr.update(self.attributes)
-            self.attributes = attr
+            coframe.deep_merge(self.attributes, type_obj.attributes)
 
         self.python_type = type_obj.python_type
 
 
-class Table:
+class DbTable:
     """
     Represents a database table with support for:
     - Multi-plugin table definitions
@@ -218,84 +222,72 @@ class Table:
     - Table attributes and metadata
     """
 
-    def __init__(self, name: str, plugin: Plugin, attributes: dict):
+    def __init__(self, name: str, plugin: Plugin, attributes: Dict[str, Any]) -> None:
         """
         Initialize a new table definition.
 
         Args:
-            name (str): Table class name
-            plugin (Plugin): Plugin that initially defines this table
-            attributes (dict): Table configuration and columns
+            name: Table class name
+            plugin: Plugin that initially defines this table
+            attributes: Table configuration and columns
         """
-        self.name = name
-        self.table_name = attributes.get('name', name.lower())
-        self.plugins = []
-        self.attributes = {}
-        self.col_def = []
-        self.columns = []
+        self.name: str = name
+        self.table_name: str = attributes.get('name', name.lower())
+        self.plugins: List[Plugin] = []
+        self.attributes: Dict[str, Any] = {}
+        self._columns: List[Dict[str, Any]] = []  # Temporary variable used to build columns
+        self.columns: List[DbColumn] = []
 
         self.update(attributes, plugin)
 
-    def update(self, attributes: dict, plugin: Plugin):
+    def update(self, attributes: Dict[str, Any], plugin: Plugin) -> None:
         """
         Update table definition with additional attributes from a plugin.
 
         Args:
-            attributes (dict): New attributes to merge
-            plugin (Plugin): Plugin providing the updates
-
-        Raises:
-            ValueError: If a column is redefined across plugins
+            attributes: New attributes to merge
+            plugin: Plugin providing the updates
         """
         # Process columns
         for column in attributes['columns']:
-            for existing_col in self.col_def:
-                if column['name'] == existing_col['name']:
-                    raise ValueError(
-                        f'Column "{column["name"]}" in "{plugin.name}" plugin '
-                        f'already defined in "{existing_col["plugin"].name}" plugin'
-                    )
             column['plugin'] = plugin
-            self.col_def.append(column)
+            self._columns.append(column)
 
         # Merge attributes
-        attr = attributes.copy()
-        attr.update(self.attributes)
-        self.attributes = attr
+        coframe.deep_merge(self.attributes, attributes)
 
         self.plugins.append(plugin)
         # Remove processed columns from attributes
         self.attributes.pop('columns', None)
 
 
-class Field:
+class DbColumn:
     """
-    Represents a table or type column field with support for:
+    Represents a table or type column with support for:
     - Type resolution
     - Foreign key relationships
-    - Field attributes
+    - Column attributes
     """
 
-    def __init__(self, attributes: dict, db: DB):
+    def __init__(self, attributes: Dict[str, Any], db: DB) -> None:
         """
-        Initialize a new field.
+        Initialize a new column.
 
         Args:
-            attributes (dict): Field configuration
-            db (DB): Database schema manager instance
+            attributes: Column configuration
+            db: Database schema manager instance
         """
-        self.db = db
-        self.attributes = attributes
-        self.name = attributes['name']
-        self.type = None
-        self.attr_field = {}
-        self.attr_type = {}
-        self.attr_relation = {}
-        self.attr_other = {}
+        self.db: DB = db
+        self.attributes: Dict[str, Any] = attributes
+        self.name: str = attributes['name']
+        self.db_type: Optional[DbType] = None
+        self.attr_field: Dict[str, Any] = {}
+        self.attr_type: Dict[str, Any] = {}
+        self.attr_other: Dict[str, Any] = {}
 
-    def resolve(self, caller: str):
+    def resolve(self, caller: str) -> None:
         """
-        Resolve field type and relationships.
+        Resolve column type and relationships.
 
         Handles:
         - Basic type resolution
@@ -304,11 +296,22 @@ class Field:
         - Attribute inheritance from type definitions
 
         Args:
-            caller (str): Context information for error messages
+            caller: Context information for error messages
 
         Raises:
             ValueError: If type resolution fails or references are invalid
         """
+        if 'foreign_key' in self.attributes:
+            try:
+                fk = self.attributes['foreign_key']
+                table, id = fk['target'].split('.')
+                foreign = self.db.tables[table]
+                fk['table'] = foreign
+                fk['id'] = id
+            except Exception:
+                raise ValueError(f"Foreign key for column: {self.name} in {caller} has invalid type")
+            return
+
         cur_type = self.attributes['type']
 
         # Inherit attributes from type definition
@@ -317,60 +320,43 @@ class Field:
             for key, value in attr.items():
                 if key not in self.attributes:
                     self.attributes[key] = value
-            self.type = self.db.types[cur_type]
+            self.db_type = self.db.types[cur_type]
 
-        # split attributes types
+        # Split attributes by type
         field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default']
         type_keys = ['length', 'precision', 'scale', 'timezone']
-        relation_keys = ['onupdate', 'ondelete']
         for key, value in self.attributes.items():
             if key in field_keys:
                 self.attr_field[key] = value
             elif key in type_keys:
                 self.attr_type[key] = value
-            elif key in relation_keys:
-                self.attr_relation[key] = value
             else:
                 self.attr_other[key] = value
 
-        # Handle foreign key references
-        if cur_type not in self.db.types:
-            try:
-                table, id = self.attributes['type'].split('.')
-                foreign = self.db.tables[table]
-                self.attributes['foreign_key'] = foreign
-                self.attributes['foreign_id'] = id
-
-                # many2many intermediate table
-                if self.name.startswith('m2m.'):
-                    self.attributes['m2m_class'] = self.name.split('.')[1]
-
-            except Exception:
-                raise ValueError(f"Field: {self.name} in {caller} has invalid type")
-            return
-
-    def resolve_foreign(self, caller: str):
+    def resolve_foreign(self, caller: str) -> None:
         """
         Resolve foreign relationships. It is done after all columns resolution
-        to avoid forward resolutions in case of m2m relationships
+        to avoid forward resolutions in case of m2m relationships.
 
         Args:
-            caller (str): Context information for error messages
+            caller: Context information for error messages
 
         Raises:
             ValueError: If type resolution fails or references are invalid
         """
-        foreign = self.attributes.get('foreign_key', None)
-        if not foreign:
+        fk = self.attributes.get('foreign_key', None)
+        if not fk:
             return
-        id = self.attributes['foreign_id']
+        foreign = fk['table']
+        id = fk['id']
 
         # Find the referenced column type
         for col in foreign.columns:
             if id == col.name:
-                self.type = col.type
-        if not self.type:
-            raise ValueError(f"Field: {self.name} has invalid foreign reference")
+                self.db_type = col.db_type
+                break
+        if not self.db_type:
+            raise ValueError(f"Column: {self.name} has invalid foreign reference")
 
 
 class BaseApp:
@@ -378,7 +364,7 @@ class BaseApp:
     Base class for all SQLAlchemy models.
     Provides access to the database schema information.
     """
-    __app__ = DB()
+    __app__: DB = DB()
 
 
 Base = declarative_base(cls=BaseApp)

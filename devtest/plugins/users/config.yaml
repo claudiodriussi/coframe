@@ -1,14 +1,12 @@
----
-config:
-  name: users
-  version: 0.0.1
-  description: User management plugin
-  license: MIT
-  author: "Claudio Driussi"
-  url: https://claudiodriussi.it
-  release_date:
-  depends_on: [common]
-  # source_imports: ['import math']
+name: users
+version: 0.0.1
+description: User management plugin
+license: MIT
+author: "Claudio Driussi"
+url: https://claudiodriussi.it
+release_date:
+depends_on: [common]
+# source_imports: ['import math']
 
 # - tags
 # - thumb

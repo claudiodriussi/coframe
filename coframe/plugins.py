@@ -1,8 +1,8 @@
 import sys
 import os
 from pathlib import Path
+from typing import Dict, List, Optional, Union, Any
 import yaml
-from typing import Dict, List
 import coframe
 
 
@@ -13,50 +13,36 @@ class PluginsManager:
     This class handles:
     - Plugin discovery and loading from filesystem
     - Plugin dependency resolution
-    - Configuration management
+    - Configuration managementep_merge(
     - Data merging from multiple plugins
     - History tracking of all plugin operations
     """
 
-    def __init__(self, logger_name='coframe'):
+    def __init__(self, logger_name: str = 'coframe') -> None:
         """
         Initialize the plugin manager.
 
         Args:
-            logger_name (str): Name for the logger instance
-
-        Attributes:
-            history (dict): Tracks the history of all key definitions
-            data (dict): Merged data from all plugins
-            config (dict): Global configuration
-            plugins (dict): Dictionary of loaded Plugin instances
-            sorted (list): Plugins sorted by dependencies
+            logger_name: Name for the logger instance
         """
-        self.history = {}
-        self.data = {}
-        self.config = {}
-        self.plugins = {}
-        self.sorted = []
+        self.history: Dict[str, List[str]] = {}
+        self.data: Dict[str, Any] = {}
+        self.config: Dict[str, Any] = {}
+        self.plugins: Dict[str, 'Plugin'] = {}
+        self.sorted: List[str] = []
 
         # Initialize logging
         self.logger = coframe.get_logger(logger_name)
         coframe.set_formatter(self.logger, '%(name)s|%(levelname)s|%(message)s')
 
-    def load_config(self, config: str = "config.yaml"):
+    def load_config(self, config: Union[str, Path] = "config.yaml") -> None:
         """
         Load global configuration from YAML file.
 
         Args:
-            config (str): Path to configuration file
-
-        The configuration includes application metadata and settings:
-        - Application name, version, description
-        - Author and license information
-        - Plugin directories
-        - Database configuration
-        - Admin credentials
+            config: Path to configuration file
         """
-        defaults = {
+        self.config = {
             "name": "myapp",
             "version": '',
             "description": "",
@@ -69,18 +55,11 @@ class PluginsManager:
         }
         with open(config) as f:
             data = yaml.safe_load(f)
-        self.config = defaults.copy()
-        self.config.update(data.get('config', {}))
+        coframe.deep_merge(self.config, data)
 
-    def load_plugins(self):
+    def load_plugins(self) -> None:
         """
         Load and initialize all plugins from configured directories.
-
-        Process:
-        1. Load configuration if not already loaded
-        2. Discover plugins in configured directories
-        3. Sort plugins by dependencies
-        4. Merge data from all plugins
 
         Raises:
             ValueError: If plugin directory doesn't exist or duplicate plugin names found
@@ -119,21 +98,15 @@ class PluginsManager:
             for data in plugin.data:
                 self.merge_dicts(data, name)
 
-    def _sort_dependencies(self):
+    def _sort_dependencies(self) -> None:
         """
         Sort plugins based on their dependencies using Kahn's topological sort algorithm.
-
-        Process:
-        1. Build dependency graph
-        2. Validate all dependencies exist
-        3. Sort using Kahn's algorithm
-        4. Check for circular dependencies
 
         Raises:
             ValueError: If dependencies are missing or circular dependencies detected
         """
         # Create dependency graph
-        dependencies = {}
+        dependencies: Dict[str, set] = {}
         for name, value in self.plugins.items():
             deps = value.config.get('depends_on', [])
             if isinstance(deps, str):
@@ -169,36 +142,36 @@ class PluginsManager:
 
         self.sorted = result
 
-    def merge_dicts(self, d: Dict, plugin: str) -> Dict:
+    def merge_dicts(self, d: Dict[str, Any], plugin: str) -> Dict[str, Any]:
         """
         Entry point for merging a new dictionary into existing data.
 
         Args:
-            d (Dict): New dictionary to merge
-            plugin (str): Name of source plugin
+            d: New dictionary to merge
+            plugin: Name of source plugin
 
         Returns:
-            Dict: Merged dictionary
+            Merged dictionary
         """
         self.data = self._recursive_merge(self.data, d, plugin)
         return self.data
 
-    def _recursive_merge(self, base: Dict, new: Dict, plugin: str, current_path: List[str] = None) -> Dict:
+    def _recursive_merge(self,
+                         base: Dict[str, Any],
+                         new: Dict[str, Any],
+                         plugin: str,
+                         current_path: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Recursively merge dictionaries while preserving plugin information.
 
-        Features:
-        - Deep merging of nested dictionaries
-        - List concatenation with duplicate removal
-        - Plugin attribution tracking
-        - Type compatibility checking
-        - History logging
-
         Args:
-            base (Dict): Base dictionary to merge into
-            new (Dict): New dictionary to merge from
-            plugin (str): Source plugin namemodel.py.txt
-            Dict: Merged dictionary
+            base: Base dictionary to merge into
+            new: New dictionary to merge from
+            plugin: Source plugin name
+            current_path: Current path in the dictionary hierarchy
+
+        Returns:
+            Merged dictionary
 
         Raises:
             TypeError: If incompatible types are found during merge
@@ -206,9 +179,9 @@ class PluginsManager:
         if current_path is None:
             current_path = []
 
-        result = {}
+        result: Dict[str, Any] = {}
 
-        # Copy base dictionarymodel.py.txt
+        # Copy base dictionary
         for key in base:
             result[key] = base[key]
 
@@ -227,11 +200,9 @@ class PluginsManager:
                         f"{type(v1).__name__} vs {type(v2).__name__}"
                     )
 
-                # Handle different value types
                 if isinstance(v1, dict):
                     self.logger.debug(f"[{plugin}] Merging dict at key '{key_path}'")
                     result[key] = self._recursive_merge(v1, v2, plugin, current_path + [key])
-                    # Preserve original plugin attribution
                     if '_plugin' in v1:
                         result[key]['_plugin'] = v1['_plugin']
                     else:
@@ -240,7 +211,6 @@ class PluginsManager:
                 elif isinstance(v1, list):
                     self.logger.debug(f"[{plugin}] Extending list at key '{key_path}'")
                     result[key] = v1 + [item for item in v2 if item not in v1]
-                    # Handle plugin attribution for dictionary items in lists
                     for item in result[key]:
                         if isinstance(item, dict):
                             if '_plugin' not in item:
@@ -252,14 +222,12 @@ class PluginsManager:
                     self.logger.warning(f"[{plugin}] Overlapping value for key '{key_path}': {v1} -> {v2}")
                     result[key] = v2
             else:
-                # Handle new keys
                 self.logger.info(f"[{plugin}] Adding new key '{key_path}'")
                 if isinstance(new[key], dict):
                     result[key] = self._recursive_merge({}, new[key], plugin, current_path + [key])
                     result[key]['_plugin'] = plugin
                 elif isinstance(new[key], list):
                     result[key] = new[key]
-                    # Add plugin attribution to dictionary items
                     for item in result[key]:
                         if isinstance(item, dict) and '_plugin' not in item:
                             item['_plugin'] = plugin
@@ -268,13 +236,13 @@ class PluginsManager:
 
         return result
 
-    def _add_to_history(self, key_path: str, plugin: str):
+    def _add_to_history(self, key_path: str, plugin: str) -> None:
         """
         Track the history of key definitions by plugin.
 
         Args:
-            key_path (str): Complete path to the key
-            plugin (str): Plugin defining the key
+            key_path: Complete path to the key
+            plugin: Plugin defining the key
         """
         if key_path not in self.history:
             self.history[key_path] = []
@@ -285,20 +253,18 @@ class PluginsManager:
         Build the complete path for a key in the dictionary hierarchy.
 
         Args:
-            current_path (List[str]): Current position in hierarchy
-            key (str): Current key name
+            current_path: Current position in hierarchy
+            key: Current key name
 
         Returns:
-            str: Complete dot-notation path to key
+            Complete dot-notation path to key
         """
         if current_path:
             return f"{'.'.join(current_path)}.{key}"
         return key
 
-    def print_history(self):
-        """
-        Display the complete history of key definitions across all plugins.Path
-        """
+    def print_history(self) -> None:
+        """Display the complete history of key definitions across all plugins."""
         format_str = coframe.set_formatter(self.logger, '%(name)s|%(message)s')
         self.logger.info("Definition History:")
         for key_path, plugins in sorted(self.history.items()):
@@ -307,13 +273,13 @@ class PluginsManager:
 
     def export_pythonpath(self, windows: bool = os.name == 'nt') -> str:
         """
-        Prepare a string for environment settings for linux/mac or windows
+        Prepare a string for environment settings for linux/mac or windows.
 
         Args:
-            windows (bool): True for windows settings, (default export the string for the os in use)
+            windows: True for windows settings, (default export the string for the os in use)
 
         Returns:
-            str: the string for environment script
+            The string for environment script
         """
         env = ""
         for plugins_dir in self.config['plugins']:
@@ -338,24 +304,15 @@ class Plugin:
     - Other resource files
     """
 
-    def __init__(self, plugin_dir: Path):
+    def __init__(self, plugin_dir: Path) -> None:
         """
         Initialize a plugin from its directory.
 
         Args:
-            plugin_dir (Path): Path to plugin directory
-
-        Attributes:
-            config (dict): Plugin configuration
-            name (str): Plugin name
-            plugin_dir (Path): Plugin directory path
-            data (list): Data loaded from YAML files
-            sources (list): Python source files
-            data_files (list): YAML data files
-            files (list): Other resource files
+            plugin_dir: Path to plugin directory
         """
         # Load plugin configuration with defaults
-        defaults = {
+        self.config: Dict[str, Any] = {
             "name": plugin_dir.name,
             "version": '0.0.1',
             "description": "",
@@ -363,20 +320,18 @@ class Plugin:
             "license": "",
             "depends_on": [],
         }
-
         with open(plugin_dir / "config.yaml") as f:
             data = yaml.safe_load(f)
-        self.config = defaults.copy()
-        self.config.update(data['config'])
+        coframe.deep_merge(self.config, data)
 
-        self.name = self.config['name']
-        self.plugin_dir = plugin_dir
+        self.name: str = self.config['name']
+        self.plugin_dir: Path = plugin_dir
 
         # Initialize file lists
-        self.data = []
-        self.sources = []
-        self.data_files = []
-        self.files = []
+        self.data: List[Dict[str, Any]] = []
+        self.sources: List[Path] = []
+        self.data_files: List[Path] = []
+        self.files: List[Path] = []
 
         # Categorize and load files
         for file in plugin_dir.iterdir():

@@ -1,10 +1,8 @@
----
-
 tables:
 
   User:
     name: users
-    title: "User"
+    label: "User"
     help: |
       The user table contains the user information
     tags: [anag]
@@ -30,11 +28,11 @@ tables:
         nullable: False
 
       - name: address
-        # prefix: a_
         type: Address
+        prefix: a_
 
       - name: is_active
-        title: "Active"
+        label: "Active"
         type: Boolean
         default: True
 
@@ -52,9 +50,10 @@ tables:
         type: String
 
       - name: user_id
-        type: User.id
-        onupdate: "'SET NULL'"
         nullable: true
+        foreign_key:
+          target: User.id
+          onupdate: "'SET NULL'"
 
       - name: endpoint
         type: Json

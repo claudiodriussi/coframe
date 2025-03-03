@@ -1,5 +1,3 @@
----
-
 tables:
 
   Author:
@@ -25,9 +23,6 @@ tables:
         type: String
         length: 50
 
-      - name: m2m.BookAuthor
-        type: Book.id
-
   Book:
     name: books
     tags: [anag]
@@ -52,6 +47,17 @@ tables:
       - name: price
         type: Price
 
-      - name: m2m.BookAuthor
-        type: Author.id
-
+  BookAuthor:
+    name: books_authors
+    columns:
+      - name: id
+        type: ID
+      - name: notes
+        type: String
+    many_to_many:
+      target1:
+        table: Book.id
+        column: book_id
+      target2:
+        table: Author.id
+        column: author_id

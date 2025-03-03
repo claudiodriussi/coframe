@@ -1,32 +1,29 @@
----
 # configuration for the app
-config:
-  name: mytestapp
-  version: 0.0.1
-  description: "A simple test app"
-  license: MIT
-  author: "Claudio Driussi"
+name: mytestapp
+version: 0.0.1
+description: "A simple test app"
+license: MIT
+author: "Claudio Driussi"
 
-  # folders which contain plugins
-  plugins: [plugins, plugins/libapp]
+# folders which contain plugins
+plugins: [plugins, plugins/libapp]
 
-  # db engine for sqlalchemy
-  db_engine: "sqlite:///:memory:"
+# db engine for sqlalchemy
+db_engine: "sqlite:///:memory:"
 
-  # admin credentials
-  admin_user: "admin"
-  admin_passwd: "not needed"
+# admin credentials
+admin_user: "admin"
+admin_passwd: "not needed"
 
-  # addiction imports for the source code generator
-  # source_imports: ['import sys', 'import os']
-  source_add: |
-    def initialize_db(db_url: str):
-        from sqlalchemy import create_engine
-        engine = create_engine(db_url)
-        Base.metadata.create_all(engine)
-        return engine
+# addiction imports for the source code generator
+# source_imports: ['import sys', 'import os']
+source_add: |
+  def initialize_db(db_url: str):
+      from sqlalchemy import create_engine
+      engine = create_engine(db_url)
+      Base.metadata.create_all(engine)
+      return engine
 
 
-    if __name__ == "__main__":
-        initialize_db('sqlite:///:memory:')
-
+  if __name__ == "__main__":
+      initialize_db('sqlite:///:memory:')

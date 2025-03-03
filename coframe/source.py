@@ -1,4 +1,4 @@
-from coframe.db import DB, Field, Table
+from coframe.db import DB, DbColumn, DbTable
 
 
 class Generator:
@@ -6,8 +6,8 @@ class Generator:
     def __init__(self, db: DB):
         self.db = db
         self.imports = set()  # standard imports
-        self.import_fields = set()  # field type found
-        self.import_orm = set()  # field type found
+        self.import_Columns = set()  # Column type found
+        self.import_orm = set()  # Column type found
         self.import_plugins = set()  # plugins with models source code
 
         self.mixins = set()  # all mixin found
@@ -70,7 +70,7 @@ class Generator:
 
         self.source += '\n'.join(self.imports)
         self.source += '\n\n'
-        self.source += f"from sqlalchemy import {', '.join(self.import_fields)}"
+        self.source += f"from sqlalchemy import {', '.join(self.import_Columns)}"
         self.source += '\n'
         self.source += f"from sqlalchemy.orm import {', '.join(self.import_orm)}"
         self.source += '\n\n'
@@ -112,37 +112,8 @@ class Generator:
         s += f"{indent}__tablename__ = '{table1.table_name}_{table2.table_name}'\n"
 
         print(s)
-        """
 
-class BookAuthors(Base):
-    __tablename__ = 'book_authors'
-    book_id: Mapped[int] = mapped_column(Integer, ForeignKey('books.id'), primary_key=True)
-    author_id: Mapped[int] = mapped_column(Integer, ForeignKey('authors.id'), primary_key=True)
-    book: Mapped["Book"] = relationship("Book", overlaps="authors")
-    author: Mapped["Author"] = relationship("Author", overlaps="books")
-
-class Author:
-    books: Mapped[List["Book"]] = relationship(secondary="book_authors", back_populates="authors", overlaps="book")
-
-class Book:
-    authors: Mapped[List["Author"]] = relationship(secondary="book_authors", back_populates="books", overlaps="author")
-
-
-  Author:
-    columns:
-      - name: m2m.BookAuthor
-        type: Book.id
-
-  Book:
-    columns:
-      - name: m2m.BookAuthor
-        type: Author.id
-
-__tablename__ = books_authors # from'm2m_class' table.name + table.name, the first table is found from class name
-
-        """
-
-    def _gen_column(self, column: Field, table: Table):
+    def _gen_column(self, column: DbColumn, table: DbTable):
         indent = " "*4
         s = indent
 
@@ -155,12 +126,12 @@ __tablename__ = books_authors # from'm2m_class' table.name + table.name, the fir
             return ""
 
         # column type
-        t = column.type
+        t = column.db_type
         py_type = t.python_type.__name__
         sa_type = t.name
         if t.inheritance:
             sa_type = t.inheritance[-1]
-        self.import_fields.add(sa_type)
+        self.import_Columns.add(sa_type)
 
         args = []
         for a in column.attr_type:
@@ -172,12 +143,14 @@ __tablename__ = books_authors # from'm2m_class' table.name + table.name, the fir
         foreign = ""
         if 'foreign_key' in column.attributes:
             fk = column.attributes['foreign_key']
-            fid = column.attributes['foreign_id']
+            fk_table = fk['table']
+            fk_id = fk['id']
             args = [""]
-            for a in column.attr_relation:
-                args.append(f"{a}={column.attr_relation[a]}")
-            foreign = f", ForeignKey('{fk.table_name}.{fid}'{', '.join(args)})"
-            self.import_fields.add('ForeignKey')
+            for a in fk:
+                if a not in ['target', 'table', 'id']:
+                    args.append(f"{a}={fk[a]}")
+            foreign = f", ForeignKey('{fk_table.table_name}.{fk_id}'{', '.join(args)})"
+            self.import_Columns.add('ForeignKey')
 
         # column args
         args = [""]
@@ -196,14 +169,14 @@ __tablename__ = books_authors # from'm2m_class' table.name + table.name, the fir
 
         if foreign:
             self.relations[table.name] = self.relations.get(table.name, [])
-            self.back_relations[fk.name] = self.back_relations.get(table.name, [])
+            self.back_relations[fk_table.name] = self.back_relations.get(fk_table.name, [])
             self.relations[table.name].append(
-                f"{indent}{fk.table_name}: Mapped[{py_type}] = "
-                f"relationship('{fk.name}', back_populates='{table.table_name}')\n"
+                f"{indent}{fk_table.table_name}: Mapped[{py_type}] = "
+                f"relationship('{fk_table.name}', back_populates='{table.table_name}')\n"
             )
-            self.back_relations[fk.name].append(
+            self.back_relations[fk_table.name].append(
                 f"{indent}{table.table_name}: Mapped[List['{table.name}']] = "
-                f"relationship('{table.name}', back_populates='{fk.table_name}')\n"
+                f"relationship('{table.name}', back_populates='{fk_table.table_name}')\n"
             )
             self.import_orm.add("relationship")
             self.imports.add("from typing import List")

@@ -1,12 +1,11 @@
----
-
 tables:
 
   User:
     columns:
       - name: is_student
-        title: "Student"
+        label: "Student"
         type: Boolean
+
 
   Book:
     columns:
@@ -30,10 +29,12 @@ tables:
         type: Text
 
       - name: user_id
-        type: User.id
+        foreign_key:
+          target: User.id
 
       - name: book_id
-        type: Book.id
+        foreign_key:
+          target: Book.id
 
   Loan:
     name: loans
@@ -57,7 +58,9 @@ tables:
         nullable: true
 
       - name: user_id
-        type: User.id
+        foreign_key:
+          target: User.id
 
       - name: book_id
-        type: Book.id
+        foreign_key:
+          target: Book.id

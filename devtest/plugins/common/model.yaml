@@ -1,68 +1,63 @@
----
-# The system recognize all the types defined in SQLAlchemy, but from them you
-# can define your own types with specific characteristics even only for semantic
-# reasons. You can define single fields or groups of fields that are often used
-# together as mixins. The attributes defined can be overloaded in the tables.
 types:
 
   ID:
-    inherits: Integer
+    base: Integer
     primary_key: True
     autoincrement: True
-    title: "Unique Identifier"
+    label: "Unique Identifier"
     help: |
       The primary key for the table
 
   ShortID:
-    inherits: String
+    base: String
     length: 32
     primary_key: True
-    title: "Unique Identifier"
+    label: "Unique Identifier"
     help: |
       The primary key for the table
 
   ShortStr:
-    inherits: String
+    base: String
     length: 32
 
   SKU:
-    inherits: ShortStr
+    base: ShortStr
     nullable: False
 
   Description:
-    inherits: String
+    base: String
     nullable: False
 
   Name:
-    inherits: Description
+    base: Description
     index: True
 
   Password:
-    inherits: String
+    base: String
     nullable: False
-    title: "Password"
+    label: "Password"
     help: |
       Please insert a robust password and keep it safe
 
   Email:
-    inherits: String
+    base: String
     validate: email_validator
 
   Price:
-    inherits: Numeric
+    base: Numeric
     precision: 10
     scale: 4
 
   Json:
-    inherits: JSON
+    base: JSON
     default: {}
     nullable: True
 
   Markdown:
-    inherits: Text
+    base: Text
 
   TimeStamp:
-    title: "Timestamp"
+    label: "Timestamp"
     columns:
       - name: created_at
         type: DateTime
@@ -74,7 +69,7 @@ types:
         nullable: False
 
   Address:
-    title: "Address"
+    label: "Address"
     columns:
       - name: address
         type: String
@@ -92,7 +87,7 @@ tables:
 
   Config:
     name: configs
-    title: "Configuration"
+    label: "Configuration"
     help: |
       Wide app configuration file
     tags: [short]
