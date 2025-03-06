@@ -73,15 +73,19 @@ types:
     columns:
       - name: address
         type: String
-        nullable: False
+        nullable: True
       - name: city
         type: String
+        nullable: True
       - name: state
         type: String
+        nullable: True
       - name: zip
         type: String
+        nullable: True
       - name: country
         type: String
+        nullable: True
 
 tables:
 

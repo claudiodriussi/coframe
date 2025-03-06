@@ -50,8 +50,6 @@ tables:
   BookAuthor:
     name: books_authors
     columns:
-      - name: id
-        type: ID
       - name: notes
         type: String
     many_to_many:

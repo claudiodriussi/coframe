@@ -5,7 +5,7 @@ tables:
       - name: is_student
         label: "Student"
         type: Boolean
-
+        default: False
 
   Book:
     columns:
