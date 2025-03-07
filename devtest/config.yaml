@@ -4,6 +4,7 @@ version: 0.0.1
 description: "A simple test app"
 license: MIT
 author: "Claudio Driussi"
+log_file: "devtest.log"
 
 # folders which contain plugins
 plugins: [plugins, plugins/libapp]

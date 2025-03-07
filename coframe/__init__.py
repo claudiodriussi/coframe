@@ -2,7 +2,8 @@ import logging
 import importlib
 import logging.handlers
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union, Sequence
+from typing import List, Dict, Any, Optional, Union, Sequence, Tuple
+from io import StringIO
 
 
 def autoimport(file: str, package: str) -> None:
@@ -100,3 +101,60 @@ def set_formatter(logger: logging.Logger, new_format: str) -> Optional[str]:
         handler.setFormatter(new_formatter)
 
     return old_format
+
+
+def logging_to_file(logger: logging.Logger,
+                    filename: Optional[str] = None,
+                    preserve_format: bool = True) -> Tuple[List[logging.Handler], Optional[StringIO]]:
+    """
+    Redirect logging to a file or StringIO, preserving the current formatter if requested.
+
+    Args:
+        logger: The logger to modify
+        filename: The filename to redirect to, or None to use StringIO
+        preserve_format: Whether to preserve the current formatter format
+
+    Returns:
+        A tuple of (original_handlers, string_io) where string_io is only
+        provided if filename is None
+    """
+    # Save original handlers
+    original_handlers = logger.handlers.copy()
+
+    # Get formatter from existing handlers if available and requested
+    original_format = None
+    if preserve_format and logger.handlers:
+        for handler in logger.handlers:
+            if handler.formatter:
+                original_format = handler.formatter._fmt
+                break
+
+    # Clear existing handlers
+    logger.handlers = []
+
+    if filename:
+        # Create file handler
+        file_handler = logging.FileHandler(filename, mode='w')
+        if original_format:
+            file_handler.setFormatter(logging.Formatter(original_format))
+        logger.addHandler(file_handler)
+        return original_handlers, None
+    else:
+        # Use StringIO for capturing
+        string_io = StringIO()
+        string_handler = logging.StreamHandler(string_io)
+        if original_format:
+            string_handler.setFormatter(logging.Formatter(original_format))
+        logger.addHandler(string_handler)
+        return original_handlers, string_io
+
+
+def restore_logging(logger: logging.Logger, original_handlers: List[logging.Handler]) -> None:
+    """
+    Restore original handlers to a logger.
+
+    Args:
+        logger: The logger to restore
+        original_handlers: The original handlers to restore
+    """
+    logger.handlers = original_handlers

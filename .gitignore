@@ -8,6 +8,7 @@ wheels/
 *.egg-info
 
 devtest/model*.py
+devtest/*.log
 
 # Virtual environments
 .venv
