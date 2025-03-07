@@ -1,4 +1,4 @@
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Any
 from coframe.db import DB, DbColumn, DbTable
 
 
@@ -92,8 +92,6 @@ class RelationshipManager:
         """Initialize relationship manager."""
         self.direct_relations: Dict[str, List[str]] = {}  # Table name -> list of relation statements
         self.back_relations: Dict[str, List[str]] = {}  # Table name -> list of backref statements
-        # self.many2many_relations: Dict[str, List[Tuple[DbTable, DbColumn]]] = {}
-        #                                                            # M2M class name -> list of [table, column] pairs
 
     def add_foreign_key_relation(self, table: str, fk_table_name: str,
                                  column_name: str, fk_table: DbTable, py_type: str) -> None:
@@ -110,22 +108,23 @@ class RelationshipManager:
         indent = " " * 4
 
         # Add forward relation
-        if table.name not in self.direct_relations:
-            self.direct_relations[table.name] = []
-
-        self.direct_relations[table.name].append(
+        relation = self.add_relation_key(table.name, self.direct_relations)
+        relation.append(
             f"{indent}{fk_table.name.lower()}: Mapped[{py_type}] = "
             f"relationship('{fk_table.name}', back_populates='{table.table_name.lower()}')\n"
         )
 
         # Add back relation
-        if fk_table.name not in self.back_relations:
-            self.back_relations[fk_table.name] = []
-
-        self.back_relations[fk_table.name].append(
+        relation = self.add_relation_key(fk_table.name, self.back_relations)
+        relation.append(
             f"{indent}{table.table_name.lower()}: Mapped[List['{table.name}']] = "
             f"relationship('{table.name}', back_populates='{fk_table.name.lower()}')\n"
         )
+
+    def add_relation_key(self, name: str, relation: Dict[str, List[str]] = {}) -> List[str]:
+        if name not in relation:
+            relation[name] = []
+        return relation[name]
 
 
 class ColumnGenerator:
@@ -302,28 +301,22 @@ class Generator:
         # Generate tablename declaration
         code = [class_declaration, " " * 4 + f"__tablename__ = '{table.table_name}'\n"]
 
+        # Generate many to many columns
         m2m = table.attributes.get('many_to_many', None)
         if m2m:
-            # Find target tables and columns
-            target1 = m2m.get('target1', {})
-            target2 = m2m.get('target2', {})
-
-            # Extract table and column names
+            def _m2m_column(target: Dict[str, Any]):
+                t = target['db_type']
+                py_type = t.python_type.__name__
+                sa_type = t.name
+                if t.inheritance:
+                    sa_type = t.inheritance[-1]
+                code.append(
+                    f"    {target['column']}: Mapped[{py_type}] = mapped_column({sa_type}, "
+                    f"ForeignKey('{target['table'].table_name}.{target['id']}'), primary_key=True)\n"
+                )
             try:
-                table1_name, id1 = target1['table'].split('.')
-                table2_name, id2 = target2['table'].split('.')
-
-                # Get the actual table objects
-                table1 = self.db.tables[table1_name]
-                code.append(
-                    f"    {target1['column']}: Mapped[int] = "
-                    f"mapped_column(Integer, ForeignKey('{table1.table_name}.{id1}'), primary_key=True)\n"
-                )
-                table2 = self.db.tables[table2_name]
-                code.append(
-                    f"    {target2['column']}: Mapped[int] = "
-                    f"mapped_column(Integer, ForeignKey('{table2.table_name}.{id2}'), primary_key=True)\n"
-                )
+                _m2m_column(m2m['target1'])
+                _m2m_column(m2m['target2'])
 
             except (ValueError, KeyError) as e:
                 print(f"Error processing many-to-many relationship in {name}: {e}")
@@ -333,6 +326,35 @@ class Generator:
             column_code = self.column_generator.generate_column(column, table)
             if column_code:
                 code.append(column_code)
+
+        # Generate many to many relationships
+        if m2m:
+            def _m2m_retations(target1: Dict[str, Any], target2: Dict[str, Any]):
+                code.append(
+                    f"    {target1['table'].name.lower()}: Mapped['{target1['table'].name}'] = "
+                    f"relationship(back_populates='{target2['table'].name.lower()}_m2m')\n"
+                )
+
+            def _m2m_back_relations(target1: Dict[str, Any], target2: Dict[str, Any]):
+                relation = self.relationships.add_relation_key(target1['table'].name, self.relationships.back_relations)
+                relation.append(
+                    f"    {target2['table'].name.lower()}_m2m: Mapped[List['{name}']]"
+                    f" = relationship(back_populates='{target1['table'].name.lower()}')\n"
+                )
+                relation.append(
+                    f"    {target2['table'].table_name}: Mapped[List['{target2['table'].name}']] = "
+                    f"relationship(secondary='{table.table_name}', "
+                    f"back_populates='{target1['table'].table_name}', viewonly=True)\n\n"
+                )
+            try:
+                code.append("\n")
+                _m2m_retations(m2m['target1'], m2m['target2'])
+                _m2m_retations(m2m['target2'], m2m['target1'])
+                _m2m_back_relations(m2m['target1'], m2m['target2'])
+                _m2m_back_relations(m2m['target2'], m2m['target1'])
+
+            except (ValueError, KeyError) as e:
+                print(f"Error processing many-to-many relationship in {name}: {e}")
 
         self.tables[name] = ''.join(code)
 

@@ -153,10 +153,11 @@ class DB:
             # No need for _column variable anymore
             delattr(self.tables[table_name], '_columns')
 
-        # Resolve foreign keys
+        # Resolve foreign keys and many to many relationships
         for table_name in self.tables:
             for col in self.tables[table_name].columns:
                 col.resolve_foreign(f"table: {table_name}")
+            self.tables[table_name].resolve_m2m(self)
 
 
 class DbType:
@@ -259,6 +260,31 @@ class DbTable:
         self.plugins.append(plugin)
         # Remove processed columns from attributes
         self.attributes.pop('columns', None)
+
+    def resolve_m2m(self, db: DB) -> None:
+        m2m = self.attributes.get('many_to_many', None)
+        if not m2m:
+            return
+
+        def _resolve_target(target: Dict[str, str]) -> None:
+            table, id = target['table'].split('.')
+            foreign = db.tables[table]
+            target['table'] = foreign
+            target['id'] = id
+
+            # Find the referenced column type
+            for col in foreign.columns:
+                if id == col.name:
+                    target['db_type'] = col.db_type
+                    break
+            if not target['db_type']:
+                raise ValueError(f"Many to Many Column error in table: {self.name}")
+
+        try:
+            _resolve_target(m2m['target1'])
+            _resolve_target(m2m['target2'])
+        except Exception:
+            raise ValueError(f"Many to Many error for table: {self.name}")
 
 
 class DbColumn:
