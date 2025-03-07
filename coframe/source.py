@@ -1,4 +1,7 @@
-from typing import Dict, List, Set, Any
+import inspect
+import importlib.util
+from pathlib import Path
+from typing import Dict, List, Set, Any, Tuple
 from coframe.db import DB, DbColumn, DbTable
 
 
@@ -81,6 +84,83 @@ class ModelImportManager:
         import_statements.append('from coframe.db import Base')
 
         return '\n'.join(import_statements)
+
+
+class PluginClassFinder:
+    """
+    Finds and imports Python classes from plugin source files
+    that match table names for inheritance.
+    """
+
+    def __init__(self, plugins_manager):
+        """
+        Initialize the class finder with the plugins manager.
+
+        Args:
+            plugins_manager: The plugins manager instance
+        """
+        self.pm = plugins_manager
+        self.class_map: Dict[str, List[Tuple[str, str]]] = {}  # Table name -> [(module_path, class_name)]
+        self.imported_modules: Dict[str, object] = {}  # Module path -> module object
+
+    def scan_plugin_sources(self) -> None:
+        """
+        Scan all plugin source files for classes that match table names.
+        """
+        for plugin_name, plugin in self.pm.plugins.items():
+            for source_file in plugin.sources:
+                self._process_source_file(source_file, plugin)
+
+    def _process_source_file(self, source_file: Path, plugin) -> None:
+        """
+        Process a single source file to find relevant classes.
+
+        Args:
+            source_file: Path to the source file
+            plugin: Plugin object that owns the source file
+        """
+
+        # Construct the module path
+        module_parts = list(source_file.parts)
+
+        # Convert path to module notation (directory.file)
+        module_parts[-1] = module_parts[-1].replace('.py', '')
+        module_path = '.'.join(module_parts)
+
+        try:
+            # Import the module
+            if module_path not in self.imported_modules:
+                self.imported_modules[module_path] = importlib.import_module(module_path)
+
+            module = self.imported_modules[module_path]
+
+            # Scan for classes
+            for name, obj in inspect.getmembers(module, inspect.isclass):
+                # Check if class is defined in this module (not imported)
+                if obj.__module__ == module_path:
+                    # Add to class map for potential table matching
+                    if name not in self.class_map:
+                        self.class_map[name] = []
+                    self.class_map[name].append((module_path, name))
+
+        except (ImportError, AttributeError) as e:
+            print(f"Error importing module {module_path}: {e}")
+
+    def get_class_inheritance(self, table_name: str) -> List[str]:
+        """
+        Get the inheritance paths for a table.
+
+        Args:
+            table_name: Name of the table to find inheritance for
+
+        Returns:
+            List of fully qualified class paths for inheritance
+        """
+        result = []
+        if table_name in self.class_map:
+            for module_path, class_name in self.class_map[table_name]:
+                result.append(f"{module_path}.{class_name}")
+        return result
 
 
 class RelationshipManager:
@@ -251,6 +331,8 @@ class Generator:
         self.imports = ModelImportManager(db)
         self.relationships = RelationshipManager()
         self.column_generator = ColumnGenerator(db, self.imports, self.relationships)
+        self.class_finder = PluginClassFinder(db.pm)
+        self.class_finder.scan_plugin_sources()
 
         self.mixins: Set[str] = set()  # Set of mixin classes
         self.tables: Dict[str, str] = {}  # Table name -> table class code
@@ -262,7 +344,14 @@ class Generator:
 
         Args:
             filename: Output filename
+        """        """
+        Process a single source file to find relevant classes.
+
+        Args:
+            source_file: Path to the source file
+            plugin: Plugin object that owns the source file
         """
+
         self._process_tables()
         self._generate_source()
 
@@ -292,11 +381,21 @@ class Generator:
         for mixin in mixins:
             self.mixins.add(mixin)
 
+        # Find plugin-defined classes with the same name
+        plugin_classes = self.class_finder.get_class_inheritance(name)
+
+        # Combine base classes (Base, mixins, plugin classes)
+        base_classes = ["Base"]
+        base_classes.extend(mixins)
+        base_classes.extend(plugin_classes)
+
+        # Add imports for plugin classes
+        for plugin_class in plugin_classes:
+            module_path = plugin_class.rsplit('.', 1)[0]
+            self.imports.standard_imports.add(f"import {module_path}")
+
         # Generate class declaration
-        if mixins:
-            class_declaration = f"class {name}(Base, {', '.join(mixins)}):\n"
-        else:
-            class_declaration = f"class {name}(Base):\n"
+        class_declaration = f"class {name}({', '.join(base_classes)}):\n"
 
         # Generate tablename declaration
         code = [class_declaration, " " * 4 + f"__tablename__ = '{table.table_name}'\n"]
