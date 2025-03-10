@@ -346,6 +346,23 @@ class PluginsManager:
         plugins_timestamp = self.get_timestamp()
         return file_timestamp < plugins_timestamp
 
+    def get_sources(self, to_str: bool = False) -> List[Path]:
+        """
+        Get a list of all Python source files from all plugins.
+
+        Args:
+            to_str: if needed transform the Path object to string
+
+        Returns:
+            List[Path]: List of all Python source files
+        """
+        sources = []
+        for name, plugin in self.plugins.items():
+            sources.extend(plugin.sources)
+        if to_str:
+            return [str(s) for s in sources]
+        return sources
+
 
 class Plugin:
     """
