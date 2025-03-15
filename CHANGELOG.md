@@ -20,3 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - added m2m relationship
 - added multiple inheritance to model classes for plugin source code
+
+## [0.3.0] - 2025-03-15
+### Added
+- command processor support with endpoint decorators
+- start centralized SQLAlchemy interaction

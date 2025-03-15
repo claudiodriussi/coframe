@@ -9,6 +9,7 @@ wheels/
 
 devtest/model*.py
 devtest/*.log
+*.sqlite
 
 # Virtual environments
 .venv

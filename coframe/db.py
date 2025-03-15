@@ -1,7 +1,9 @@
 import inspect
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Iterator
+from contextlib import contextmanager
 import sqlalchemy.types
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, scoped_session, Session
 from coframe.plugins import PluginsManager, Plugin
 import coframe
 
@@ -29,6 +31,8 @@ class DB:
         self.types: Dict[str, DbType] = {}
         self.tables: Dict[str, DbTable] = {}
         self.tables_list: List[str] = []
+        self.model: Any = None
+        self.engine: Any = None
 
     def calc_db(self, plugins: PluginsManager) -> None:
         """
@@ -159,6 +163,44 @@ class DB:
                 col.resolve_foreign(f"table: {table_name}")
             self.tables[table_name].resolve_m2m(self)
 
+    def initialize_db(self, db_url: str) -> Any:
+        """
+        Initialize the database with the given connection URL.
+
+        Args:
+            db_url: Database connection URL for SQLAlchemy
+
+        Returns:
+            The created engine instance
+        """
+        from sqlalchemy import create_engine
+        engine = create_engine(db_url)
+        Base.metadata.create_all(engine)
+        self.engine = engine
+        return engine
+
+    @contextmanager
+    def get_session(self) -> Iterator[Session]:
+        """
+        Context manager that provides a session for database operations.
+
+        The session is automatically closed when the context is exited.
+        If an exception occurs, the session is rolled back before being closed.
+
+        Yields:
+            SQLAlchemy session object
+        """
+        session_factory = sessionmaker(bind=self.engine)
+        Session = scoped_session(session_factory)
+        session = Session()
+        try:
+            yield session
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
 
 class DbType:
     """
@@ -170,10 +212,7 @@ class DbType:
     - Automatic attribute inheritance from parent types
     """
 
-    def __init__(self,
-                 name: str,
-                 plugin: Union[Plugin, str],
-                 attributes: Optional[Dict[str, Any]] = None,
+    def __init__(self, name: str, plugin: Union[Plugin, str], attributes: Optional[Dict[str, Any]] = None,
                  python_type: Optional[object] = None) -> None:
         """
         Initialize a new type definition.
@@ -262,11 +301,23 @@ class DbTable:
         self.attributes.pop('columns', None)
 
     def resolve_m2m(self, db: DB) -> None:
+        """
+        Resolve many-to-many relationship information.
+
+        This method processes target tables in a many-to-many relationship,
+        finding the referenced columns and their types.
+
+        Args:
+            db: Database schema manager instance
+
+        Raises:
+            ValueError: If the many-to-many relationship has invalid configuration
+        """
         m2m = self.attributes.get('many_to_many', None)
         if not m2m:
             return
 
-        def _resolve_target(target: Dict[str, str]) -> None:
+        def _resolve_target(target: Dict[str, Any]) -> None:
             table, id = target['table'].split('.')
             foreign = db.tables[table]
             target['table'] = foreign
@@ -361,8 +412,8 @@ class DbColumn:
 
     def resolve_foreign(self, caller: str) -> None:
         """
-        Resolve foreign relationships. It is done after all columns resolution
-        to avoid forward resolutions in case of m2m relationships.
+        Resolve foreign relationships. This is done after all columns resolution
+        to avoid forward resolutions in case of many-to-many relationships.
 
         Args:
             caller: Context information for error messages

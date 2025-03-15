@@ -1,3 +1,4 @@
+import coframe
 from coframe.endpoints import endpoint
 
 
@@ -21,5 +22,22 @@ def say_hello(data):
     return {
         "status": "success",
         "data": message,
+        "code": 200
+    }
+
+
+@endpoint('books')
+def query_books(data):
+    app = coframe.db.Base.__app__
+
+    with app.get_session() as session:
+        books = session.query(app.model.Book).all()
+        data = []
+        for book in books:
+            data.append(book.title)
+
+    return {
+        "status": "success",
+        "data": data,
         "code": 200
     }
