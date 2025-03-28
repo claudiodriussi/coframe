@@ -12,7 +12,7 @@
 
 - **Rich data information**: Plugins will not only include information about database tables but can also include additional data such as form generation details, menu structures, and other elements useful for both client and server applications. The database table definition include also semantic information such labels information and column type inheritance.
 
-- **DB-agnostic**: Applications developed with Coframe are built entirely from plugins. There are no default tables or configurations, although we provide some best practices examples, which are treated like any other plugin.
+- **DB schema-agnostic**: Applications developed with Coframe are built entirely from plugins. There are no default tables or configurations, although we provide some best practices examples, which are treated like any other plugin.
 
 - **Client-agnostic**: The system will include data that client applications can use to build their interfaces. Currently, our focus is on server-side development, so client-specific details are not yet fully defined.
 

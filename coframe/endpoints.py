@@ -229,14 +229,10 @@ class CommandProcessor:
     allowing for asynchronous execution with proper sequencing.
     """
 
-    def __init__(self, db: Any = None) -> None:
+    def __init__(self) -> None:
         """
         Initialize the command processor.
-
-        Args:
-            db: Optional database connection or context
         """
-        self.db = db
         self.endpoints: Dict[str, Callable] = {}
         self.results: Dict[str, CommandResult] = {}
         self.pending_commands: Dict[str, Command] = {}

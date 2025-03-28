@@ -25,3 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - command processor support with endpoint decorators
 - start centralized SQLAlchemy interaction
+
+## [0.3.2] - 2025-03-28
+### Added
+- CRUD db endpoints
+- start querybuilder integration and standalone querybuilder demo

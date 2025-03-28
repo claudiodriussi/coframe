@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 import coframe.plugins
-from coframe.endpoints import endpoint, CommandProcessor
+from coframe.endpoints import endpoint
 
 
 @endpoint('add')
@@ -56,11 +56,9 @@ def main():
             authors_names = [author.full_name for author in book.authors]
             print(f"- {book.title} by {', '.join(authors_names)}")
 
-    # start command processor
-    cp = CommandProcessor()
+    # register extra endpoints
+    cp = app.cp
     cp.resolve_endpoints(["devtest.py"])
-    sources = plugins.get_sources()
-    cp.resolve_endpoints(sources)
 
     # test some endpoints
     command = {
@@ -80,7 +78,82 @@ def main():
 
     # interact to db using endpoint
     command = {
-        "operation": "books",
+        "operation": "Book",
+    }
+    result = cp.send(command)
+    print(result)
+
+    # using standard endpoints get
+    command = {
+        "operation": "db",
+        "parameters": {
+            "table": "Book",
+            "method": "get",
+            "start": 0,
+            "limit": 10
+        }
+    }
+    result = cp.send(command)
+    print(result)
+
+    # using standard endpoints get 1
+    command = {
+        "operation": "db",
+        "parameters": {
+            "table": "Book",
+            "method": "get",
+            "id": 1,
+            "start": 0,
+            "limit": 10
+        }
+    }
+    result = cp.send(command)
+    print(result)
+
+    # using standard endpoints create
+    command = {
+        "operation": "db",
+        "parameters": {
+            "table": "Book",
+            "method": "create",
+            "data": {
+                "isbn": "9788806219451",
+                "title": "Le città invisibili",
+                "publication_date": datetime(1972, 1, 1),
+                "price": 14.90,
+                "status": "A"
+            }
+        }
+    }
+    result = cp.send(command)
+    print(result)
+
+    # get id from just created book
+    book_id = result['data']['id']
+
+    # using standard endpoints update
+    command = {
+        "operation": "db",
+        "parameters": {
+            "table": "Book",
+            "method": "update",
+            "id": book_id,
+            "data": {
+                "price": 16.50
+            }
+        }
+    }
+    result = cp.send(command)
+    print(result)
+
+    # using standard endpoints delete
+    command = {
+        "operation": "db",
+        "parameters": {
+            "table": "Book",
+            "method": "delete",
+            "id": book_id
+        }
     }
     result = cp.send(command)
     print(result)

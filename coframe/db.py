@@ -5,6 +5,8 @@ import sqlalchemy.types
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
 from coframe.plugins import PluginsManager, Plugin
+from coframe.endpoints import CommandProcessor
+from sqlalchemy import inspection
 import coframe
 
 
@@ -28,6 +30,7 @@ class DB:
         - self.tables_list: Ordered list of table names
         """
         self.pm: Optional[PluginsManager] = None
+        self.cp: Optional[CommandProcessor] = None
         self.types: Dict[str, DbType] = {}
         self.tables: Dict[str, DbTable] = {}
         self.tables_list: List[str] = []
@@ -42,6 +45,7 @@ class DB:
         1. Load all type definitions
         2. Create table structures
         3. Process and validate column definitions
+        4. register all endpoints from plugins and from package
 
         Args:
             plugins: Instance containing all loaded plugins
@@ -50,6 +54,7 @@ class DB:
         self._calc_types()
         self._calc_tables()
         self._calc_columns()
+        self._calc_endpoints()
 
     def _calc_types(self) -> None:
         """
@@ -162,6 +167,50 @@ class DB:
             for col in self.tables[table_name].columns:
                 col.resolve_foreign(f"table: {table_name}")
             self.tables[table_name].resolve_m2m(self)
+
+    def _calc_endpoints(self) -> None:
+        """
+        Resolve all endpoints coming from plugins and the ones defined in package
+        """
+        self.cp = CommandProcessor()
+        sources = self.pm.get_sources()
+        self.cp.resolve_endpoints(sources)
+        self.cp.resolve_endpoints('endpoint_db.py')
+        self.cp.resolve_endpoints('endpoint_query.py')
+
+    def find_model_class(self, table_name: str) -> Any:
+        """
+        Find the model class from the name of class or the name of table,
+
+        Args:
+            table_name: the name to search
+
+        Returns:
+            The model class or None if not found
+        """
+
+        # find model by class name
+        if hasattr(self.model, table_name):
+            return getattr(self.model, table_name)
+
+        # find model by table_name
+        for k, v in self.tables.items():
+            if table_name == v.table_name:
+                if hasattr(self.model, v.name):
+                    return getattr(self.model, v.name)
+
+        return None
+
+    def serialize_model(self, model) -> Dict[str, Any]:
+        """
+        Convert SQLAlchemy model instance to dictionary, may be improved adding
+        metadata from DB object and getting relationships.
+        """
+        result = {}
+        for column in inspection.inspect(model.__class__).columns:
+            result[column.name] = getattr(model, column.name)
+
+        return result
 
     def initialize_db(self, db_url: str) -> Any:
         """
