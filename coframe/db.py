@@ -1,5 +1,6 @@
 import inspect
 from typing import Dict, List, Any, Optional, Union, Iterator
+from types import ModuleType
 from contextlib import contextmanager
 import sqlalchemy.types
 from sqlalchemy.ext.declarative import declarative_base
@@ -25,9 +26,13 @@ class DB:
         """
         Initialize the database schema manager.
         - self.pm: Plugin manager instance
+        - self.cp: Command processor instance
         - self.types: Dictionary of all available types (built-in and custom)
         - self.tables: Dictionary of all defined tables
         - self.tables_list: Ordered list of table names
+        - self.model: Module containing all models
+        - self.models: Dictionary of all db models
+        - self.engine: The instanced db engine
         """
         self.pm: Optional[PluginsManager] = None
         self.cp: Optional[CommandProcessor] = None
@@ -35,6 +40,7 @@ class DB:
         self.tables: Dict[str, DbTable] = {}
         self.tables_list: List[str] = []
         self.model: Any = None
+        self.models: Dict[str, Any] = {}
         self.engine: Any = None
 
     def calc_db(self, plugins: PluginsManager) -> None:
@@ -180,7 +186,7 @@ class DB:
 
     def find_model_class(self, table_name: str) -> Any:
         """
-        Find the model class from the name of class or the name of table,
+        Find the model class from the name of class,
 
         Args:
             table_name: the name to search
@@ -188,18 +194,7 @@ class DB:
         Returns:
             The model class or None if not found
         """
-
-        # find model by class name
-        if hasattr(self.model, table_name):
-            return getattr(self.model, table_name)
-
-        # find model by table_name
-        for k, v in self.tables.items():
-            if table_name == v.table_name:
-                if hasattr(self.model, v.name):
-                    return getattr(self.model, v.name)
-
-        return None
+        return self.models.get(table_name, None)
 
     def serialize_model(self, model) -> Dict[str, Any]:
         """
@@ -212,16 +207,21 @@ class DB:
 
         return result
 
-    def initialize_db(self, db_url: str) -> Any:
+    def initialize_db(self, db_url: str, model: ModuleType) -> Any:
         """
-        Initialize the database with the given connection URL.
+        Initialize the database with the given connection URL, register the
+        model module and build the models dictionary
 
         Args:
             db_url: Database connection URL for SQLAlchemy
+            model: Module containing all models
 
         Returns:
             The created engine instance
         """
+        self.model = model
+        self.models = {name: cls for name, cls in vars(self.model).items()
+                       if isinstance(cls, type) and not name.startswith('_')}
         from sqlalchemy import create_engine
         engine = create_engine(db_url)
         Base.metadata.create_all(engine)

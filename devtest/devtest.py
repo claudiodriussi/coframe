@@ -36,16 +36,14 @@ def main():
     else:
         print("No regeneration required.")
 
-    import model  # type: ignore
-    app.model = model
-
     import plugins.libapp.library as library  # type: ignore
     library.test.ok()
 
     # open db engine and populate empty db
+    import model  # type: ignore
     db_file = 'devtest.sqlite'
     is_db = Path(db_file).exists()
-    app.initialize_db(f'sqlite:///{db_file}')
+    app.initialize_db(f'sqlite:///{db_file}', model)
     if not is_db:
         populate_db(app)
 
