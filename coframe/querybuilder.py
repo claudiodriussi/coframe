@@ -42,23 +42,29 @@ class DynamicQueryBuilder:
         self.models = models
         self.engine = session.get_bind() if session else None
 
-    def build_query(self, json_str: str) -> Select:
+    def build_query(self, query_def):
         """
-        Build a SQLAlchemy query from a JSON string.
+        Build a SQLAlchemy query from a JSON string or a dictionary.
 
         Args:
-            json_str: JSON string defining the query structure
+            query_def: Either a JSON string or a dictionary defining the query structure
 
         Returns:
             SQLAlchemy Select object representing the query
 
         Raises:
-            ValueError: If the JSON is invalid or contains errors
+            ValueError: If the query definition is invalid
         """
-        try:
-            query_def = json.loads(json_str)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON: {str(e)}")
+        # Convert JSON string to dictionary if needed
+        if isinstance(query_def, str):
+            try:
+                query_def = json.loads(query_def)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON: {str(e)}")
+
+        # Ensure we have a dictionary
+        if not isinstance(query_def, dict):
+            raise ValueError(f"Query definition must be a JSON string or a dictionary, got {type(query_def)}")
 
         # Get the main table (supports both 'from' and 'table' as synonyms)
         main_table = None
@@ -138,19 +144,19 @@ class DynamicQueryBuilder:
 
         return query
 
-    def execute_query(self, json_str: str, result_format: str = 'default') -> Any:
+    def execute_query(self, query_def, result_format='default', return_cursor=False):
         """
         Build and execute a query, returning the results in the specified format.
 
         Args:
-            json_str: JSON string defining the query
-            result_format: Format of the results ('default', 'dict', 'records', 'tuples', 'json', 'csv', 'cursor')
+            query_def: Either a JSON string or a dictionary defining the query
+            result_format: Format of the results ('default', 'dict', 'records', 'tuples', 'json', 'csv')
             return_cursor: If True, returns a result proxy for streaming iteration
 
         Returns:
             Query results in the requested format or a result proxy for streaming iteration
         """
-        query = self.build_query(json_str)
+        query = self.build_query(query_def)
         result = self.session.execute(query)
 
         # If streaming mode is requested, return the result proxy directly
@@ -326,36 +332,34 @@ class DynamicQueryBuilder:
 
         return csv_string
 
-    def get_query_headers(self, json_str: str) -> List[str]:
+    def get_query_headers(self, query_def):
         """
         Return only the column headers that would be returned by the query
         without actually executing the full query.
-        Useful for getting result metadata before execution.
 
         Args:
-            json_str: JSON string defining the query
+            query_def: Either a JSON string or a dictionary defining the query
 
         Returns:
             List of column names
         """
-        query = self.build_query(json_str)
+        query = self.build_query(query_def)
         # Execute a query with LIMIT 0 to get only the structure without data
         limited_query = query.limit(0)
         result = self.session.execute(limited_query)
         return list(result.keys())
 
-    def get_sql(self, json_str: str) -> str:
+    def get_sql(self, query_def):
         """
-        Return the SQL string corresponding to the JSON query.
-        Useful for debugging and analysis.
+        Return the SQL string corresponding to the query.
 
         Args:
-            json_str: JSON string defining the query
+            query_def: Either a JSON string or a dictionary defining the query
 
         Returns:
             SQL string
         """
-        query = self.build_query(json_str)
+        query = self.build_query(query_def)
         return str(query.compile(compile_kwargs={"literal_binds": True}))
 
 

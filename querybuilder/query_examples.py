@@ -6,12 +6,10 @@ from populate import populate_sample_data
 sys.path.append("..")
 
 # Various query samples
-query_Customer_all = '''
-{
+query_Customer_all = {
     "from": "Customer",
     "select": ["*"]
 }
-'''
 
 query_Customer_germany = '''
 {
