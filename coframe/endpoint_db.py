@@ -1,5 +1,6 @@
 import coframe
 from coframe.endpoints import endpoint
+from coframe.querybuilder import DynamicQueryBuilder
 from typing import Dict, Any, Optional
 from sqlalchemy import and_, or_, desc, asc
 
@@ -281,3 +282,34 @@ def build_filters(model_class, query_filters: Dict[str, Any]) -> Optional[Any]:
     if conditions:
         return and_(*conditions)
     return None
+
+
+@endpoint('query')
+def db_query(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Execute a query in DynamicQueryBuilder format
+
+    Parameters:
+        - format: The desired format for the result from the ones provided by execute_query method
+        - query: Dict for DynamicQueryBuilder
+
+    Returns:
+        Dictionary with query result
+    """
+    format = data.get("format", "tuples")
+    query = data.get("query")
+    if not query:
+        return {"status": "error", "message": "Query not defined", "code": 400}
+    try:
+        app: coframe.DB = coframe.db.Base.__app__
+        with app.get_session() as session:
+            builder = DynamicQueryBuilder(session, app.models)
+            data = builder.execute_query(query, result_format=format)
+            return {
+                "status": "success",
+                "data": data
+            }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "message": str(e), "code": 500}

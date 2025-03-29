@@ -24,10 +24,147 @@ from sqlalchemy.ext.declarative import DeclarativeMeta
 
 class DynamicQueryBuilder:
     """
-    Main query builder that coordinates specialized builders to construct a complete query from JSON.
+    Main query builder that coordinates specialized builders to construct a complete query from JSON or dictionary.
 
     This class acts as a facade for the query building process, delegating specialized tasks
     to dedicated builder classes (SelectBuilder, JoinBuilder, etc.) and assembling the final query.
+
+    Query Format:
+    -------------
+    The query can be defined either as a JSON string or a Python dictionary with the following structure:
+
+    {
+        "from": "ModelName",           # Main table/model name (required)
+        "table": "ModelName",          # Alternative to "from" (optional)
+
+        "select": [                    # Columns to select (optional, defaults to all columns)
+            "column_name",             # Column from the main table
+            "Model.column_name",       # Column from a specific model
+            "function(column_name)",   # Function on a column (e.g., "count(id)")
+            "expr as alias",           # Column or expression with alias
+            "*",                       # All columns from the main table
+            "Model.*"                  # All columns from a specific model
+        ],
+
+        "joins": [                     # Table joins (optional)
+            {                          # Verbose format
+                "table": "ModelName",
+                "type": "inner|left",  # Join type (optional, defaults to "inner")
+                "on": {                # Join condition
+                    "left_table": "ModelName1",
+                    "left_column": "column_name1",
+                    "right_table": "ModelName2",
+                    "right_column": "column_name2"
+                }
+            },
+            {                          # Concise format
+                "ModelName": "Model1.column1 = Model2.column2"
+            },
+            {                          # Dictionary format
+                "ModelName": {
+                    "type": "left",
+                    "on": "Model1.column1 = Model2.column2"
+                }
+            }
+        ],
+
+        "filters": {                   # WHERE conditions (optional)
+            "conditions": [
+                {                      # Verbose format
+                    "table": "ModelName",
+                    "column": "column_name",
+                    "op": "eq|ne|gt|ge|lt|le|like|ilike|in|notin|isnull|isnotnull|between",
+                    "value": value
+                },
+                {                      # Concise format
+                    "column_name": value  # Implicit "eq" operator
+                },
+                {                      # Concise format with explicit operator
+                    "Model.column_name": ["operator", value]
+                },
+                {                      # Operator symbols format
+                    "column_name": ["=", value]  # Symbols like =, !=, >, >=, <, <=
+                },
+                {                      # Nested conditions with AND (default)
+                    "conditions": [
+                        {"column1": value1},
+                        {"column2": value2}
+                    ]
+                },
+                {                      # Nested conditions with OR
+                    "op": "or",
+                    "conditions": [
+                        {"column1": value1},
+                        {"column2": value2}
+                    ]
+                }
+            ]
+        },
+
+        "group_by": [                  # GROUP BY clause (optional)
+            "column_name",
+            "Model.column_name",
+            "expression"
+        ],
+
+        "having": {                    # HAVING clause (optional, same format as "filters")
+            "conditions": [
+                {"function(column_name)": ["operator", value]}
+            ]
+        },
+
+        "order_by": [                  # ORDER BY clause (optional)
+            "column_name",             # Ascending order by default
+            ["column_name", "asc|desc"],  # Explicit direction
+            {                          # Verbose format
+                "column": "column_name",
+                "direction": "asc|desc"
+            },
+            {                          # With table specification
+                "table": "ModelName",
+                "column": "column_name",
+                "direction": "desc"
+            }
+        ],
+
+        "limit": number,               # LIMIT clause (optional)
+        "offset": number               # OFFSET clause (optional)
+    }
+
+    Examples:
+    ---------
+    Example 1: Basic query with filters
+    ```
+    {
+        "from": "Product",
+        "select": ["product_id", "product_name", "unit_price"],
+        "filters": {
+            "conditions": [
+                {"discontinued": 0},
+                {"unit_price": [">", 20]}
+            ]
+        },
+        "order_by": ["unit_price"],
+        "limit": 10
+    }
+    ```
+
+    Example 2: Join query with aggregation
+    ```
+    {
+        "from": "OrderDetail",
+        "select": [
+            "Product.product_name",
+            "sum(OrderDetail.quantity) as total_sold",
+            "sum(OrderDetail.quantity * OrderDetail.unit_price) as revenue"
+        ],
+        "joins": [
+            {"Product": "Product.product_id = OrderDetail.product_id"}
+        ],
+        "group_by": ["Product.product_name"],
+        "order_by": [["revenue", "desc"]],
+        "limit": 5
+    }
     """
 
     def __init__(self, session: Session, models: Dict[str, Type[DeclarativeMeta]]) -> None:
@@ -42,7 +179,7 @@ class DynamicQueryBuilder:
         self.models = models
         self.engine = session.get_bind() if session else None
 
-    def build_query(self, query_def):
+    def build_query(self, query_def: Union[Dict[str, Any], str]) -> Select:
         """
         Build a SQLAlchemy query from a JSON string or a dictionary.
 
@@ -144,14 +281,20 @@ class DynamicQueryBuilder:
 
         return query
 
-    def execute_query(self, query_def, result_format='default', return_cursor=False):
+    def execute_query(self, query_def: Union[Dict[str, Any], str], result_format: str = 'default') -> Any:
         """
         Build and execute a query, returning the results in the specified format.
 
         Args:
             query_def: Either a JSON string or a dictionary defining the query
-            result_format: Format of the results ('default', 'dict', 'records', 'tuples', 'json', 'csv')
-            return_cursor: If True, returns a result proxy for streaming iteration
+            result_format: Format of the results:
+                - 'default': Returns the raw result rows
+                - 'dict': Returns a dictionary with 'headers' and 'data'
+                - 'records': Returns a list of dictionaries (row as dict)
+                - 'tuples': Returns a tuple (headers, data)
+                - 'json': Returns a JSON string representation
+                - 'csv': Returns a CSV string representation
+                - 'cursor': Returns the result cursor for streaming iteration
 
         Returns:
             Query results in the requested format or a result proxy for streaming iteration
@@ -332,7 +475,7 @@ class DynamicQueryBuilder:
 
         return csv_string
 
-    def get_query_headers(self, query_def):
+    def get_query_headers(self, query_def: Union[Dict[str, Any]]) -> List[str]:
         """
         Return only the column headers that would be returned by the query
         without actually executing the full query.
@@ -349,9 +492,10 @@ class DynamicQueryBuilder:
         result = self.session.execute(limited_query)
         return list(result.keys())
 
-    def get_sql(self, query_def):
+    def get_sql(self, query_def: Union[Dict[str, Any]]) -> str:
         """
         Return the SQL string corresponding to the query.
+        Useful for debugging and analysis.
 
         Args:
             query_def: Either a JSON string or a dictionary defining the query

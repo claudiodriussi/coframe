@@ -76,7 +76,36 @@ def main():
 
     # interact to db using endpoint
     command = {
-        "operation": "Book",
+        "operation": "books",
+    }
+    result = cp.send(command)
+    print(result)
+
+    # a dynamic query
+    q = {
+        "from": "Book",
+        "select": [
+            "id",
+            "title",
+            "isbn",
+            "publication_date",
+            "Author.id as author_id",
+            "Author.first_name",
+            "Author.last_name",
+            "Author.nationality"
+        ],
+        "joins": [
+            {"BookAuthor": "BookAuthor.book_id = Book.id"},
+            {"Author": "Author.id = BookAuthor.author_id"}
+        ],
+        "order_by": ["Book.title", "Author.last_name", "Author.first_name"]
+    }
+    command = {
+        "operation": "query",
+        'parameters': {
+            "format": "tuples",
+            "query": q
+        }
     }
     result = cp.send(command)
     print(result)
