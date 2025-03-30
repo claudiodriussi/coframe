@@ -5,6 +5,7 @@ import uuid
 from functools import wraps
 from typing import Dict, List, Any, Optional, Union, Callable
 from pathlib import Path
+import coframe
 
 # Global dictionary to register endpoints
 _ENDPOINTS: Dict[str, Callable] = {}
@@ -131,12 +132,13 @@ class Command:
     Class to represent a command to be processed.
 
     This class encapsulates all information needed to execute a command,
-    including operation name, parameters, and execution metadata.
+    including operation name, parameters, execution metadata, and authentication context.
     """
     def __init__(self,
                  operation: str,
                  parameters: Optional[Dict[str, Any]] = None,
                  request_id: Optional[str] = None,
+                 context: Optional[Dict[str, Any]] = None,
                  version: str = "1.0",
                  depends_on: Optional[Union[str, List[str]]] = None,
                  timeout: int = 30) -> None:
@@ -147,6 +149,7 @@ class Command:
             operation: The name of the operation to execute
             parameters: Parameters to pass to the operation
             request_id: Unique identifier for the command (auto-generated if None)
+            context: Execution context (tenant, user, permissions, etc.)
             version: API version string
             depends_on: Request ID(s) that must complete before this command can execute
             timeout: Maximum execution time in seconds
@@ -154,30 +157,13 @@ class Command:
         self.operation = operation
         self.parameters = parameters or {}
         self.request_id = request_id or str(uuid.uuid4())
+        self.context = context or {}
         self.version = version
         self.depends_on = depends_on if isinstance(depends_on, list) or depends_on is None else [depends_on]
         self.timeout = timeout
         self.result: Optional[CommandResult] = None
         self.completed: threading.Event = threading.Event()
         self.started: bool = False
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Command':
-        """
-        Create a command from a dictionary.
-
-        Args:
-            data: Dictionary containing command data
-
-        Returns:
-            A new Command instance
-        """
-        return cls(operation=data.get("operation", ""),
-                   parameters=data.get("parameters", {}),
-                   request_id=data.get("request_id"),
-                   version=data.get("version", "1.0"),
-                   depends_on=data.get("depends_on"),
-                   timeout=data.get("timeout", 30))
 
     @classmethod
     def from_json(cls, json_str: str) -> 'Command':
@@ -194,22 +180,6 @@ class Command:
         data = json.loads(json_str)
         return cls.from_dict(data)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert the command to a dictionary.
-
-        Returns:
-            Dictionary representation of the command
-        """
-        return {
-            "operation": self.operation,
-            "parameters": self.parameters,
-            "request_id": self.request_id,
-            "version": self.version,
-            "depends_on": self.depends_on,
-            "timeout": self.timeout
-        }
-
     def to_json(self) -> str:
         """
         Convert the command to a JSON string.
@@ -219,6 +189,33 @@ class Command:
         """
         import json
         return json.dumps(self.to_dict())
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Command':
+        """
+        Create a command from a dictionary.
+        """
+        return cls(operation=data.get("operation", ""),
+                   parameters=data.get("parameters", {}),
+                   request_id=data.get("request_id"),
+                   context=data.get("context"),
+                   version=data.get("version", "1.0"),
+                   depends_on=data.get("depends_on"),
+                   timeout=data.get("timeout", 30))
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert the command to a dictionary.
+        """
+        return {
+            "operation": self.operation,
+            "parameters": self.parameters,
+            "request_id": self.request_id,
+            "context": self.context,
+            "version": self.version,
+            "depends_on": self.depends_on,
+            "timeout": self.timeout
+        }
 
 
 class CommandProcessor:
@@ -317,6 +314,9 @@ class CommandProcessor:
                                    code=404)
         else:
             try:
+                # set the context before executing the function
+                coframe.db.BaseApp.set_context(command.context)
+
                 # Execute the endpoint function
                 func = self.endpoints[command.operation]
                 start_time = time.time()

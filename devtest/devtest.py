@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from pathlib import Path
+import coframe
 import coframe.plugins
 from coframe.endpoints import endpoint
 
@@ -9,6 +10,8 @@ def add_numbers(data):
     a = data.get("a", 0)
     b = data.get("b", 0)
 
+    # the context manager is working
+    print(coframe.db.BaseApp.get_context())
     return {
         "status": "success",
         "data": a + b
@@ -62,9 +65,12 @@ def main():
     command = {
         "operation": "add",
         "parameters": {"a": 5, "b": 3},
+        "context": {"user": "me"}
     }
     result = cp.send(command)
     print(result)
+    # the context manager works within the command thread
+    print(coframe.db.BaseApp.get_context())
 
     command = {
         "operation": "sayhello",
@@ -154,6 +160,7 @@ def main():
     }
     result = cp.send(command)
     print(result)
+    print(coframe.db.BaseApp.get_context())
 
     # get id from just created book
     book_id = result['data']['id']

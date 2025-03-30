@@ -1,4 +1,5 @@
 import inspect
+import threading
 from typing import Dict, List, Any, Optional, Union, Iterator
 from types import ModuleType
 from contextlib import contextmanager
@@ -229,16 +230,26 @@ class DB:
         return engine
 
     @contextmanager
-    def get_session(self) -> Iterator[Session]:
+    def get_session(self, context: Dict[str, Any] = None) -> Iterator[Session]:
         """
         Context manager that provides a session for database operations.
 
         The session is automatically closed when the context is exited.
         If an exception occurs, the session is rolled back before being closed.
 
+        Args:
+            context: Optional context manager to use for this session
+
         Yields:
             SQLAlchemy session object
         """
+
+        # save the current context and set a new one
+        old_context = None
+        if context is not None:
+            old_context = BaseApp.get_context()
+            BaseApp.set_context(context)
+
         session_factory = sessionmaker(bind=self.engine)
         Session = scoped_session(session_factory)
         session = Session()
@@ -249,6 +260,9 @@ class DB:
             raise
         finally:
             session.close()
+            # restore previous context
+            if context is not None and old_context is not None:
+                BaseApp.set_context(old_context)
 
 
 class DbType:
@@ -491,6 +505,24 @@ class BaseApp:
     Provides access to the database schema information.
     """
     __app__: DB = DB()
+
+    @classmethod
+    def get_context(cls):
+        """
+        Get current context from thread-local storage
+        """
+        if not hasattr(BaseApp, '_context'):
+            BaseApp._context = threading.local()
+        return getattr(BaseApp._context, 'value', None)
+
+    @classmethod
+    def set_context(cls, context):
+        """
+        Set current context in thread-local storage
+        """
+        if not hasattr(BaseApp, '_context'):
+            BaseApp._context = threading.local()
+        BaseApp._context.value = context
 
 
 Base = declarative_base(cls=BaseApp)
