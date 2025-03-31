@@ -28,7 +28,7 @@ def main():
     print(plugins.export_pythonpath())
 
     # recalc db and source code model generation
-    app = coframe.db.Base.__app__
+    app = coframe.utils.get_app()
     app.calc_db(plugins)
 
     model_file = "model.py"
@@ -83,6 +83,15 @@ def main():
     # interact to db using endpoint
     command = {
         "operation": "books",
+    }
+    result = cp.send(command)
+    print(result)
+
+    command = {
+        "operation": "auth",
+        "parameters": {
+            "username": "mrossi",
+            "password": "hashed_password_here"},
     }
     result = cp.send(command)
     print(result)

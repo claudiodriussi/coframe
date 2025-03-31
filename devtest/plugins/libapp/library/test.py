@@ -28,7 +28,7 @@ def say_hello(data):
 
 @endpoint('books')
 def query_books(data):
-    app: coframe.DB = coframe.db.Base.__app__
+    app = coframe.utils.get_app()
 
     with app.get_session() as session:
         books = session.query(app.model.Book).all()

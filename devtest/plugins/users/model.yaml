@@ -36,6 +36,11 @@ tables:
         type: Boolean
         default: True
 
+      - name: is_admin
+        label: "Administrator"
+        type: Boolean
+        default: False
+
   UserLog:
     name: user_logs
     mixins: [TimeStamp]

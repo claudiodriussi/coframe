@@ -8,7 +8,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
 from coframe.plugins import PluginsManager, Plugin
 from coframe.endpoints import CommandProcessor
-from sqlalchemy import inspection
 import coframe
 
 
@@ -183,7 +182,6 @@ class DB:
         sources = self.pm.get_sources()
         self.cp.resolve_endpoints(sources)
         self.cp.resolve_endpoints('endpoint_db.py')
-        self.cp.resolve_endpoints('endpoint_query.py')
 
     def find_model_class(self, table_name: str) -> Any:
         """
@@ -196,17 +194,6 @@ class DB:
             The model class or None if not found
         """
         return self.models.get(table_name, None)
-
-    def serialize_model(self, model) -> Dict[str, Any]:
-        """
-        Convert SQLAlchemy model instance to dictionary, may be improved adding
-        metadata from DB object and getting relationships.
-        """
-        result = {}
-        for column in inspection.inspect(model.__class__).columns:
-            result[column.name] = getattr(model, column.name)
-
-        return result
 
     def initialize_db(self, db_url: str, model: ModuleType) -> Any:
         """
@@ -504,7 +491,7 @@ class BaseApp:
     Base class for all SQLAlchemy models.
     Provides access to the database schema information.
     """
-    __app__: DB = DB()
+    __coframe_app__: DB = DB()
 
     @classmethod
     def get_context(cls):

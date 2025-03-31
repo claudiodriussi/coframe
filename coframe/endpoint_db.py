@@ -33,7 +33,7 @@ def db_operations(data: Dict[str, Any]) -> Dict[str, Any]:
             return {"status": "error", "message": "Table name is required", "code": 400}
 
         # Get database app and model class
-        app: coframe.DB = coframe.db.Base.__app__
+        app = coframe.utils.get_app()
         model_class = app.find_model_class(table_name)
 
         if not model_class:
@@ -75,7 +75,7 @@ def handle_get(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
 
             return {
                 "status": "success",
-                "data": app.serialize_model(record),
+                "data": coframe.utils.serialize_model(record),
                 "code": 200
             }
         else:
@@ -105,7 +105,7 @@ def handle_get(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
 
             # Execute query and serialize results
             records = query.all()
-            result = [app.serialize_model(record) for record in records]
+            result = [coframe.utils.serialize_model(record) for record in records]
 
             return {
                 "status": "success",
@@ -139,7 +139,7 @@ def handle_create(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
 
             return {
                 "status": "success",
-                "data": app.serialize_model(new_record),
+                "data": coframe.utils.serialize_model(new_record),
                 "message": "Record created successfully",
                 "code": 201
             }
@@ -172,7 +172,7 @@ def handle_update(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
             session.commit()
             return {
                 "status": "success",
-                "data": app.serialize_model(record),
+                "data": coframe.utils.serialize_model(record),
                 "message": "Record updated successfully",
                 "code": 200
             }
@@ -301,7 +301,7 @@ def db_query(data: Dict[str, Any]) -> Dict[str, Any]:
     if not query:
         return {"status": "error", "message": "Query not defined", "code": 400}
     try:
-        app: coframe.DB = coframe.db.Base.__app__
+        app = coframe.utils.get_app()
         with app.get_session() as session:
             builder = DynamicQueryBuilder(session, app.models)
             data = builder.execute_query(query, result_format=format)
@@ -309,6 +309,76 @@ def db_query(data: Dict[str, Any]) -> Dict[str, Any]:
                 "status": "success",
                 "data": data
             }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "message": str(e), "code": 500}
+
+
+@endpoint('auth')
+def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Authenticate a user and return a context for subsequent operations.
+
+    Parameters:
+        - username: User identifier
+        - password: User credential
+
+    Returns:
+        Dictionary with authentication result and context
+    """
+    try:
+        username = data.get('username')
+        password = data.get('password')
+
+        if not username or not password:
+            return {
+                "status": "error",
+                "message": "Username and password are required",
+                "code": 400
+            }
+
+        # Get authentication configuration
+        app = coframe.utils.get_app()
+        config = app.pm.config.get('authentication', {})
+        user_table = config.get('user_table', 'User')
+        name_field = config.get('username_field', 'username')
+        pass_field = config.get('password_field', 'password')
+        context_fields = config.get('context_fields', ['id'])
+
+        # Find the user
+        user = coframe.utils.seek(user_table, {name_field: username})
+
+        if not user:
+            return {
+                "status": "error",
+                "message": "Invalid credentials",
+                "code": 401
+            }
+
+        # Verify password (in a real system, use proper password hashing)
+        if getattr(user, pass_field) != password:
+            return {
+                "status": "error",
+                "message": "Invalid credentials",
+                "code": 401
+            }
+
+        # Build context with selected fields
+        context = {}
+        for field in context_fields:
+            if hasattr(user, field):
+                context[field] = getattr(user, field)
+
+        return {
+            "status": "success",
+            "data": {
+                "authenticated": True,
+                "context": context
+            },
+            "code": 200
+        }
+
     except Exception as e:
         import traceback
         traceback.print_exc()

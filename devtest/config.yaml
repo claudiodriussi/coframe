@@ -16,6 +16,13 @@ db_engine: "sqlite:///:memory:"
 admin_user: "admin"
 admin_passwd: "not needed"
 
+authentication:
+  user_table: User
+  username_field: username
+  password_field: password
+  context_fields: [id, email, is_active, is_admin]
+
+
 # addiction imports for the source code generator
 # source_imports: ['import sys', 'import os']
 source_add: |
