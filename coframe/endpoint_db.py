@@ -356,11 +356,29 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
                 "code": 401
             }
 
-        # Verify password (in a real system, use proper password hashing)
+        # Verify password - production version
+        '''
+        hashed_password = getattr(user, pass_field)
+        if not bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8')):
+            return {
+                "status": "error",
+                "message": "Invalid credentials",
+                "code": 401
+            }
+        '''
+        # Verify password - For development/testing
         if getattr(user, pass_field) != password:
             return {
                 "status": "error",
                 "message": "Invalid credentials",
+                "code": 401
+            }
+
+        # Check if user is active
+        if hasattr(user, 'is_active') and not user.is_active:
+            return {
+                "status": "error",
+                "message": "Account is inactive",
                 "code": 401
             }
 
@@ -369,6 +387,7 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
         for field in context_fields:
             if hasattr(user, field):
                 context[field] = getattr(user, field)
+        context['username'] = username
 
         return {
             "status": "success",

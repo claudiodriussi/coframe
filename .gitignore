@@ -11,6 +11,7 @@ devtest/model*.py
 devtest/*.log
 *.sqlite
 
-# Virtual environments
+# Virtual environments and ide
 .venv
 .vscode
+.ipynb*/

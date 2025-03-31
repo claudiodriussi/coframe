@@ -1,0 +1,7 @@
+sqlalchemy
+pyyaml
+flask
+flask-cors
+pyjwt
+jupyterlab
+pandas

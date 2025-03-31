@@ -1,8 +1,10 @@
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-import coframe
-import coframe.plugins
-from coframe.endpoints import endpoint
+sys.path.append("..")
+import coframe  # noqa: E402
+import coframe.plugins  # noqa: E402
+from coframe.endpoints import endpoint  # noqa: E402
 
 
 @endpoint('add')

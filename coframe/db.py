@@ -33,6 +33,7 @@ class DB:
         - self.model: Module containing all models
         - self.models: Dictionary of all db models
         - self.engine: The instanced db engine
+        - self.db_type: Database type: "sqlite", "postgresql", "mysql" and so on
         """
         self.pm: Optional[PluginsManager] = None
         self.cp: Optional[CommandProcessor] = None
@@ -42,6 +43,7 @@ class DB:
         self.model: Any = None
         self.models: Dict[str, Any] = {}
         self.engine: Any = None
+        self.db_type: str = "unknown"
 
     def calc_db(self, plugins: PluginsManager) -> None:
         """
@@ -214,7 +216,32 @@ class DB:
         engine = create_engine(db_url)
         Base.metadata.create_all(engine)
         self.engine = engine
+        self.db_type = self.get_database_type()
         return engine
+
+    def get_database_type(self) -> str:
+        """
+        Get the type of database being used.
+
+        Returns:
+            String representing database type ('sqlite', 'postgresql', 'mysql', etc.)
+        """
+        if not self.engine:
+            return None
+
+        connection_url = str(self.engine.url)
+
+        if 'sqlite' in connection_url:
+            return 'sqlite'
+        elif 'postgresql' in connection_url or 'postgres' in connection_url:
+            return 'postgresql'
+        elif 'mysql' in connection_url:
+            return 'mysql'
+        elif 'mariadb' in connection_url:
+            return 'mariadb'
+        # add further db types if needed
+        else:
+            return 'unknown'
 
     @contextmanager
     def get_session(self, context: Dict[str, Any] = None) -> Iterator[Session]:
