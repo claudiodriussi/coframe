@@ -382,11 +382,27 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
                 "code": 401
             }
 
-        # Build context with selected fields
+        # Build context with selected fields from the User table
+        # and handle custom fields automatically
         context = {}
+
+        # Get all attributes available on the user model
+        user_model = app.models.get(user_table)
+        user_attributes = [column.key for column in user_model.__table__.columns]
+
         for field in context_fields:
-            if hasattr(user, field):
+            if field in user_attributes:
+                # Standard field from User table
                 context[field] = getattr(user, field)
+            else:
+                # Custom field not in User table
+                # Check if this field was provided in the request
+                if field in data:
+                    context[field] = data[field]
+                else:
+                    # Otherwise set to None
+                    context[field] = None
+
         context['username'] = username
 
         return {
@@ -394,6 +410,58 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
             "data": {
                 "authenticated": True,
                 "context": context
+            },
+            "code": 200
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "message": str(e), "code": 500}
+
+
+@endpoint('update_context')
+def update_context(data):
+    """
+    Update user context and return a new token with updated context.
+    """
+    try:
+        # Get current context
+        current_context = coframe.db.BaseApp.get_context()
+
+        # Verify user is authenticated
+        if not current_context or 'id' not in current_context:
+            return {
+                "status": "error",
+                "message": "User not authenticated",
+                "code": 401
+            }
+
+        # Get authentication configuration
+        app = coframe.utils.get_app()
+        config = app.pm.config.get('authentication', {})
+        user_table = config.get('user_table', 'User')
+        context_fields = config.get('context_fields', ['id'])
+
+        # Get all attributes available on the user model
+        user_model = app.models.get(user_table)
+        user_attributes = [column.key for column in user_model.__table__.columns]
+
+        # Determine which fields are custom (not in User table)
+        custom_fields = [field for field in context_fields if field not in user_attributes]
+
+        # Only allow updates to custom fields
+        for field in custom_fields:
+            if field in data:
+                current_context[field] = data[field]
+
+        # Update the context in the current thread
+        coframe.db.BaseApp.set_context(current_context)
+
+        return {
+            "status": "success",
+            "data": {
+                "context": current_context
             },
             "code": 200
         }

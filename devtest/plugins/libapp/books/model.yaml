@@ -17,7 +17,7 @@ tables:
 
       - name: birth_date
         type: Date
-        default: null
+        nullable: true
 
       - name: nationality
         type: String

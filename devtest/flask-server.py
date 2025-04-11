@@ -113,6 +113,53 @@ def login():
         return jsonify({'message': 'An error occurred during authentication'}), 500
 
 
+@app.route('/api/auth/update_context', methods=['POST'])
+@login_required
+def update_user_context():
+    """Update user context and generate a new token"""
+    try:
+        data = request.json
+
+        # Create command to update context
+        command = {
+            "operation": "update_context",
+            "parameters": data,
+            "context": g.user_context
+        }
+
+        # Execute command
+        result = command_processor.send(command)
+
+        # Check if operation was successful
+        if result.get('status') != 'success':
+            return jsonify(result), result.get('code', 400)
+
+        # Get updated context from result
+        updated_context = result.get('data', {}).get('context', {})
+
+        # Create new JWT token with updated context
+        token_payload = {
+            'exp': datetime.datetime.utcnow() + app.config['JWT_EXPIRATION_DELTA']
+        }
+
+        # Add all context fields to the token
+        for key, value in updated_context.items():
+            token_payload[key] = value
+
+        # Generate the token
+        new_token = jwt.encode(token_payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+        return jsonify({
+            'status': 'success',
+            'token': new_token,
+            'context': updated_context
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"Context update error: {str(e)}")
+        return jsonify({'message': 'An error occurred while updating context'}), 500
+
+
 @app.route('/api/db/<table>', methods=['GET'])
 @login_required
 def db_get_all(table):

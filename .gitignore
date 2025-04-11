@@ -1,7 +1,7 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
-_notes/
+_*/
 build/
 dist/
 wheels/
