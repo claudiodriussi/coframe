@@ -52,8 +52,6 @@ class PluginsManager:
             "license": "",
             "plugins": ['plugins'],
             "db_engine": "",
-            "admin_user": "",
-            "admin_passwd": "",
             "log_file": "",
         }
         with open(config) as f:

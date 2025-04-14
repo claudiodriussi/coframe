@@ -1,4 +1,3 @@
-
 import datetime
 from sqlalchemy import inspection
 import coframe

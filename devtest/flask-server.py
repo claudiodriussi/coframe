@@ -311,6 +311,27 @@ def execute_query():
         return jsonify({'message': str(e)}), 500
 
 
+@app.route('/api/read_file', methods=['POST'])
+@login_required
+def read_file():
+    """Read a file from filesystem, it recognize some suffixes"""
+    try:
+        data = request.json
+
+        command = {
+            "operation": "read_file",
+            "parameters": data,
+            "context": g.user_context
+        }
+
+        result = command_processor.send(command)
+        return jsonify(result), result.get('code', 200)
+
+    except Exception as e:
+        app.logger.error(f"Error in generic_endpoint: {str(e)}")
+        return jsonify({'message': str(e)}), 500
+
+
 @app.route('/api/endpoint/<operation>', methods=['POST'])
 @login_required
 def generic_endpoint(operation):

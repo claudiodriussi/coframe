@@ -34,6 +34,8 @@ def query_books(data):
         books = session.query(app.model.Book).all()
         data = []
         for book in books:
+            if len(data) > 10:
+                break
             data.append(book.title)
 
     return {
