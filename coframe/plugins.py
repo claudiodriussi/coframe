@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 import yaml
-import coframe
+from coframe.utils import get_logger, set_formatter, logging_to_file, deep_merge
 
 
 class PluginsManager:
@@ -35,8 +35,8 @@ class PluginsManager:
         self.merge_handlers: Dict[str, Any] = {}
 
         # Initialize logging
-        self.logger = coframe.get_logger(logger_name)
-        coframe.set_formatter(self.logger, '%(name)s|%(levelname)s|%(message)s')
+        self.logger = get_logger(logger_name)
+        set_formatter(self.logger, '%(name)s|%(levelname)s|%(message)s')
 
     def register_merge_handler(self, pattern: str, handler: Any) -> None:
         """
@@ -90,11 +90,11 @@ class PluginsManager:
         }
         with open(config) as f:
             data = yaml.safe_load(f)
-        coframe.deep_merge(self.config, data)
+        deep_merge(self.config, data)
 
         # Redirect logging to file if specified in config
         if self.config['log_file']:
-            self.original_handlers, _ = coframe.logging_to_file(self.logger, self.config['log_file'])
+            self.original_handlers, _ = logging_to_file(self.logger, self.config['log_file'])
 
     def load_plugins(self) -> None:
         """
@@ -310,11 +310,11 @@ class PluginsManager:
 
     def print_history(self) -> None:
         """Display the complete history of key definitions across all plugins."""
-        format_str = coframe.set_formatter(self.logger, '%(name)s|%(message)s')
+        format_str = set_formatter(self.logger, '%(name)s|%(message)s')
         self.logger.info("Definition History:")
         for key_path, plugins in sorted(self.history.items()):
             self.logger.info(f"{key_path}: defined in {sorted(plugins)}")
-        coframe.set_formatter(self.logger, format_str)
+        set_formatter(self.logger, format_str)
 
     def export_pythonpath(self, windows: bool = os.name == 'nt') -> str:
         """
@@ -432,7 +432,7 @@ class Plugin:
 
         with open(plugin_dir / "config.yaml") as f:
             data = yaml.safe_load(f)
-        coframe.deep_merge(self.config, data)
+        deep_merge(self.config, data)
 
         self.name: str = self.config['name']
         self.plugin_dir: Path = plugin_dir

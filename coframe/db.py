@@ -8,7 +8,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
 from coframe.plugins import PluginsManager, Plugin
 from coframe.endpoints import CommandProcessor
-import coframe
+from coframe.utils import deep_merge
 
 
 class DB:
@@ -329,7 +329,7 @@ class DbType:
                 raise ValueError(f'Type "{type_obj.name}" declared in "{type_obj.plugin.name}" is not found')
             type_obj = types[type_obj.attributes['base']]
             self.inheritance.append(type_obj.name)
-            coframe.deep_merge(self.attributes, type_obj.attributes)
+            deep_merge(self.attributes, type_obj.attributes)
 
         self.python_type = type_obj.python_type
 
@@ -374,7 +374,7 @@ class DbTable:
             self._columns.append(column)
 
         # Merge attributes
-        coframe.deep_merge(self.attributes, attributes)
+        deep_merge(self.attributes, attributes)
 
         self.plugins.append(plugin)
         # Remove processed columns from attributes
