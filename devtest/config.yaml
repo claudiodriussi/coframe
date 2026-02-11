@@ -12,6 +12,10 @@ plugins: [plugins, plugins/libapp]
 # db engine for sqlalchemy
 db_engine: "sqlite:///:memory:"
 
+# API configuration
+api:
+  prefix: "coframe"  # All Coframe endpoints will be under /coframe/api/...
+
 # table and fields used for authentication
 authentication:
   user_table: User

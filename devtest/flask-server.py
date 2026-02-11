@@ -30,6 +30,10 @@ db_url = 'sqlite:///devtest.sqlite'  # Configure your database URL here
 coframe_app.initialize_db(db_url, model)
 command_processor = coframe_app.cp
 
+# Get API prefix from configuration
+api_prefix = f"/{plugins.config.get('api', {}).get('prefix', 'api')}/api"
+print(f"Coframe API endpoints will be available under: {api_prefix}")
+
 
 # Authentication decorator
 def login_required(f):
@@ -61,8 +65,31 @@ def login_required(f):
     return decorated_function
 
 
-# Routes
-@app.route('/api/auth/login', methods=['POST'])
+# Local application routes (not part of Coframe)
+@app.route('/info', methods=['GET'])
+def app_info():
+    """Application Information endpoint - local endpoint"""
+    return jsonify({
+        'status': 'success',
+        'data': {
+            'application': plugins.config.get('name', 'Unknown'),
+            'version': plugins.config.get('version', '0.0.0'),
+            'description': plugins.config.get('description', ''),
+            'coframe_api_prefix': api_prefix,
+            'available_endpoints': {
+                'app_info': '/info',
+                'coframe_auth': f'{api_prefix}/auth/login',
+                'coframe_database': f'{api_prefix}/db/<table>',
+                'coframe_query': f'{api_prefix}/query',
+                'coframe_files': f'{api_prefix}/read_file',
+                'coframe_commands': f'{api_prefix}/endpoint/<operation>'
+            }
+        }
+    })
+
+
+# Coframe routes (using configured prefix)
+@app.route(f'{api_prefix}/auth/login', methods=['POST'])
 def login():
     """Login endpoint"""
     data = request.json
@@ -113,7 +140,7 @@ def login():
         return jsonify({'message': 'An error occurred during authentication'}), 500
 
 
-@app.route('/api/auth/update_context', methods=['POST'])
+@app.route(f'{api_prefix}/auth/update_context', methods=['POST'])
 @login_required
 def update_user_context():
     """Update user context and generate a new token"""
@@ -160,7 +187,7 @@ def update_user_context():
         return jsonify({'message': 'An error occurred while updating context'}), 500
 
 
-@app.route('/api/db/<table>', methods=['GET'])
+@app.route(f'{api_prefix}/db/<table>', methods=['GET'])
 @login_required
 def db_get_all(table):
     """Get all records from a table"""
@@ -186,7 +213,7 @@ def db_get_all(table):
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/db/<table>/<id>', methods=['GET'])
+@app.route(f'{api_prefix}/db/<table>/<id>', methods=['GET'])
 @login_required
 def db_get_one(table, id):
     """Get a single record by ID"""
@@ -209,7 +236,7 @@ def db_get_one(table, id):
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/db/<table>', methods=['POST'])
+@app.route(f'{api_prefix}/db/<table>', methods=['POST'])
 @login_required
 def db_create(table):
     """Create a new record"""
@@ -236,7 +263,7 @@ def db_create(table):
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/db/<table>/<id>', methods=['PUT'])
+@app.route(f'{api_prefix}/db/<table>/<id>', methods=['PUT'])
 @login_required
 def db_update(table, id):
     """Update a record"""
@@ -264,7 +291,7 @@ def db_update(table, id):
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/db/<table>/<id>', methods=['DELETE'])
+@app.route(f'{api_prefix}/db/<table>/<id>', methods=['DELETE'])
 @login_required
 def db_delete(table, id):
     """Delete a record"""
@@ -287,7 +314,7 @@ def db_delete(table, id):
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/query', methods=['POST'])
+@app.route(f'{api_prefix}/query', methods=['POST'])
 @login_required
 def execute_query():
     """Execute a dynamic query"""
@@ -311,7 +338,7 @@ def execute_query():
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/read_file', methods=['POST'])
+@app.route(f'{api_prefix}/read_file', methods=['POST'])
 @login_required
 def read_file():
     """Read a file from filesystem, it recognize some suffixes"""
@@ -323,7 +350,6 @@ def read_file():
             "parameters": data,
             "context": g.user_context
         }
-
         result = command_processor.send(command)
         return jsonify(result), result.get('code', 200)
 
@@ -332,7 +358,7 @@ def read_file():
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/endpoint/<operation>', methods=['POST'])
+@app.route(f'{api_prefix}/endpoint/<operation>', methods=['POST'])
 @login_required
 def generic_endpoint(operation):
     """Generic endpoint that can call any Coframe operation"""
@@ -353,7 +379,7 @@ def generic_endpoint(operation):
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/profile', methods=['GET'])
+@app.route(f'{api_prefix}/profile', methods=['GET'])
 @login_required
 def get_profile():
     """Get current user profile"""
@@ -382,7 +408,7 @@ def get_profile():
         return jsonify({'message': str(e)}), 500
 
 
-@app.route('/api/users/me', methods=['GET'])
+@app.route(f'{api_prefix}/users/me', methods=['GET'])
 @login_required
 def get_current_user():
     """Alias for get_profile"""
