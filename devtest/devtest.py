@@ -25,6 +25,7 @@ def main():
     # load plugins
     plugins = coframe.plugins.PluginsManager()
     plugins.load_config("config.yaml")
+    coframe.utils.register_standard_handlers(plugins)
     plugins.load_plugins()
 
     print(plugins.export_pythonpath())

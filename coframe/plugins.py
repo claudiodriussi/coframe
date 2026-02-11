@@ -32,10 +32,44 @@ class PluginsManager:
         self.plugins: Dict[str, 'Plugin'] = {}
         self.sorted: List[str] = []
         self.original_handlers = None
+        self.merge_handlers: Dict[str, Any] = {}
 
         # Initialize logging
         self.logger = coframe.get_logger(logger_name)
         coframe.set_formatter(self.logger, '%(name)s|%(levelname)s|%(message)s')
+
+    def register_merge_handler(self, pattern: str, handler: Any) -> None:
+        """
+        Register a custom merge handler for a specific data path pattern.
+
+        Args:
+            pattern: Dot-notation path pattern (supports wildcards like 'tables.*.columns')
+            handler: Callable that takes (base_list, new_list, plugin) and returns merged list
+        """
+        self.merge_handlers[pattern] = handler
+
+    def _get_merge_handler(self, key_path: str) -> Optional[Any]:
+        """
+        Find a merge handler for the given key path.
+
+        Args:
+            key_path: Complete dot-notation path
+
+        Returns:
+            Handler function if found, None otherwise
+        """
+        import fnmatch
+
+        # Exact match first
+        if key_path in self.merge_handlers:
+            return self.merge_handlers[key_path]
+
+        # Pattern match with wildcards
+        for pattern, handler in self.merge_handlers.items():
+            if fnmatch.fnmatch(key_path, pattern):
+                return handler
+
+        return None
 
     def load_config(self, config: Union[str, Path] = "config.yaml") -> None:
         """
@@ -214,15 +248,21 @@ class PluginsManager:
                         result[key]['_plugin'] = plugin
 
                 elif isinstance(v1, list):
-                    self.logger.debug(f"[{plugin}] Extending list at key '{key_path}'")
-                    result[key] = v1 + [item for item in v2 if item not in v1]
-                    for item in result[key]:
-                        if isinstance(item, dict):
-                            if '_plugin' not in item:
-                                if item in v2:
-                                    item['_plugin'] = plugin
-                                else:
-                                    item['_plugin'] = v1[0].get('_plugin', plugin)
+                    # Check if there's a custom merge handler for this path
+                    handler = self._get_merge_handler(key_path)
+                    if handler:
+                        self.logger.debug(f"[{plugin}] Merging list at key '{key_path}' using custom handler")
+                        result[key] = handler(v1, v2, plugin)
+                    else:
+                        self.logger.debug(f"[{plugin}] Extending list at key '{key_path}'")
+                        result[key] = v1 + [item for item in v2 if item not in v1]
+                        for item in result[key]:
+                            if isinstance(item, dict):
+                                if '_plugin' not in item:
+                                    if item in v2:
+                                        item['_plugin'] = plugin
+                                    else:
+                                        item['_plugin'] = v1[0].get('_plugin', plugin)
                 else:
                     self.logger.warning(f"[{plugin}] Overlapping value for key '{key_path}': {v1} -> {v2}")
                     result[key] = v2

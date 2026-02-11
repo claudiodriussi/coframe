@@ -105,24 +105,27 @@ class DB:
         Process all table definitions from plugins.
 
         Handles:
-        - Table creation and updates
-        - Merging table definitions from multiple plugins
+        - Table creation using merged plugin data
         - Maintaining table order
         """
         self.tables = {}
         self.tables_list = []
 
-        for name in self.pm.sorted:
-            plugin = self.pm.plugins[name]
-            for data in plugin.data:
-                tables = data.get('tables', {})
-                for table_name, value in tables.items():
-                    if table_name in self.tables:
-                        self.tables[table_name].update(value, plugin)
-                    else:
-                        table = DbTable(table_name, plugin, value)
-                        self.tables[table_name] = table
-                        self.tables_list.append(table_name)
+        # Use merged data instead of individual plugin data
+        # The merge handlers have already combined columns with the same name
+        tables = self.pm.data.get('tables', {})
+        for table_name, value in tables.items():
+            # Skip metadata keys (those starting with _)
+            if table_name.startswith('_'):
+                continue
+
+            # Get the plugin that defined/last modified this table
+            plugin_name = value.get('_plugin', 'unknown')
+            plugin = self.pm.plugins.get(plugin_name)
+
+            table = DbTable(table_name, plugin, value)
+            self.tables[table_name] = table
+            self.tables_list.append(table_name)
 
     def _calc_columns(self) -> None:
         """
@@ -163,7 +166,7 @@ class DB:
 
                 # Check for duplicate column names after composite types integration
                 for i, c1 in enumerate(self.tables[table_name].columns):
-                    for c2 in self.tables[table_name].columns[i+1:]:
+                    for c2 in self.tables[table_name].columns[i + 1:]:
                         if c1.name == c2.name:
                             raise ValueError(f'Duplicated column "{c1.name}" in table "{table_name}"')
 
