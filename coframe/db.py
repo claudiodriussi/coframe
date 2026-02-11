@@ -1,5 +1,6 @@
 import inspect
 import threading
+import contextvars
 from typing import Dict, List, Any, Optional, Union, Iterator
 from types import ModuleType
 from contextlib import contextmanager
@@ -520,26 +521,47 @@ class BaseApp:
     """
     Base class for all SQLAlchemy models.
     Provides access to the database schema information.
+
+    Context management supports both threading (Flask, CLI sync)
+    and asyncio (FastAPI, CLI async) execution models.
     """
     __coframe_app__: DB = DB()
+
+    # Dual-mode context storage
+    _context_local = threading.local()  # For threading-based execution (Flask, WSGI)
+    _context_var: contextvars.ContextVar = contextvars.ContextVar('app_context', default=None)  # (FastAPI, ASGI)
 
     @classmethod
     def get_context(cls):
         """
-        Get current context from thread-local storage
+        Get current context (threading or asyncio aware).
+
+        Tries async context first (FastAPI/asyncio), then falls back
+        to thread-local storage (Flask/threading).
+
+        Returns:
+            Current context dictionary or None
         """
-        if not hasattr(BaseApp, '_context'):
-            BaseApp._context = threading.local()
-        return getattr(BaseApp._context, 'value', None)
+        # Try async context first (FastAPI, async CLI)
+        ctx = cls._context_var.get()
+
+        # Fallback to thread-local context (Flask, sync CLI)
+        if ctx is None:
+            ctx = getattr(cls._context_local, 'value', None)
+
+        return ctx
 
     @classmethod
     def set_context(cls, context):
         """
-        Set current context in thread-local storage
+        Set current context (writes to both backends for compatibility).
+
+        Args:
+            context: Context dictionary with user/tenant info
         """
-        if not hasattr(BaseApp, '_context'):
-            BaseApp._context = threading.local()
-        BaseApp._context.value = context
+        # Write to both backends for maximum compatibility
+        cls._context_local.value = context
+        cls._context_var.set(context)
 
 
 Base = declarative_base(cls=BaseApp)

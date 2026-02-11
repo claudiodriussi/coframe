@@ -2,6 +2,8 @@ import importlib.util
 import threading
 import time
 import uuid
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import Dict, List, Any, Optional, Union, Callable
 from pathlib import Path
@@ -544,3 +546,100 @@ class CommandProcessor:
                     request_id=request_id,
                     code=500
                 ).to_dict()
+
+
+class AsyncCommandProcessor:
+    """
+    Async wrapper for CommandProcessor to support asyncio-based frameworks.
+
+    This class wraps the synchronous CommandProcessor and executes commands
+    in a ThreadPoolExecutor, allowing integration with async frameworks like
+    FastAPI while maintaining backward compatibility with the existing
+    threading-based command execution.
+
+    Context is automatically propagated from asyncio context variables to
+    thread-local storage via BaseApp.set_context().
+
+    Usage:
+        # In FastAPI server
+        async_processor = AsyncCommandProcessor(sync_processor, max_workers=10)
+        result = await async_processor.send_async(command_dict)
+
+        # In async CLI
+        result = asyncio.run(async_processor.send_async(command_dict))
+
+    Args:
+        sync_processor: Existing synchronous CommandProcessor instance
+        max_workers: Maximum number of threads in the pool (default: 10)
+    """
+
+    def __init__(self, sync_processor: 'CommandProcessor', max_workers: int = 10) -> None:
+        """
+        Initialize async wrapper with thread pool.
+
+        Args:
+            sync_processor: The synchronous CommandProcessor to wrap
+            max_workers: Size of the ThreadPoolExecutor (default: 10)
+        """
+        self.sync_processor = sync_processor
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+
+    async def send_async(self, command_dict: Dict[str, Any], wait: bool = True) -> Dict[str, Any]:
+        """
+        Execute command asynchronously without blocking the event loop.
+
+        The command is executed in a thread pool. Context from command_dict
+        is automatically set in the thread via BaseApp.set_context() during
+        execution.
+
+        Args:
+            command_dict: Command dictionary with:
+                - operation: Operation name
+                - parameters: Operation parameters
+                - context: User/tenant context (optional)
+                - timeout: Command timeout (optional)
+            wait: If True, wait for completion; if False, return immediately
+
+        Returns:
+            Result dictionary with status, data/message, code, etc.
+        """
+        # Execute synchronous processor in thread pool
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            self.executor,
+            self.sync_processor.send,
+            command_dict,
+            wait
+        )
+
+        return result
+
+    async def wait_for_result_async(self, request_id: str, timeout: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Wait for a specific command result asynchronously.
+
+        Args:
+            request_id: ID of the command to wait for
+            timeout: Maximum wait time in seconds (None = use command's timeout)
+
+        Returns:
+            Result dictionary
+        """
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            self.executor,
+            self.sync_processor.wait_for_result,
+            request_id,
+            timeout
+        )
+
+        return result
+
+    def shutdown(self) -> None:
+        """
+        Shutdown the thread pool executor.
+
+        Call this when shutting down the application to ensure
+        all threads are properly terminated.
+        """
+        self.executor.shutdown(wait=True)
