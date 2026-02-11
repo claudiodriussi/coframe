@@ -258,24 +258,36 @@ def populate_db(app):
             )
             session.add_all([book_author1, book_author2])
 
-            user = model.User(
-                name="Mario Rossi",
-                email="mario.rossi@example.com",
-                username="mrossi",
-                password="hashed_password_here"
+            # Create admin user for system
+            admin_user = model.User(
+                name="Admin User",
+                email="admin@example.com",
+                username="admin",
+                password="hashed_password_here",
+                is_admin=True
             )
-            session.add(user)
+            session.add(admin_user)
+
+            # Create library user for library operations
+            library_user = model.LibraryUser(
+                name="Mario Rossi",
+                email="mario.rossi@library.com",
+                username="mrossi",
+                password="hashed_password_here",
+                is_student=False
+            )
+            session.add(library_user)
             session.flush()
 
             loan1 = model.Loan(
-                book=book1,
-                user=user,
+                book_id=book1.id,
+                library_user_id=library_user.id,
                 borrowed_at=datetime.now(),
                 due_date=datetime.now() + timedelta(days=30)
             )
             review1 = model.Review(
-                book=book1,
-                user=user,
+                book_id=book1.id,
+                library_user_id=library_user.id,
                 rating=5,
                 comment="An italian masterpiece!"
             )

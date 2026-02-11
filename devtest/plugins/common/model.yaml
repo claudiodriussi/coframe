@@ -43,11 +43,6 @@ types:
     base: String
     validate: email_validator
 
-  Price:
-    base: Numeric
-    precision: 10
-    scale: 4
-
   Json:
     base: JSON
     default: {}
@@ -55,6 +50,41 @@ types:
 
   Markdown:
     base: Text
+
+  Phone:
+    base: String
+    length: 20
+    nullable: true
+
+  URL:
+    base: String
+    length: 512
+    nullable: true
+
+  Color:
+    base: String
+    length: 7
+    nullable: true
+    label: "Color"
+    help: "Hex color code (e.g., #FF5733)"
+
+  FilePath:
+    base: String
+    length: 512
+    nullable: true
+    label: "File Path"
+    help: "Path to uploaded file or resource"
+
+  Money:
+    base: Numeric
+    precision: 10
+    scale: 2
+    nullable: true
+
+  Price:
+    base: Money
+    precision: 10
+    scale: 4
 
   TimeStamp:
     label: "Timestamp"
@@ -86,6 +116,33 @@ types:
       - name: country
         type: String
         nullable: True
+
+  Credentials:
+    label: "Authentication Credentials"
+    columns:
+      - name: username
+        type: ShortStr
+        unique: true
+        nullable: false
+        label: "Username"
+        help: "Unique login username"
+      - name: password
+        type: Password
+        label: "Password"
+      - name: email
+        type: Email
+        unique: true
+        nullable: false
+        label: "Email"
+      - name: is_active
+        type: Boolean
+        default: true
+        nullable: false
+        label: "Active"
+      - name: last_login
+        type: DateTime
+        nullable: true
+        label: "Last Login"
 
 tables:
 

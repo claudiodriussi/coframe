@@ -2,10 +2,20 @@ tables:
 
   User:
     columns:
-      - name: is_student
-        label: "Student"
-        type: Boolean
-        default: False
+      - name: employee_id
+        type: ShortStr
+        unique: true
+        nullable: true
+
+      - name: department
+        type: String
+        length: 50
+        nullable: true
+
+      - name: phone
+        type: String
+        length: 20
+        nullable: true
 
   Book:
     columns:
@@ -18,6 +28,48 @@ tables:
         type: SKU
         length: 50
         unique: false
+
+  LibraryUser:
+    name: library_users
+    mixins: [TimeStamp, Credentials]
+    columns:
+      - name: id
+        type: ID
+
+      - name: name
+        type: Name
+        index: False
+
+      - name: address
+        type: Address
+        prefix: a_
+
+      - name: is_student
+        label: "Student"
+        type: Boolean
+        default: False
+
+      - name: membership_number
+        type: String
+        length: 50
+        unique: true
+        nullable: true
+
+      - name: membership_date
+        type: Date
+        nullable: true
+
+      - name: membership_expires
+        type: Date
+        nullable: true
+
+      - name: phone
+        type: Phone
+        help: "Contact phone number"
+
+      - name: notes
+        type: Text
+        nullable: true
 
 
   Review:
@@ -34,9 +86,9 @@ tables:
       - name: comment
         type: Text
 
-      - name: user_id
+      - name: library_user_id
         foreign_key:
-          target: User.id
+          target: LibraryUser.id
 
       - name: book_id
         foreign_key:
@@ -63,9 +115,9 @@ tables:
         type: DateTime
         nullable: true
 
-      - name: user_id
+      - name: library_user_id
         foreign_key:
-          target: User.id
+          target: LibraryUser.id
 
       - name: book_id
         foreign_key:

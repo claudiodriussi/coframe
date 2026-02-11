@@ -6,7 +6,7 @@ tables:
     help: |
       The user table contains the user information
     tags: [anag]
-    mixins: [TimeStamp]
+    mixins: [TimeStamp, Credentials]
     columns:
       - name: id
         type: ID
@@ -15,26 +15,9 @@ tables:
         type: Name
         index: False
 
-      - name: username
-        type: String
-        unique: True
-        nullable: False
-
-      - name: password
-        type: Password
-
-      - name: email
-        type: Email
-        nullable: False
-
       - name: address
         type: Address
         prefix: a_
-
-      - name: is_active
-        label: "Active"
-        type: Boolean
-        default: True
 
       - name: is_admin
         label: "Administrator"
