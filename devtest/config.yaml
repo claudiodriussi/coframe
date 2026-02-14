@@ -15,6 +15,7 @@ db_engine: "sqlite:///:memory:"
 # API configuration
 api:
   prefix: "coframe"  # All Coframe endpoints will be under /coframe/api/...
+  port: 8300         # Default Coframe server port (evocative: 8xxx HTTP-like, 3=C of Coframe)
 
 # table and fields used for authentication
 authentication:

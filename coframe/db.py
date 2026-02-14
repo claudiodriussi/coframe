@@ -35,6 +35,8 @@ class DB:
         - self.models: Dictionary of all db models
         - self.engine: The instanced db engine
         - self.db_type: Database type: "sqlite", "postgresql", "mysql" and so on
+        - self.multi_tenant_config: Multi-tenancy configuration
+        - self.shared_tables: Set of tables that are shared (no tenant prefix)
         """
         self.pm: Optional[PluginsManager] = None
         self.cp: Optional[CommandProcessor] = None
@@ -45,6 +47,8 @@ class DB:
         self.models: Dict[str, Any] = {}
         self.engine: Any = None
         self.db_type: str = "unknown"
+        self.multi_tenant_config: Dict[str, Any] = {}
+        self.shared_tables: set = set()
 
     def calc_db(self, plugins: PluginsManager) -> None:
         """
@@ -55,6 +59,7 @@ class DB:
         2. Create table structures
         3. Process and validate column definitions
         4. register all endpoints from plugins and from package
+        5. Load multi-tenant configuration
 
         Args:
             plugins: Instance containing all loaded plugins
@@ -64,6 +69,7 @@ class DB:
         self._calc_tables()
         self._calc_columns()
         self._calc_endpoints()
+        self._load_multi_tenant_config()
 
     def _calc_types(self) -> None:
         """
@@ -188,6 +194,59 @@ class DB:
         sources = self.pm.get_sources()
         self.cp.resolve_endpoints(sources)
         self.cp.resolve_endpoints('endpoint_db.py')
+
+    def _load_multi_tenant_config(self) -> None:
+        """
+        Load multi-tenancy configuration from PluginManager config.
+
+        If 'multi_tenant' section is not present in config.yaml,
+        the system works in standard single-tenant mode.
+        """
+        self.multi_tenant_config = self.pm.config.get('multi_tenant', {})
+        self.shared_tables = set(self.multi_tenant_config.get('shared_tables', []))
+
+    def get_table_name(self, model_name: str, context: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Get the actual table name based on model name and context.
+
+        Supports multi-tenancy with tenant prefixes (e.g., 'data_orders', 'test_customers').
+
+        Args:
+            model_name: The model class name (e.g., "Order")
+            context: User context with optional tenant_prefix
+
+        Returns:
+            Actual table name (e.g., "data_orders" or "orders")
+
+        Example:
+            >>> app.get_table_name('Order', {'tenant_prefix': 'data'})
+            'data_orders'
+
+            >>> app.get_table_name('Config', {'tenant_prefix': 'data'})
+            'config'  # Config is shared, no prefix
+        """
+        # Get base table name from model definition
+        table_def = self.tables.get(model_name)
+        if not table_def:
+            return None
+
+        base_table_name = table_def.table_name
+
+        # Check if multi-tenancy is enabled
+        if not self.multi_tenant_config.get('enabled', False):
+            return base_table_name
+
+        # Check if this table is shared (no prefix)
+        if model_name in self.shared_tables:
+            return base_table_name
+
+        # Apply tenant prefix if context has tenant_prefix
+        if context and context.get('tenant_prefix'):
+            tenant_prefix = context.get('tenant_prefix')
+            return f"{tenant_prefix}_{base_table_name}"
+
+        # Fallback to base name
+        return base_table_name
 
     def find_model_class(self, table_name: str) -> Any:
         """
@@ -562,6 +621,167 @@ class BaseApp:
         # Write to both backends for maximum compatibility
         cls._context_local.value = context
         cls._context_var.set(context)
+
+    # ==========================================
+    # Model ↔ DB Definition Bridge
+    # ==========================================
+
+    @classmethod
+    def get_table_definition(cls):
+        """
+        Get the DbTable definition for this model class.
+
+        Returns:
+            DbTable object with columns, attributes, plugins, etc.
+
+        Example:
+            >>> User.get_table_definition()
+            <DbTable: User (table_name='users', columns=[...])>
+
+            >>> table_def = User.get_table_definition()
+            >>> table_def.attributes.get('label')
+            'Utente'
+        """
+        table_name = cls.__name__
+        return cls.__coframe_app__.tables.get(table_name)
+
+    @classmethod
+    def get_column_definition(cls, column_name: str):
+        """
+        Get the DbColumn definition for a specific column.
+
+        Args:
+            column_name: Name of the column
+
+        Returns:
+            DbColumn object with type, attributes, constraints, etc.
+
+        Example:
+            >>> User.get_column_definition('username')
+            <DbColumn: username (type=String, unique=True)>
+        """
+        table_def = cls.get_table_definition()
+        if not table_def:
+            return None
+
+        for col in table_def.columns:
+            if col.name == column_name:
+                return col
+
+        return None
+
+    @classmethod
+    def get_table_name(cls, context=None) -> str:
+        """
+        Get the actual table name for this model (with tenant prefix if applicable).
+
+        Args:
+            context: Optional context dict with tenant_prefix
+
+        Returns:
+            Actual table name (e.g., 'data_orders' or 'orders')
+
+        Example:
+            >>> context = {'tenant_prefix': 'data'}
+            >>> Order.get_table_name(context)
+            'data_orders'
+
+            >>> Config.get_table_name(context)  # Shared table
+            'config'
+        """
+        if context is None:
+            context = cls.get_context()
+
+        model_name = cls.__name__
+        return cls.__coframe_app__.get_table_name(model_name, context)
+
+    @classmethod
+    def get_plugins(cls) -> list:
+        """
+        Get list of plugins that contribute to this table.
+
+        Returns:
+            List of Plugin objects
+
+        Example:
+            >>> User.get_plugins()
+            [<Plugin: base/users>, <Plugin: auth/extended_users>]
+        """
+        table_def = cls.get_table_definition()
+        return table_def.plugins if table_def else []
+
+    @classmethod
+    def get_relationships(cls) -> dict:
+        """
+        Get all relationships (foreign keys and many-to-many) for this model.
+
+        Returns:
+            Dictionary with relationship metadata
+
+        Example:
+            >>> Order.get_relationships()
+            {
+                'foreign_keys': [
+                    {'column': 'customer_id', 'target': 'Customer.id'}
+                ],
+                'many_to_many': {...}
+            }
+        """
+        table_def = cls.get_table_definition()
+        if not table_def:
+            return {}
+
+        relationships = {
+            'foreign_keys': [],
+            'many_to_many': table_def.attributes.get('many_to_many')
+        }
+
+        for col in table_def.columns:
+            if 'foreign_key' in col.attributes:
+                fk = col.attributes['foreign_key']
+                relationships['foreign_keys'].append({
+                    'column': col.name,
+                    'target': f"{fk['table'].name}.{fk['id']}"
+                })
+
+        return relationships
+
+    def get_column_value_with_metadata(self, column_name: str) -> dict:
+        """
+        Get column value with its metadata (instance method).
+
+        Args:
+            column_name: Name of the column
+
+        Returns:
+            Dictionary with value and metadata
+
+        Example:
+            >>> user = User(username='mario', email='mario@example.com')
+            >>> user.get_column_value_with_metadata('email')
+            {
+                'value': 'mario@example.com',
+                'column_name': 'email',
+                'type': 'String',
+                'label': 'Email',
+                'required': True
+            }
+        """
+        col_def = self.get_column_definition(column_name)
+        if not col_def:
+            return None
+
+        return {
+            'value': getattr(self, column_name, None),
+            'column_name': column_name,
+            'type': col_def.db_type.name if col_def.db_type else None,
+            'python_type': col_def.db_type.python_type.__name__ if col_def.db_type else None,
+            'label': col_def.attributes.get('label', column_name),
+            'description': col_def.attributes.get('description'),
+            'required': not col_def.attr_field.get('nullable', True),
+            'unique': col_def.attr_field.get('unique', False),
+            'primary_key': col_def.attr_field.get('primary_key', False),
+        }
 
 
 Base = declarative_base(cls=BaseApp)

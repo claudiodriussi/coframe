@@ -433,13 +433,14 @@ async def execute_query(
 @app.on_event("startup")
 async def startup_event():
     """Called when server starts"""
+    port = plugins.config.get('api', {}).get('port', 8300)
     print("\n" + "=" * 60)
     print("🚀 FastAPI server starting...")
     print("=" * 60)
     print("✓ Async mode enabled")
     print("✓ Thread pool size: 10")
     print(f"✓ API prefix: {api_prefix}")
-    print("✓ OpenAPI docs: http://localhost:8000/docs")
+    print(f"✓ OpenAPI docs: http://localhost:{port}/docs")
     print("=" * 60 + "\n")
 
 
@@ -457,9 +458,12 @@ async def shutdown_event():
 
 if __name__ == '__main__':
     import uvicorn
+    # Read port from config (default to 8300 if not specified)
+    port = plugins.config.get('api', {}).get('port', 8300)
+    print(f"Starting Coframe FastAPI server on port {port}")
     uvicorn.run(
         app,
         host='0.0.0.0',
-        port=8000,
+        port=port,
         log_level='info'
     )

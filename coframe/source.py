@@ -80,8 +80,13 @@ class ModelImportManager:
         if self.orm_imports:
             import_statements.append(f"from sqlalchemy.orm import {', '.join(sorted(self.orm_imports))}")
 
-        # Add Base import
-        import_statements.append('from coframe.db import Base')
+        # Add declared_attr for dynamic __tablename__
+        import_statements.append('from sqlalchemy.ext.declarative import declared_attr')
+
+        # Add Base import and coframe utilities
+        import_statements.append('from coframe.db import Base, BaseApp')
+        import_statements.append('from coframe.utils import resolve_table_name')
+        import_statements.append('import coframe')
 
         return '\n'.join(import_statements)
 
@@ -397,8 +402,13 @@ class Generator:
         # Generate class declaration
         class_declaration = f"class {name}({', '.join(base_classes)}):\n"
 
-        # Generate tablename declaration
-        code = [class_declaration, " " * 4 + f"__tablename__ = '{table.table_name}'\n"]
+        # Generate tablename declaration with declared_attr for dynamic resolution
+        tablename_code = (
+            "    @declared_attr\n"
+            "    def __tablename__(cls):\n"
+            f"        return resolve_table_name('{name}', '{table.table_name}')\n"
+        )
+        code = [class_declaration, tablename_code]
 
         # Generate many to many columns
         m2m = table.attributes.get('many_to_many', None)
@@ -425,6 +435,12 @@ class Generator:
             column_code = self.column_generator.generate_column(column, table)
             if column_code:
                 code.append(column_code)
+
+        # Generate compound indexes (__table_args__)
+        indexes_code = self._generate_table_indexes(table)
+        if indexes_code:
+            code.append("\n")
+            code.append(indexes_code)
 
         # Generate many to many relationships
         if m2m:
@@ -456,6 +472,53 @@ class Generator:
                 print(f"Error processing many-to-many relationship in {name}: {e}")
 
         self.tables[name] = ''.join(code)
+
+    def _generate_table_indexes(self, table: DbTable) -> str:
+        """
+        Generate __table_args__ for compound indexes.
+
+        Args:
+            table: Table definition
+
+        Returns:
+            String with __table_args__ definition, or empty string if no indexes
+        """
+        indexes = table.attributes.get('indexes', [])
+        if not indexes:
+            return ""
+
+        # Add Index to imports
+        self.imports.column_imports.add('Index')
+
+        index_lines = []
+        for i, idx in enumerate(indexes):
+            # Build column list
+            columns = idx.get('columns', [])
+            if not columns:
+                continue
+
+            name = idx.get('name', f"idx_{'_'.join(columns)}")
+            cols_str = ', '.join(f"'{col}'" for col in columns)
+
+            # Add unique flag if specified
+            unique = idx.get('unique', False)
+            unique_str = ', unique=True' if unique else ''
+
+            # Add comma (except for last element)
+            comma = ',' if i < len(indexes) - 1 else ''
+
+            # Optional description as comment
+            description = idx.get('description', '')
+            comment = f"  # {description}" if description else ''
+
+            index_lines.append(f"        Index('{name}', {cols_str}{unique_str}){comma}{comment}")
+
+        if not index_lines:
+            return ""
+
+        # Generate __table_args__ (no join with comma since we added commas manually)
+        args = '\n'.join(index_lines)
+        return f"    __table_args__ = (\n{args}\n    )\n"
 
     def _add_relationships_to_tables(self) -> None:
         """Add relationship definitions to table classes."""
@@ -496,10 +559,21 @@ class Generator:
         """Generate the complete source code."""
         source_parts = []
 
+        # Add file header warning
+        source_parts.append(self._generate_file_header())
+        source_parts.append("")
+
         # Add imports
         source_parts.append(self.imports.generate_import_statements())
         source_parts.append("")
         source_parts.append("")
+
+        # Add helper functions if any (currently empty - resolve_table_name moved to utils)
+        helper_code = self._generate_helper_functions()
+        if helper_code:
+            source_parts.append(helper_code)
+            source_parts.append("")
+            source_parts.append("")
 
         # Add mixins
         mixin_code = self._generate_mixin_classes()
@@ -518,3 +592,32 @@ class Generator:
             source_parts.append(additional_code)
 
         self.source = '\n'.join(source_parts)
+
+    def _generate_file_header(self) -> str:
+        """
+        Generate file header warning about automatic generation.
+
+        Returns:
+            String with warning header
+        """
+        return '''# ============================================================================
+# GENERATED FILE - DO NOT EDIT MANUALLY
+# ============================================================================
+# This file is automatically generated by Coframe source generator.
+# Any manual changes will be lost when the file is regenerated.
+#
+# To make changes:
+#   1. Edit the plugin YAML files (plugins/**/model.yaml)
+#   2. Regenerate this file (python devtest.py or coframe generate)
+#
+# Generator: coframe.source.Generator
+# ============================================================================'''
+
+    def _generate_helper_functions(self) -> str:
+        """
+        Generate helper functions for model code.
+
+        Returns:
+            String with helper functions (empty now - resolve_table_name moved to coframe.utils)
+        """
+        return ""

@@ -263,7 +263,7 @@ def populate_db(app):
                 name="Admin User",
                 email="admin@example.com",
                 username="admin",
-                password="hashed_password_here",
+                password="admin",
                 is_admin=True
             )
             session.add(admin_user)

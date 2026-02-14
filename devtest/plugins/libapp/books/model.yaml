@@ -23,6 +23,16 @@ tables:
         type: String
         length: 50
 
+    # Compound indexes for better query performance
+    indexes:
+      - name: idx_author_fullname
+        columns: [first_name, last_name]
+        description: "Search authors by full name"
+
+      - name: idx_author_nationality
+        columns: [nationality, last_name]
+        description: "Authors by country"
+
   Book:
     name: books
     tags: [anag]
@@ -46,6 +56,17 @@ tables:
 
       - name: price
         type: Price
+
+    # Compound indexes
+    indexes:
+      - name: idx_book_isbn
+        columns: [isbn]
+        unique: true
+        description: "Unique ISBN constraint"
+
+      - name: idx_book_title_date
+        columns: [title, publication_date]
+        description: "Search books by title and year"
 
   BookAuthor:
     name: books_authors
