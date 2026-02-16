@@ -5,5 +5,5 @@ class User:
 
     @hybrid_property
     def active_loans(self):
-        """Restituisce i prestiti attivi dell'utente"""
+        """Returns user's active loans"""
         return [loan for loan in self.loans if not loan.returned_at]

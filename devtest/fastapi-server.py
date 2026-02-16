@@ -1,33 +1,25 @@
 #!/usr/bin/env python3
 """
-Example FastAPI server using AsyncCommandProcessor.
+FastAPI server for Coframe using AuthMiddleware wrapper.
 
-This demonstrates how to integrate Coframe with FastAPI using
-the new async compatibility layer.
-
-Run with: uvicorn fastapi-server-example:app --reload
-Or: python fastapi-server-example.py
-
-Requirements:
-    pip install fastapi uvicorn python-multipart
+Clean implementation showing how to use server_utils.AuthMiddleware
+for consistent authentication and token refresh across frameworks.
 """
 
 import sys
 import os
 sys.path.append("..")
 
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, Dict, Any
-import jwt
-from datetime import datetime, timedelta
+from typing import Dict, Any
 
 import coframe
+import coframe.server_utils as srv
 from coframe.utils import get_app
-from coframe.endpoints import AsyncCommandProcessor
 
 # ============================================================================
-# Initialize Coframe (identical to Flask setup)
+# Initialize Coframe
 # ============================================================================
 
 print("Initializing Coframe...")
@@ -35,7 +27,7 @@ print("Initializing Coframe...")
 # Load plugins
 plugins = coframe.plugins.PluginsManager()
 plugins.load_config("config.yaml")
-coframe.utils.register_standard_handlers(plugins)  # Register column merge handlers
+coframe.utils.register_standard_handlers(plugins)
 plugins.load_plugins()
 
 # Setup database
@@ -46,20 +38,29 @@ db_url = 'sqlite:///devtest.sqlite'
 import model  # type: ignore
 coframe_app.initialize_db(db_url, model)
 
-# Create async processor wrapper
-sync_processor = coframe_app.cp
-async_processor = AsyncCommandProcessor(sync_processor, max_workers=10)
+# Get command processor
+command_processor = coframe_app.cp
 
-print(f"✓ Coframe initialized with {len(plugins.plugins)} plugins")
+# Configuration
+SECRET_KEY = os.environ.get('SECRET_KEY', 'development-secret-key')
+api_prefix = f"/{plugins.config.get('api', {}).get('prefix', 'api')}"
+
+# Initialize AuthMiddleware (wrapper with config)
+auth = srv.AuthMiddleware(plugins.config, SECRET_KEY)
+
+print("✓ Coframe initialized")
+print(f"✓ API prefix: {api_prefix}")
+print(f"✓ JWT expiration: {auth.jwt_expiration_hours}h")
+print(f"✓ Refresh interval: {auth.refresh_interval_minutes}min")
 
 # ============================================================================
 # FastAPI App Setup
 # ============================================================================
 
 app = FastAPI(
-    title="Coframe API (FastAPI)",
-    description="Data-driven backend with async support",
-    version="1.0"
+    title="Coframe API (FastAPI + AuthMiddleware)",
+    description="Framework-agnostic server with automatic token refresh",
+    version="2.0"
 )
 
 # CORS
@@ -71,272 +72,152 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuration
-SECRET_KEY = os.environ.get('SECRET_KEY', 'development-secret-key')
-JWT_EXPIRATION_HOURS = 24
-
-# Get API prefix from configuration
-api_prefix = f"/{plugins.config.get('api', {}).get('prefix', 'api')}/api"
-print(f"✓ API endpoints available at: {api_prefix}")
 
 # ============================================================================
-# Authentication Dependencies
+# Token Refresh Middleware
 # ============================================================================
-
-
-async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+@app.middleware("http")
+async def token_refresh_middleware(request: Request, call_next):
     """
-    FastAPI dependency for JWT authentication.
-    Extracts user context from Bearer token.
+    Middleware that adds X-New-Token header if token was refreshed.
+
+    This implements the Coframe protocol for automatic token refresh.
     """
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing authentication token")
+    response = await call_next(request)
 
-    if not authorization.startswith('Bearer '):
-        raise HTTPException(status_code=401, detail="Invalid authentication scheme")
+    # If token was refreshed, add to response header
+    if hasattr(request.state, 'new_token'):
+        response.headers['X-New-Token'] = request.state.new_token
 
-    token = authorization.split(' ')[1]
-
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    return response
 
 
 # ============================================================================
-# Public Endpoints (No Auth)
+# Authentication Dependency (using AuthMiddleware)
 # ============================================================================
+async def get_current_user(request: Request) -> Dict[str, Any]:
+    """
+    Extract and validate JWT token, with automatic refresh.
 
+    Uses AuthMiddleware for consistent, framework-agnostic logic.
+    """
+    # Extract token from header
+    token, error = auth.extract_token(request.headers.get("authorization"))
+    if error:
+        raise HTTPException(status_code=401, detail=error)
+
+    # Decode and check if refresh is needed
+    payload, new_token, error = auth.decode_and_refresh(token)
+    if error:
+        raise HTTPException(status_code=401, detail=error)
+
+    # If token was refreshed, save for middleware
+    if new_token:
+        request.state.new_token = new_token
+
+    return payload
+
+
+# ============================================================================
+# Routes
+# ============================================================================
 @app.get('/')
-async def root():
-    """API root - health check"""
+async def home():
+    """Root endpoint"""
     return {
-        "status": "success",
-        "message": "Coframe FastAPI server is running",
-        "framework": "FastAPI",
-        "async_mode": True
+        'message': 'Coframe API Server (FastAPI + AuthMiddleware)',
+        'version': plugins.config.get('version', '0.0.0'),
+        'protocol': 'Coframe v2.0',
+        'info': '/info',
+        'api': f'{api_prefix}/...'
     }
 
 
 @app.get('/info')
 async def app_info():
     """Application information"""
-    return {
-        'status': 'success',
-        'data': {
-            'application': plugins.config.get('name', 'Unknown'),
-            'version': plugins.config.get('version', '0.0.0'),
-            'description': plugins.config.get('description', ''),
-            'framework': 'FastAPI',
-            'async_mode': True,
-            'coframe_api_prefix': api_prefix,
-            'available_endpoints': {
-                'health': '/',
-                'info': '/info',
-                'auth_login': f'{api_prefix}/auth/login',
-                'generic_endpoint': f'{api_prefix}/endpoint/<operation>',
-                'database_get': f'{api_prefix}/db/<table>',
-                'query_execute': f'{api_prefix}/query'
-            }
-        }
-    }
+    result = srv.get_app_info(plugins.config, api_prefix)
+    return result
 
 
 # ============================================================================
 # Authentication Endpoints
 # ============================================================================
-
 @app.post(f'{api_prefix}/auth/login')
-async def login(credentials: Dict[str, str]):
-    """
-    User login endpoint.
-    Returns JWT token on success.
-
-    Body:
-        {
-            "username": "string",
-            "password": "string"
-        }
-    """
-    username = credentials.get('username')
-    password = credentials.get('password')
-
-    if not username or not password:
-        raise HTTPException(status_code=400, detail="Username and password required")
-
-    # Execute auth command via async processor
-    command = {
-        "operation": "auth",
-        "parameters": {
-            "username": username,
-            "password": password
-        },
-        "context": {}
-    }
-
-    result = await async_processor.send_async(command)
-
-    if result.get('status') != 'success':
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    # Generate JWT token
-    user_context = result['data']['context']
-    token_payload = {
-        **user_context,
-        'exp': datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
-    }
-
-    token = jwt.encode(token_payload, SECRET_KEY, algorithm='HS256')
-
-    return {
-        'token': token,
-        'user': user_context
-    }
+async def login(data: dict):
+    """Login endpoint (using AuthMiddleware)"""
+    try:
+        # Use AuthMiddleware.login() for consistent behavior
+        result = auth.login(command_processor, data)
+        return result
+    except Exception as e:
+        return {'status': 'error', 'message': str(e), 'status_code': 500}
 
 
-# ============================================================================
-# Protected Endpoints (Require Auth)
-# ============================================================================
-
-@app.post(f'{api_prefix}/endpoint/{{operation}}')
-async def execute_endpoint(
-    operation: str,
-    data: Dict[str, Any],
-    user: Dict = Depends(get_current_user)
+@app.post(f'{api_prefix}/auth/update_context')
+async def update_context(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
 ):
-    """
-    Generic endpoint that can execute any Coframe operation.
-
-    URL params:
-        operation: Name of the operation to execute
-
-    Body:
-        Command parameters (dict)
-
-    Returns:
-        Operation result
-    """
-    command = {
-        'operation': operation,
-        'parameters': data,
-        'context': user
-    }
-
-    result = await async_processor.send_async(command)
-
-    if result.get('status') == 'error':
-        raise HTTPException(
-            status_code=result.get('code', 500),
-            detail=result.get('message')
-        )
-
+    """Update user context and get new token"""
+    result = srv.handle_update_context(
+        current_user,
+        data,
+        SECRET_KEY,
+        auth.jwt_expiration_hours
+    )
     return result
 
 
+# ============================================================================
+# Database CRUD Endpoints
+# ============================================================================
 @app.get(f'{api_prefix}/db/{{table}}')
-async def db_get_all(
+async def db_list(
     table: str,
-    start: int = 0,
-    limit: int = 100,
-    order_by: Optional[str] = None,
-    order_dir: str = 'asc',
-    user: Dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
-    """
-    Get all records from a table with pagination.
-
-    URL params:
-        table: Table name
-
-    Query params:
-        start: Offset (default 0)
-        limit: Max records (default 100)
-        order_by: Column to sort by
-        order_dir: Sort direction (asc/desc)
-    """
-    command = {
-        "operation": "db",
-        "parameters": {
-            "table": table,
-            "method": "get",
-            "start": start,
-            "limit": limit,
-            "order_by": order_by,
-            "order_dir": order_dir
-        },
-        "context": user
-    }
-
-    result = await async_processor.send_async(command)
-
-    if result.get('status') == 'error':
-        raise HTTPException(
-            status_code=result.get('code', 500),
-            detail=result.get('message')
-        )
-
+    """List all records in table"""
+    result = srv.handle_db_operation(
+        command_processor,
+        'get',
+        table,
+        context=current_user
+    )
     return result
 
 
 @app.get(f'{api_prefix}/db/{{table}}/{{id}}')
-async def db_get_one(
+async def db_get(
     table: str,
     id: str,
-    user: Dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Get a single record by ID"""
-    command = {
-        "operation": "db",
-        "parameters": {
-            "table": table,
-            "method": "get",
-            "id": id
-        },
-        "context": user
-    }
-
-    result = await async_processor.send_async(command)
-
-    if result.get('status') == 'error':
-        raise HTTPException(
-            status_code=result.get('code', 500),
-            detail=result.get('message')
-        )
-
+    """Get single record by ID"""
+    result = srv.handle_db_operation(
+        command_processor,
+        'get',
+        table,
+        record_id=id,
+        context=current_user
+    )
     return result
 
 
 @app.post(f'{api_prefix}/db/{{table}}')
 async def db_create(
     table: str,
-    data: Dict[str, Any],
-    user: Dict = Depends(get_current_user)
+    data: dict,
+    current_user: dict = Depends(get_current_user)
 ):
-    """Create a new record"""
-    # Convert types if needed
-    data = coframe.utils.json_to_model_types(data, table)
-
-    command = {
-        "operation": "db",
-        "parameters": {
-            "table": table,
-            "method": "create",
-            "data": data
-        },
-        "context": user
-    }
-
-    result = await async_processor.send_async(command)
-
-    if result.get('status') == 'error':
-        raise HTTPException(
-            status_code=result.get('code', 500),
-            detail=result.get('message')
-        )
-
+    """Create new record"""
+    result = srv.handle_db_operation(
+        command_processor,
+        'create',
+        table,
+        data=data,
+        context=current_user
+    )
     return result
 
 
@@ -344,31 +225,18 @@ async def db_create(
 async def db_update(
     table: str,
     id: str,
-    data: Dict[str, Any],
-    user: Dict = Depends(get_current_user)
+    data: dict,
+    current_user: dict = Depends(get_current_user)
 ):
-    """Update a record"""
-    data = coframe.utils.json_to_model_types(data, table)
-
-    command = {
-        "operation": "db",
-        "parameters": {
-            "table": table,
-            "method": "update",
-            "id": id,
-            "data": data
-        },
-        "context": user
-    }
-
-    result = await async_processor.send_async(command)
-
-    if result.get('status') == 'error':
-        raise HTTPException(
-            status_code=result.get('code', 500),
-            detail=result.get('message')
-        )
-
+    """Update existing record"""
+    result = srv.handle_db_operation(
+        command_processor,
+        'update',
+        table,
+        record_id=id,
+        data=data,
+        context=current_user
+    )
     return result
 
 
@@ -376,81 +244,92 @@ async def db_update(
 async def db_delete(
     table: str,
     id: str,
-    user: Dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Delete a record"""
-    command = {
-        "operation": "db",
-        "parameters": {
-            "table": table,
-            "method": "delete",
-            "id": id
-        },
-        "context": user
-    }
-
-    result = await async_processor.send_async(command)
-
-    if result.get('status') == 'error':
-        raise HTTPException(
-            status_code=result.get('code', 500),
-            detail=result.get('message')
-        )
-
+    """Delete record"""
+    result = srv.handle_db_operation(
+        command_processor,
+        'delete',
+        table,
+        record_id=id,
+        context=current_user
+    )
     return result
 
 
+# ============================================================================
+# Query Endpoint
+# ============================================================================
 @app.post(f'{api_prefix}/query')
-async def execute_query(
-    data: Dict[str, Any],
-    user: Dict = Depends(get_current_user)
+async def query(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
 ):
-    """Execute a dynamic query"""
-    command = {
-        "operation": "query",
-        "parameters": {
-            "format": data.get('format', 'tuples'),
-            "query": data.get('query')
-        },
-        "context": user
-    }
-
-    result = await async_processor.send_async(command)
-
-    if result.get('status') == 'error':
-        raise HTTPException(
-            status_code=result.get('code', 500),
-            detail=result.get('message')
-        )
-
+    """Execute dynamic query"""
+    result = srv.handle_query(
+        command_processor,
+        data,
+        context=current_user
+    )
     return result
 
 
 # ============================================================================
-# Startup/Shutdown Events
+# File Reading Endpoint
 # ============================================================================
+@app.post(f'{api_prefix}/read_file')
+async def read_file(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Read file from allowed directories"""
+    result = srv.handle_generic_endpoint(
+        command_processor,
+        'read_file',
+        data,
+        context=current_user
+    )
+    return result
 
-@app.on_event("startup")
-async def startup_event():
-    """Called when server starts"""
-    port = plugins.config.get('api', {}).get('port', 8300)
-    print("\n" + "=" * 60)
-    print("🚀 FastAPI server starting...")
-    print("=" * 60)
-    print("✓ Async mode enabled")
-    print("✓ Thread pool size: 10")
-    print(f"✓ API prefix: {api_prefix}")
-    print(f"✓ OpenAPI docs: http://localhost:{port}/docs")
-    print("=" * 60 + "\n")
+
+# ============================================================================
+# Generic Endpoint Dispatcher
+# ============================================================================
+@app.post(f'{api_prefix}/endpoint/{{operation}}')
+async def generic_endpoint(
+    operation: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generic endpoint for custom operations"""
+    result = srv.handle_generic_endpoint(
+        command_processor,
+        operation,
+        data,
+        context=current_user
+    )
+    return result
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Called when server shuts down - cleanup resources"""
-    print("\n🛑 Shutting down async processor...")
-    async_processor.shutdown()
-    print("✓ Cleanup complete\n")
+# ============================================================================
+# User Profile Endpoints
+# ============================================================================
+@app.get(f'{api_prefix}/profile')
+async def get_profile(current_user: dict = Depends(get_current_user)):
+    """Get current user profile"""
+    # Remove sensitive fields
+    user_data = {k: v for k, v in current_user.items() if k not in ['exp', 'iat', 'last_refresh']}
+    return {
+        'status': 'success',
+        'data': user_data,
+        'status_code': 200
+    }
 
+
+@app.get(f'{api_prefix}/users/me')
+async def get_current_user_alias(current_user: dict = Depends(get_current_user)):
+    """Alias for get_profile"""
+    return await get_profile(current_user)
 
 # ============================================================================
 # Main Entry Point
@@ -460,7 +339,9 @@ if __name__ == '__main__':
     import uvicorn
     # Read port from config (default to 8300 if not specified)
     port = plugins.config.get('api', {}).get('port', 8300)
-    print(f"Starting Coframe FastAPI server on port {port}")
+    print(f"\n🚀 Starting Coframe FastAPI server (v2) on port {port}")
+    print(f"📖 OpenAPI docs: http://localhost:{port}/docs")
+    print(f"🔄 Auto-refresh enabled: every {auth.refresh_interval_minutes} minutes\n")
     uvicorn.run(
         app,
         host='0.0.0.0',

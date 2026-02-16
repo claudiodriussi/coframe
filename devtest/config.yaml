@@ -14,7 +14,7 @@ db_engine: "sqlite:///:memory:"
 
 # API configuration
 api:
-  prefix: "coframe"  # All Coframe endpoints will be under /coframe/api/...
+  prefix: "coframe"  # API prefix - all endpoints will be under /coframe/* (or use "api/v1" for /api/v1/*, etc.)
   port: 8300         # Default Coframe server port (evocative: 8xxx HTTP-like, 3=C of Coframe)
 
 # table and fields used for authentication
@@ -23,6 +23,8 @@ authentication:
   username_field: username
   password_field: password
   context_fields: [id, email, is_active, is_admin]
+  jwt_expiration_hours: 24           # Token lifetime
+  jwt_refresh_interval_minutes: 20   # Auto-refresh after this inactivity
 
 # the endpoint `read_file` can send files to client we can decide the
 # directory white list and the extensions that has to be treated as text

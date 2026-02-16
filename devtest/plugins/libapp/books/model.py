@@ -7,7 +7,7 @@ class Author:
 
     @hybrid_property
     def full_name(self):
-        """Proprietà ibrida per il nome completo"""
+        """Hybrid property for full name"""
         return f"{self.first_name} {self.last_name}"
 
     __table_args__ = (
@@ -22,19 +22,19 @@ class Book:
 
     @validates('isbn')
     def validate_isbn(self, key, value):
-        """Validazione ISBN"""
+        """ISBN validation"""
         if not (len(value) == 10 or len(value) == 13):
-            raise ValueError("ISBN deve essere di 10 o 13 caratteri")
+            raise ValueError("ISBN must be 10 or 13 characters")
         return value
 
     @hybrid_property
     def is_available(self):
-        """Verifica se il libro è disponibile per il prestito"""
+        """Check if book is available for loan"""
         return self.status == 'A'
 
     @hybrid_property
     def average_rating(self):
-        """Calcola il rating medio del libro"""
+        """Calculate average book rating"""
         if not self.reviews:
             return 0.0
         return sum(review.rating for review in self.reviews) / len(self.reviews)
