@@ -470,3 +470,33 @@ def update_context(data):
         import traceback
         traceback.print_exc()
         return {"status": "error", "message": str(e), "code": 500}
+
+
+@endpoint('get_type_schema')
+def get_type_schema(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Return the resolved type registry for client-side rendering.
+
+    Parameters:
+        include_builtin (bool, default false) — include SQLAlchemy built-in types
+
+    Response data:
+        { types: { TypeName: { inheritance, base, python_type, builtin,
+                               ...yaml_attrs, columns? } } }
+
+    The server exposes raw type metadata without widget inference.
+    Each client (web, mobile, desktop, …) applies its own rendering logic.
+    Field-level attrs from view descriptors override type-level defaults (client-side).
+    """
+    try:
+        app = coframe.utils.get_app()
+        include_builtin = bool(data.get('include_builtin', False))
+        return {
+            'status': 'success',
+            'data': {'types': app.get_type_schema(include_builtin)},
+            'code': 200,
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {'status': 'error', 'message': str(e), 'code': 500}

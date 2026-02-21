@@ -260,6 +260,28 @@ class DB:
         """
         return self.models.get(table_name, None)
 
+    def get_type_schema(self, include_builtin: bool = False) -> Dict[str, Any]:
+        """
+        Return all resolved types as a client-facing dict.
+
+        Args:
+            include_builtin: if True, include SQLAlchemy built-in types
+                             (String, Integer, DateTime, …).
+                             Default False: only plugin-defined types.
+
+        Returns:
+            { TypeName: DbType.to_client_dict() }
+
+        The result is intentionally free of UI-specific concerns (no widget
+        inference): each client applies its own rendering logic on top of
+        the type metadata (inheritance chain, python_type, declared attrs).
+        """
+        return {
+            name: t.to_client_dict(self.types)
+            for name, t in self.types.items()
+            if include_builtin or t.plugin != ""
+        }
+
     def initialize_db(self, db_url: str, model: ModuleType) -> Any:
         """
         Initialize the database with the given connection URL, register the
@@ -389,9 +411,64 @@ class DbType:
                 raise ValueError(f'Type "{type_obj.name}" declared in "{type_obj.plugin.name}" is not found')
             type_obj = types[type_obj.attributes['base']]
             self.inheritance.append(type_obj.name)
-            deep_merge(self.attributes, type_obj.attributes)
+            # Child wins on conflict: only fill in keys not already set by the child.
+            # deep_merge is intentionally NOT used here — its "last wins" semantics
+            # is correct for plugin merging but wrong for type inheritance.
+            for key, value in type_obj.attributes.items():
+                if key not in self.attributes:
+                    self.attributes[key] = value
 
         self.python_type = type_obj.python_type
+
+    def to_client_dict(self, all_types: Dict[str, 'DbType']) -> Dict[str, Any]:
+        """
+        Serialise this type for the frontend client.
+
+        The server is intentionally agnostic about UI concerns (widgets, rendering).
+        It exposes raw type metadata; each client applies its own widget mapping.
+
+        Field-level attributes in view descriptors or model columns override
+        these type-level defaults — the merge is client-side (field wins).
+
+        Returns a dict with:
+          inheritance  — resolution chain [direct_parent, grandparent, ...]
+          base         — direct parent type name (first in inheritance)
+          python_type  — Python type as string ('str', 'int', 'float', ...)
+          builtin      — True if SQLAlchemy built-in, False if plugin-defined
+          + all resolved YAML attributes: widget (if declared), label, help,
+            nullable, length, precision, scale, validate, index, unique, ...
+          + columns    — for composite types: sub-column list with their own attrs
+        """
+        result: Dict[str, Any] = {
+            'inheritance': self.inheritance,
+            'builtin':     self.plugin == "",
+        }
+        if self.inheritance:
+            result['base'] = self.inheritance[0]
+        if self.python_type:
+            try:
+                result['python_type'] = self.python_type.__name__
+            except AttributeError:
+                pass
+
+        # All resolved YAML attributes except structural keys already exposed above
+        _skip = {'base', 'columns'}
+        for key, value in self.attributes.items():
+            if key not in _skip:
+                result[key] = value
+
+        # Sub-columns for composite types (TimeStamp, Address, Credentials, …)
+        if self.columns:
+            cols = []
+            for col in self.columns:
+                col_entry: Dict[str, Any] = {'name': col.name}
+                for k, v in col.attributes.items():
+                    if k not in ('plugin', 'name'):
+                        col_entry[k] = v
+                cols.append(col_entry)
+            result['columns'] = cols
+
+        return result
 
 
 class DbTable:
@@ -518,6 +595,7 @@ class DbColumn:
         Raises:
             ValueError: If type resolution fails or references are invalid
         """
+        # Handle foreign key columns
         if 'foreign_key' in self.attributes:
             try:
                 fk = self.attributes['foreign_key']
@@ -527,6 +605,18 @@ class DbColumn:
                 fk['id'] = id
             except Exception:
                 raise ValueError(f"Foreign key for column: {self.name} in {caller} has invalid type")
+
+            # For FK columns, split attributes NOW (before return)
+            # This ensures nullable, index, etc. are captured
+            field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default']
+            type_keys = ['length', 'precision', 'scale', 'timezone']
+            for key, value in self.attributes.items():
+                if key in field_keys:
+                    self.attr_field[key] = value
+                elif key in type_keys:
+                    self.attr_type[key] = value
+                else:
+                    self.attr_other[key] = value
             return
 
         cur_type = self.attributes['type']
@@ -539,7 +629,7 @@ class DbColumn:
                     self.attributes[key] = value
             self.db_type = self.db.types[cur_type]
 
-        # Split attributes by type
+        # Split attributes by type (for non-FK columns, after type inheritance)
         field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default']
         type_keys = ['length', 'precision', 'scale', 'timezone']
         for key, value in self.attributes.items():

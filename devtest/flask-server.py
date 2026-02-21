@@ -10,7 +10,7 @@ import sys
 import os
 sys.path.append("..")
 
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 from functools import wraps
 
@@ -44,6 +44,7 @@ command_processor = coframe_app.cp
 # Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'development-secret-key')
 api_prefix = f"/{plugins.config.get('api', {}).get('prefix', 'api')}"
+endpoint_prefix = plugins.config.get('api', {}).get('endpoint_prefix', 'endpoint')
 
 # Initialize AuthMiddleware (wrapper with config)
 auth = srv.AuthMiddleware(plugins.config, SECRET_KEY)
@@ -115,7 +116,9 @@ def login_required(f):
 # ============================================================================
 @app.route('/', methods=['GET'])
 def home():
-    """Root endpoint"""
+    """Root endpoint — serves Svelte client if built, otherwise API info."""
+    if os.path.isfile('static_client/index.html'):
+        return send_from_directory('static_client', 'index.html')
     return jsonify({
         'message': 'Coframe API Server (Flask + AuthMiddleware)',
         'version': plugins.config.get('version', '0.0.0'),
@@ -272,7 +275,7 @@ def read_file():
 # ============================================================================
 # Generic Endpoint Dispatcher
 # ============================================================================
-@app.route(f'{api_prefix}/endpoint/<operation>', methods=['POST'])
+@app.route(f'{api_prefix}/{endpoint_prefix}/<operation>', methods=['POST'])
 @login_required
 def generic_endpoint(operation):
     """Generic endpoint for custom operations"""
@@ -312,6 +315,19 @@ def get_current_user_alias():
 # ============================================================================
 # Main Entry Point
 # ============================================================================
+
+# ============================================================================
+# Static Client (Svelte build) — catch-all, registered last so API routes win
+# ============================================================================
+if os.path.isdir('static_client'):
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def serve_client(path):
+        full = os.path.join('static_client', path)
+        if path and os.path.isfile(full):
+            return send_from_directory('static_client', path)
+        return send_from_directory('static_client', 'index.html')
+
 
 if __name__ == '__main__':
     # Read port from config (default to 8300 if not specified)

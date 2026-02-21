@@ -33,6 +33,30 @@ tables:
         columns: [nationality, last_name]
         description: "Authors by country"
 
+  Publisher:
+    name: publishers
+    tags: [anag]
+    columns:
+      - name: id
+        type: ID
+
+      - name: name
+        type: String
+        length: 100
+        nullable: false
+        index: true
+
+      - name: country
+        type: String
+        length: 2
+        nullable: true
+        description: "ISO 3166-1 alpha-2 (US, GB, IT, FR)"
+
+      - name: website
+        type: String
+        length: 200
+        nullable: true
+
   Book:
     name: books
     tags: [anag]
@@ -52,17 +76,45 @@ tables:
 
       - name: publication_date
         type: Date
+        nullable: true
         default: null
 
       - name: price
         type: Price
 
+      - name: language
+        type: String
+        length: 2
+        nullable: true
+        index: true
+        description: "ISO 639-1 (en, it, fr, es, de)"
+
+      - name: pages
+        type: Integer
+        nullable: true
+
+      - name: publisher_id
+        type: Integer
+        nullable: true
+        foreign_key:
+          target: Publisher.id
+
+      - name: description
+        type: Text
+        nullable: true
+
+      - name: tags
+        type: String
+        length: 200
+        nullable: true
+        description: "Comma-separated tags (first = primary genre)"
+
     # Compound indexes
     indexes:
       - name: idx_book_isbn
         columns: [isbn]
-        unique: true
-        description: "Unique ISBN constraint"
+        unique: false
+        description: "ISBN index (non-unique for testing)"
 
       - name: idx_book_title_date
         columns: [title, publication_date]

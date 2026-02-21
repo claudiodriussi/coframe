@@ -35,34 +35,41 @@ types:
   Password:
     base: String
     nullable: False
+    widget: password
     label: "Password"
     help: |
       Please insert a robust password and keep it safe
 
   Email:
     base: String
+    widget: email
     validate: email_validator
 
   Json:
     base: JSON
+    widget: json
     default: {}
     nullable: True
 
   Markdown:
     base: Text
+    widget: markdown
 
   Phone:
     base: String
+    widget: tel
     length: 20
     nullable: true
 
   URL:
     base: String
+    widget: url
     length: 512
     nullable: true
 
   Color:
     base: String
+    widget: color
     length: 7
     nullable: true
     label: "Color"
@@ -70,6 +77,7 @@ types:
 
   FilePath:
     base: String
+    widget: filepath
     length: 512
     nullable: true
     label: "File Path"
@@ -77,12 +85,14 @@ types:
 
   Money:
     base: Numeric
+    widget: currency
     precision: 10
     scale: 2
     nullable: true
 
   Price:
     base: Money
+    widget: currency
     precision: 10
     scale: 4
 

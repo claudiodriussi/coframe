@@ -12,6 +12,7 @@ sys.path.append("..")
 
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from typing import Dict, Any
 
 import coframe
@@ -44,6 +45,7 @@ command_processor = coframe_app.cp
 # Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'development-secret-key')
 api_prefix = f"/{plugins.config.get('api', {}).get('prefix', 'api')}"
+endpoint_prefix = plugins.config.get('api', {}).get('endpoint_prefix', 'endpoint')
 
 # Initialize AuthMiddleware (wrapper with config)
 auth = srv.AuthMiddleware(plugins.config, SECRET_KEY)
@@ -123,7 +125,10 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
 # ============================================================================
 @app.get('/')
 async def home():
-    """Root endpoint"""
+    """Root endpoint — serves Svelte client if built, otherwise API info."""
+    if os.path.isfile('static_client/index.html'):
+        from fastapi.responses import FileResponse
+        return FileResponse('static_client/index.html')
     return {
         'message': 'Coframe API Server (FastAPI + AuthMiddleware)',
         'version': plugins.config.get('version', '0.0.0'),
@@ -295,7 +300,7 @@ async def read_file(
 # ============================================================================
 # Generic Endpoint Dispatcher
 # ============================================================================
-@app.post(f'{api_prefix}/endpoint/{{operation}}')
+@app.post(f'{api_prefix}/{endpoint_prefix}/{{operation}}')
 async def generic_endpoint(
     operation: str,
     data: dict,
@@ -334,6 +339,13 @@ async def get_current_user_alias(current_user: dict = Depends(get_current_user))
 # ============================================================================
 # Main Entry Point
 # ============================================================================
+
+# ============================================================================
+# Static Client (Svelte build) — mounted last so API routes take priority
+# ============================================================================
+if os.path.isdir('static_client'):
+    app.mount('/', StaticFiles(directory='static_client', html=True), name='client')
+
 
 if __name__ == '__main__':
     import uvicorn

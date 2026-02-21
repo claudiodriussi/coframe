@@ -22,9 +22,12 @@ class Book:
 
     @validates('isbn')
     def validate_isbn(self, key, value):
-        """ISBN validation"""
-        if not (len(value) == 10 or len(value) == 13):
-            raise ValueError("ISBN must be 10 or 13 characters")
+        """ISBN validation (accepts dashes)"""
+        if value:
+            # Remove dashes for validation
+            clean_isbn = value.replace('-', '')
+            if not (len(clean_isbn) == 10 or len(clean_isbn) == 13):
+                raise ValueError("ISBN must be 10 or 13 digits (dashes optional)")
         return value
 
     @hybrid_property

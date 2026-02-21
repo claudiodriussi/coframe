@@ -1,0 +1,451 @@
+id,title,isbn,publication_date,price,language,pages,publisher_id,description,tags
+1,1984,978-0451524935,1949-06-08,12.99,en,328,1,Dystopian masterpiece about totalitarianism and surveillance.,Fiction,Dystopian,Classic
+2,Pride and Prejudice,978-0141439518,1813-01-28,9.99,en,432,1,Elizabeth Bennet navigates love and society in Regency England.,Fiction,Romance,Classic
+3,To Kill a Mockingbird,978-0061120084,1960-07-11,14.99,en,324,2,Scout Finch witnesses racial injustice in Depression-era Alabama.,Fiction,Classic,Southern Gothic
+4,The Great Gatsby,978-0743273565,1925-04-10,11.99,en,180,3,Jay Gatsby pursues the American Dream in the Jazz Age.,Fiction,Classic,Literary
+5,Harry Potter and the Philosopher's Stone,978-0747532699,1997-06-26,15.99,en,223,4,Young wizard discovers his magical heritage at Hogwarts School.,Fantasy,Young Adult,Adventure
+6,The Lord of the Rings,978-0618640157,1954-07-29,24.99,en,1178,5,Epic quest to destroy the One Ring and save Middle-earth.,Fantasy,Epic Fantasy,Adventure
+7,Animal Farm,978-0452284244,1945-08-17,10.99,en,112,1,Satirical allegory of Soviet totalitarianism through farm animals.,Fiction,Political Satire,Classic
+8,Brave New World,978-0060850524,1932-01-01,13.99,en,268,6,Dystopian vision of a genetically engineered society.,Fiction,Dystopian,Science Fiction
+9,The Catcher in the Rye,978-0316769488,1951-07-16,12.99,en,277,7,Holden Caulfield's alienated journey through New York City.,Fiction,Coming of Age,Classic
+10,The Hobbit,978-0547928227,1937-09-21,14.99,en,310,5,Bilbo Baggins' unexpected adventure with dwarves and a dragon.,Fantasy,Adventure,Classic
+11,The Shadow of the Wind,978-0143034902,2001-04-15,16.99,en,487,8,A young boy discovers a mysterious book that changes his life in post-war Barcelona.,Fiction,Mystery,Historical
+12,Dune,978-0441172719,1965-06-01,18.99,en,688,9,Paul Atreides must navigate desert politics and prophecy on planet Arrakis.,Science Fiction,Space Opera,Adventure
+13,Foundation,978-0553293357,1951-05-01,15.99,en,255,10,Psychohistorian Hari Seldon predicts the fall of the Galactic Empire.,Science Fiction,Hard SF,Classic
+14,Neuromancer,978-0441569595,1984-07-01,14.99,en,271,11,Console cowboy Case enters cyberspace for one last job.,Science Fiction,Cyberpunk,Noir
+15,The Name of the Rose,978-0156001311,1980-09-01,17.99,en,536,12,Franciscan friar investigates mysterious deaths in a medieval monastery.,Mystery,Historical,Literary
+16,One Hundred Years of Solitude,978-0060883287,1967-05-30,16.99,en,417,13,The Buendía family saga spans generations in magical Macondo.,Fiction,Magical Realism,Literary
+17,The Handmaid's Tale,978-0385490818,1985-06-01,14.99,en,311,14,Offred survives in a totalitarian theocracy where women are enslaved.,Fiction,Dystopian,Feminist
+18,The Road,978-0307387899,2006-09-26,15.99,en,287,15,A father and son journey through post-apocalyptic America.,Fiction,Post-Apocalyptic,Literary
+19,American Gods,978-0380789030,2001-06-19,17.99,en,635,16,Ex-convict Shadow Moon discovers old gods living in modern America.,Fantasy,Urban Fantasy,Mythology
+20,Good Omens,978-0060853983,1990-05-01,16.99,en,432,17,An angel and demon team up to prevent the apocalypse.,Fantasy,Comedy,Paranormal
+21,The Silence of the Lambs,978-0312924584,1988-06-01,14.99,en,338,18,FBI trainee Clarice Starling seeks help from imprisoned cannibal Hannibal Lecter.,Thriller,Crime,Horror
+22,Gone Girl,978-0307588371,2012-06-05,15.99,en,415,19,Amy Dunne disappears on her fifth wedding anniversary.,Thriller,Mystery,Psychological
+23,The Girl with the Dragon Tattoo,978-0307454546,2005-08-01,16.99,en,465,20,Journalist and hacker investigate a decades-old disappearance.,Mystery,Thriller,Crime
+24,The Shining,978-0307743657,1977-01-28,14.99,en,447,21,Jack Torrance descends into madness at the isolated Overlook Hotel.,Horror,Psychological,Supernatural
+25,It,978-0451169518,1986-09-15,19.99,en,1138,21,Seven children confront an ancient evil in the town of Derry.,Horror,Supernatural,Coming of Age
+26,Dracula,978-0486411095,1897-05-26,10.99,en,418,22,Count Dracula leaves Transylvania for England seeking new blood.,Horror,Gothic,Classic
+27,Frankenstein,978-0486282114,1818-01-01,9.99,en,280,22,Victor Frankenstein creates life with horrifying consequences.,Horror,Gothic,Science Fiction,Classic
+28,Wuthering Heights,978-0141439556,1847-12-01,11.99,en,416,1,Heathcliff and Catherine's destructive love spans two generations.,Fiction,Romance,Gothic,Classic
+29,Jane Eyre,978-0141441146,1847-10-16,12.99,en,507,1,Orphaned Jane becomes governess at Thornfield Hall.,Fiction,Romance,Gothic,Classic
+30,Moby-Dick,978-0142437247,1851-10-18,13.99,en,635,23,Captain Ahab obsessively pursues the white whale.,Fiction,Adventure,Classic
+31,Catch-22,978-1451626650,1961-11-10,15.99,en,453,24,Bombardier Yossarian struggles with military absurdity in World War II.,Fiction,Satire,War,Classic
+32,Slaughterhouse-Five,978-0385333849,1969-03-31,14.99,en,275,25,Billy Pilgrim becomes unstuck in time during World War II.,Fiction,Science Fiction,War,Postmodern
+33,The Hitchhiker's Guide to the Galaxy,978-0345391803,1979-10-12,13.99,en,224,26,Arthur Dent survives Earth's destruction with alien friend Ford Prefect.,Science Fiction,Comedy,Space Opera
+34,Ender's Game,978-0812550702,1985-01-15,15.99,en,324,27,Child genius Ender Wiggin trains to fight an alien invasion.,Science Fiction,Military SF,Young Adult
+35,The Left Hand of Darkness,978-0441478125,1969-03-01,14.99,en,304,11,Diplomat Genly Ai navigates gender politics on planet Gethen.,Science Fiction,Literary,Anthropological
+36,A Game of Thrones,978-0553103540,1996-08-01,19.99,en,694,28,Noble families vie for control of the Iron Throne.,Fantasy,Epic Fantasy,Political
+37,The Eye of the World,978-0812511819,1990-01-15,17.99,en,782,29,Farm boy Rand al'Thor discovers he's part of an ancient prophecy.,Fantasy,Epic Fantasy,Adventure
+38,The Way of Kings,978-0765326355,2010-08-31,21.99,en,1007,30,Knights Radiant return as the world faces Desolation.,Fantasy,Epic Fantasy,Military
+39,Mistborn: The Final Empire,978-0765311788,2006-07-17,16.99,en,541,30,Street urchin Vin learns she's a powerful Mistborn allomancer.,Fantasy,Epic Fantasy,Heist
+40,The Name of the Wind,978-0756404741,2007-03-27,17.99,en,662,31,Kvothe recounts his journey from innkeeper to legendary wizard.,Fantasy,Literary Fantasy,Coming of Age
+41,A Wizard of Earthsea,978-0547722023,1968-11-01,13.99,en,183,32,Young wizard Ged must face the shadow he unleashed.,Fantasy,Coming of Age,Classic
+42,The Princess Bride,978-0156035217,1973-11-01,14.99,en,465,33,True love and high adventure in the tale of Westley and Buttercup.,Fantasy,Romance,Comedy,Adventure
+43,The Once and Future King,978-0441627400,1958-01-01,16.99,en,639,34,Arthur's rise from boy to legendary king of Britain.,Fantasy,Arthurian,Classic
+44,Jonathan Strange & Mr Norrell,978-0765356154,2004-09-08,19.99,en,1006,35,Two magicians restore English magic during the Napoleonic Wars.,Fantasy,Historical,Literary
+45,The Ocean at the End of the Lane,978-0062255655,2013-06-18,14.99,en,178,16,A man returns home and remembers supernatural events from childhood.,Fantasy,Dark Fantasy,Literary
+46,Neverwhere,978-0380789016,1996-09-16,15.99,en,370,16,Richard Mayhew falls through the cracks into magical London Below.,Fantasy,Urban Fantasy,Adventure
+47,The Graveyard Book,978-0060530921,2008-09-30,14.99,en,312,16,Nobody Owens is raised by ghosts in a graveyard.,Fantasy,Young Adult,Gothic
+48,Coraline,978-0380977789,2002-07-02,12.99,en,162,16,Girl discovers alternate world behind a secret door.,Fantasy,Horror,Young Adult
+49,The Chronicles of Narnia: The Lion the Witch and the Wardrobe,978-0064471046,1950-10-16,13.99,en,206,5,Four children enter magical Narnia through a wardrobe.,Fantasy,Young Adult,Classic,Adventure
+50,A Wrinkle in Time,978-0312367541,1962-01-01,12.99,en,211,4,Meg Murry travels through space and time to rescue her father.,Science Fiction,Young Adult,Adventure
+51,The Giver,978-0544336261,1993-04-26,11.99,en,179,8,Jonas discovers the dark truth behind his seemingly perfect community.,Science Fiction,Dystopian,Young Adult
+52,Fahrenheit 451,978-1451673319,1953-10-19,13.99,en,249,24,Fireman Guy Montag burns books in a future where reading is forbidden.,Science Fiction,Dystopian,Classic
+53,The Hunger Games,978-0439023481,2008-09-14,15.99,en,374,9,Katniss Everdeen volunteers for a televised fight to the death.,Science Fiction,Dystopian,Young Adult
+54,Divergent,978-0062024039,2011-04-25,14.99,en,487,10,Tris Prior must hide her Divergent nature in faction-based Chicago.,Science Fiction,Dystopian,Young Adult
+55,The Maze Runner,978-0385737951,2009-10-06,14.99,en,375,11,Thomas wakes in a maze with no memory of his past.,Science Fiction,Dystopian,Young Adult
+56,Ready Player One,978-0307887436,2011-08-16,16.99,en,374,12,Wade Watts hunts for Easter egg in massive virtual reality game.,Science Fiction,Cyberpunk,Adventure
+57,Snow Crash,978-0553380958,1992-06-01,15.99,en,440,13,Hacker Hero Protagonist uncovers a mind virus in the Metaverse.,Science Fiction,Cyberpunk,Thriller
+58,The Martian,978-0553418026,2011-09-27,16.99,en,369,14,Astronaut Mark Watney must survive alone on Mars.,Science Fiction,Hard SF,Survival
+59,Project Hail Mary,978-0593135204,2021-05-04,18.99,en,476,15,Ryland Grace wakes on a spaceship with no memory of his mission.,Science Fiction,Hard SF,Space Opera
+60,The Three-Body Problem,978-0765382030,2008-05-01,17.99,en,399,17,Scientist Ye Wenjie makes contact with alien Trisolaran civilization.,Science Fiction,Hard SF,First Contact
+61,Children of Time,978-0316452502,2015-06-04,16.99,en,600,18,Uplifted spiders and last humans compete for habitable world.,Science Fiction,Space Opera,Evolution
+62,The Expanse: Leviathan Wakes,978-0316129084,2011-06-02,17.99,en,561,19,Detective and ship captain uncover conspiracy in colonized solar system.,Science Fiction,Space Opera,Mystery
+63,Hyperion,978-0553283686,1989-05-26,16.99,en,482,20,Seven pilgrims journey to meet the Shrike on planet Hyperion.,Science Fiction,Space Opera,Literary
+64,The Stars My Destination,978-0679767800,1956-01-01,14.99,en,236,21,Gully Foyle seeks revenge in a future where teleportation is common.,Science Fiction,Space Opera,Classic
+65,Do Androids Dream of Electric Sheep?,978-0345404473,1968-01-01,13.99,en,210,22,Bounty hunter Rick Deckard must retire six escaped androids.,Science Fiction,Cyberpunk,Philosophical,Classic
+66,I Robot,978-0553382563,1950-12-02,12.99,en,224,23,Nine stories explore the Three Laws of Robotics.,Science Fiction,Robot Fiction,Classic
+67,The Time Machine,978-0486284729,1895-05-07,9.99,en,118,22,Time Traveler journeys to year 802701 and beyond.,Science Fiction,Time Travel,Classic
+68,The War of the Worlds,978-0486295060,1898-01-01,10.99,en,192,22,Martians invade Victorian England with devastating heat-rays.,Science Fiction,Alien Invasion,Classic
+69,Twenty Thousand Leagues Under the Sea,978-0486440682,1870-01-01,11.99,en,335,24,Professor Aronnax becomes captive on Captain Nemo's submarine.,Science Fiction,Adventure,Classic
+70,Journey to the Center of the Earth,978-0486440880,1864-11-25,10.99,en,183,24,Professor Lidenbrock descends into an Icelandic volcano.,Science Fiction,Adventure,Classic
+71,The Count of Monte Cristo,978-0140449266,1844-08-28,16.99,en,1276,25,Edmond Dantès escapes prison to exact elaborate revenge.,Fiction,Adventure,Classic
+72,The Three Musketeers,978-0140440089,1844-03-01,14.99,en,625,25,D'Artagnan joins three legendary musketeers in 17th century France.,Fiction,Adventure,Historical,Classic
+73,Les Misérables,978-0451419439,1862-04-03,19.99,en,1463,26,Jean Valjean seeks redemption in post-revolutionary France.,Fiction,Historical,Classic
+74,Crime and Punishment,978-0486415871,1866-01-01,12.99,en,430,27,Raskolnikov commits murder to test his theory of the extraordinary man.,Fiction,Philosophical,Crime,Classic
+75,The Brothers Karamazov,978-0374528379,1880-01-01,18.99,en,796,28,Three brothers struggle with faith morality and patricide.,Fiction,Philosophical,Classic
+76,War and Peace,978-0307266934,1869-01-01,21.99,en,1296,29,Russian aristocracy during Napoleonic invasion.,Fiction,Historical,Epic,Classic
+77,Anna Karenina,978-0143035008,1877-01-01,17.99,en,864,30,Anna's affair with Count Vronsky leads to tragedy.,Fiction,Romance,Classic
+78,The Picture of Dorian Gray,978-0486278070,1890-07-01,10.99,en,254,22,Dorian Gray's portrait ages while he remains young.,Fiction,Gothic,Philosophical,Classic
+79,The Strange Case of Dr Jekyll and Mr Hyde,978-0486266886,1886-01-05,8.99,en,96,22,Dr. Jekyll's experiments unleash his dark alter ego.,Horror,Gothic,Classic
+80,The Turn of the Screw,978-0486266848,1898-01-01,9.99,en,96,22,Governess believes ghosts haunt her young charges.,Horror,Gothic,Psychological,Classic
+81,The Metamorphosis,978-0486290300,1915-01-01,9.99,en,72,31,Gregor Samsa wakes transformed into a giant insect.,Fiction,Absurdist,Classic
+82,The Trial,978-0805209990,1925-01-01,13.99,en,255,32,Josef K is arrested and prosecuted by unknown authority.,Fiction,Absurdist,Philosophical,Classic
+83,The Stranger,978-0679720201,1942-01-01,12.99,en,123,33,Meursault commits murder and faces existential trial.,Fiction,Existentialist,Classic
+84,Siddhartha,978-0553208849,1922-01-01,11.99,en,152,34,Young Brahmin searches for enlightenment.,Fiction,Philosophical,Spiritual
+451,Thus Spoke Zarathustra,978-0140441185,1883-01-01,14.99,en,352,35,Zarathustra descends from mountain to teach the Übermensch.,Philosophy,Fiction,Classic
+86,The Iliad,978-0140275360,800-01-01,13.99,en,683,1,Achilles' wrath during the Trojan War.,Poetry,Epic,Classic,Mythology
+87,The Odyssey,978-0140268867,800-01-01,13.99,en,541,1,Odysseus' ten-year journey home from Troy.,Poetry,Epic,Classic,Mythology,Adventure
+88,The Divine Comedy,978-0142437223,1320-01-01,15.99,en,798,2,Dante's journey through Hell Purgatory and Paradise.,Poetry,Epic,Classic,Religion
+89,Paradise Lost,978-0140424393,1667-01-01,14.99,en,453,3,Satan's rebellion and the fall of man.,Poetry,Epic,Classic,Religion
+90,Beowulf,978-0393320978,1000-01-01,12.99,en,213,4,Geatish hero battles Grendel and dragon.,Poetry,Epic,Classic,Mythology
+91,The Canterbury Tales,978-0140424386,1400-01-01,14.99,en,504,3,Pilgrims tell stories on journey to Canterbury.,Poetry,Classic,Medieval
+92,Don Quixote,978-0060934347,1605-01-01,17.99,en,1023,5,Delusional knight errant seeks adventure in Spain.,Fiction,Classic,Satire
+93,Hamlet,978-0743477123,1603-01-01,11.99,en,342,6,Prince of Denmark seeks revenge for his father's murder.,Drama,Tragedy,Classic
+94,Macbeth,978-0743477109,1623-01-01,10.99,en,249,6,Scottish general's ambition leads to tyranny and madness.,Drama,Tragedy,Classic
+95,Romeo and Juliet,978-0743477116,1597-01-01,10.99,en,283,6,Star-crossed lovers from feuding families.,Drama,Tragedy,Romance,Classic
+96,Othello,978-0743477550,1603-01-01,11.99,en,314,6,Moorish general destroyed by jealousy and manipulation.,Drama,Tragedy,Classic
+97,King Lear,978-0743482769,1606-01-01,11.99,en,311,6,Aging king divides kingdom with tragic consequences.,Drama,Tragedy,Classic
+98,A Midsummer Night's Dream,978-0743477543,1600-01-01,10.99,en,142,6,Fairies meddle in lovers' affairs in enchanted forest.,Drama,Comedy,Fantasy,Classic
+99,The Tempest,978-0743482837,1611-01-01,10.99,en,199,6,Prospero uses magic to reclaim his dukedom.,Drama,Comedy,Fantasy,Classic
+100,Medea,978-0486275482,431-01-01,9.99,en,64,7,Sorceress takes terrible revenge on unfaithful husband.,Drama,Tragedy,Classic,Mythology
+101,Oedipus Rex,978-0486268774,429-01-01,9.99,en,64,7,King discovers he fulfilled prophecy he tried to avoid.,Drama,Tragedy,Classic,Mythology
+102,Antigone,978-0486278049,442-01-01,9.99,en,64,7,Woman defies king to bury her brother.,Drama,Tragedy,Classic,Mythology
+103,The Republic,978-0872201361,380-01-01,15.99,en,416,8,Plato's dialogue on justice and the ideal state.,Philosophy,Classic,Political Theory
+104,The Prince,978-0486272740,1532-01-01,9.99,en,96,22,Machiavelli's treatise on political power.,Philosophy,Political Theory,Classic
+105,Leviathan,978-0140431957,1651-01-01,16.99,en,736,1,Hobbes argues for social contract and absolute sovereignty.,Philosophy,Political Theory,Classic
+106,On Liberty,978-0486421308,1859-01-01,10.99,en,128,22,Mill defends individual freedom against state power.,Philosophy,Political Theory,Classic
+107,The Communist Manifesto,978-0486424651,1848-02-21,8.99,en,63,22,Marx and Engels call for workers' revolution.,Philosophy,Political Theory,Classic
+108,The Wealth of Nations,978-0553585971,1776-03-09,19.99,en,1152,9,Adam Smith's foundational work on economics.,Economics,Philosophy,Classic
+109,On the Origin of Species,978-0486450063,1859-11-24,13.99,en,502,22,Darwin's theory of evolution by natural selection.,Science,Biology,Classic
+110,A Brief History of Time,978-0553380163,1988-04-01,16.99,en,212,10,Stephen Hawking explains cosmology for general readers.,Science,Physics,Cosmology
+111,The Selfish Gene,978-0199291151,1976-01-01,15.99,en,360,11,Richard Dawkins presents gene-centered view of evolution.,Science,Biology,Evolution
+112,Cosmos,978-0345539434,1980-01-01,18.99,en,365,12,Carl Sagan explores the universe and humanity's place in it.,Science,Astronomy,Popular Science
+113,Sapiens: A Brief History of Humankind,978-0062316097,2011-01-01,19.99,en,443,13,Yuval Noah Harari traces human history from Stone Age to present.,History,Anthropology,Popular Science
+114,Guns Germs and Steel,978-0393317558,1997-03-01,18.99,en,480,14,Jared Diamond explains why some civilizations dominated others.,History,Anthropology,Social Science
+115,The History of the Peloponnesian War,978-0140440393,431-01-01,16.99,en,648,1,Thucydides chronicles the war between Athens and Sparta.,History,Classic,Military History
+116,The Histories,978-0140449082,440-01-01,15.99,en,716,1,Herodotus recounts the Greco-Persian Wars.,History,Classic,Ancient History
+117,The Decline and Fall of the Roman Empire,978-0140433937,1776-01-01,24.99,en,1952,1,Gibbon traces Rome's decline from 2nd century to 1453.,History,Classic,Roman History
+118,A People's History of the United States,978-0060838652,1980-01-01,19.99,en,729,15,Howard Zinn tells American history from marginalized perspectives.,History,Social History,Political
+119,The Diary of a Young Girl,978-0553296983,1947-06-25,12.99,en,283,16,Anne Frank's diary while hiding from Nazis.,Biography,History,WWII,Classic
+120,Night,978-0374500016,1960-01-01,11.99,en,120,17,Elie Wiesel's memoir of surviving the Holocaust.,Biography,History,WWII,Classic
+121,Man's Search for Meaning,978-0807014271,1946-01-01,13.99,en,165,18,Viktor Frankl finds meaning in concentration camp suffering.,Psychology,Philosophy,Biography
+122,The Autobiography of Malcolm X,978-0345350688,1965-01-01,14.99,en,466,19,Malcolm X's journey from street criminal to civil rights leader.,Biography,History,Social Justice
+123,Long Walk to Freedom,978-0316548182,1994-01-01,17.99,en,656,20,Nelson Mandela's autobiography from childhood to presidency.,Biography,History,Politics
+124,The Story of My Life,978-0486292496,1903-01-01,9.99,en,441,22,Helen Keller overcomes blindness and deafness.,Biography,Classic,Inspirational
+125,Into the Wild,978-0385486804,1996-01-01,15.99,en,207,21,Christopher McCandless abandons civilization for Alaskan wilderness.,Biography,Adventure,Non-fiction
+126,Into Thin Air,978-0385494786,1997-05-01,16.99,en,332,21,Jon Krakauer survives deadly 1996 Mount Everest disaster.,Biography,Adventure,Mountaineering
+127,Unbroken,978-0812974492,2010-11-16,17.99,en,473,22,Louis Zamperini survives plane crash Japanese POW camp and PTSD.,Biography,History,WWII,Survival
+128,Educated,978-0399590504,2018-02-20,17.99,en,334,23,Tara Westover escapes survivalist family to earn PhD.,Biography,Memoir,Education
+129,Born a Crime,978-0399588174,2016-11-15,16.99,en,304,24,Trevor Noah grows up mixed-race in apartheid South Africa.,Biography,Memoir,Comedy
+130,The Glass Castle,978-0743247542,2005-03-01,15.99,en,288,25,Jeannette Walls' unconventional upbringing with dysfunctional parents.,Biography,Memoir,Family
+131,Wild,978-0307476074,2012-03-20,15.99,en,315,26,Cheryl Strayed hikes Pacific Crest Trail to heal from trauma.,Biography,Memoir,Adventure
+132,Eat Pray Love,978-0143038419,2006-02-16,15.99,en,334,27,Elizabeth Gilbert's journey of self-discovery in Italy India and Indonesia.,Biography,Memoir,Travel,Self-Help
+133,The Immortal Life of Henrietta Lacks,978-1400052189,2010-02-02,16.99,en,381,28,Story of woman whose cancer cells revolutionized medical research.,Biography,Science,Medical Ethics
+134,Just Mercy,978-0812994520,2014-10-21,16.99,en,336,29,Bryan Stevenson fights for wrongly condemned death row prisoners.,Biography,Law,Social Justice
+135,When Breath Becomes Air,978-0812988406,2016-01-12,15.99,en,228,30,Neurosurgeon Paul Kalanithi confronts terminal cancer.,Biography,Memoir,Medicine,Philosophy
+136,The Subtle Art of Not Giving a F*ck,978-0062457714,2016-09-13,16.99,en,224,31,Mark Manson's counterintuitive approach to living a good life.,Self-Help,Philosophy,Popular Psychology
+137,Atomic Habits,978-0735211292,2018-10-16,17.99,en,320,32,James Clear explains how tiny changes create remarkable results.,Self-Help,Psychology,Productivity
+138,Thinking Fast and Slow,978-0374533557,2011-10-25,18.99,en,499,33,Daniel Kahneman explores two systems that drive human thinking.,Psychology,Behavioral Economics,Science
+139,The Power of Habit,978-0812981605,2012-02-28,16.99,en,371,34,Charles Duhigg explains the science of habit formation.,Psychology,Self-Help,Business
+140,Outliers: The Story of Success,978-0316017923,2008-11-18,16.99,en,309,35,Malcolm Gladwell examines what makes high-achievers successful.,Psychology,Sociology,Business
+141,Blink: The Power of Thinking Without Thinking,978-0316010665,2005-01-11,15.99,en,296,35,Malcolm Gladwell explores the power of snap judgments.,Psychology,Decision Making,Popular Science
+142,The Tipping Point,978-0316346627,2000-01-01,15.99,en,301,35,Malcolm Gladwell analyzes how ideas spread like epidemics.,Sociology,Marketing,Popular Science
+143,Freakonomics,978-0060731335,2005-04-12,16.99,en,336,1,Levitt and Dubner reveal hidden side of everything with economics.,Economics,Sociology,Popular Science
+144,Nudge,978-0143115267,2008-04-08,16.99,en,312,2,Thaler and Sunstein show how choice architecture influences decisions.,Behavioral Economics,Psychology,Policy
+145,Predictably Irrational,978-0061353239,2008-02-19,16.99,en,368,3,Dan Ariely explores hidden forces that shape our decisions.,Behavioral Economics,Psychology,Popular Science
+146,The Black Swan,978-0812973815,2007-04-17,17.99,en,444,4,Nassim Taleb analyzes highly improbable events with massive impact.,Economics,Philosophy,Risk Management
+147,Antifragile,978-0812979688,2012-11-27,18.99,en,519,4,Nassim Taleb explains things that gain from disorder.,Philosophy,Economics,Risk Management
+148,Zero to One,978-0804139298,2014-09-16,16.99,en,224,5,Peter Thiel shares insights on innovation and startups.,Business,Entrepreneurship,Technology
+149,The Lean Startup,978-0307887894,2011-09-13,17.99,en,336,6,Eric Ries presents methodology for developing successful businesses.,Business,Entrepreneurship,Innovation
+150,Good to Great,978-0066620992,2001-10-16,18.99,en,300,7,Jim Collins identifies what separates great companies from good ones.,Business,Leadership,Management
+151,The 7 Habits of Highly Effective People,978-0743269513,1989-08-15,16.99,en,381,8,Stephen Covey's principles for personal effectiveness.,Self-Help,Leadership,Productivity
+152,How to Win Friends and Influence People,978-0671027032,1936-10-01,14.99,en,288,9,Dale Carnegie's timeless advice on human relations.,Self-Help,Communication,Business,Classic
+153,The 4-Hour Workweek,978-0307465351,2007-04-24,16.99,en,308,10,Tim Ferriss shows how to escape 9-5 and live anywhere.,Self-Help,Business,Lifestyle
+154,Shoe Dog,978-1501135910,2016-04-26,17.99,en,386,11,Phil Knight's memoir of creating Nike.,Biography,Business,Entrepreneurship
+155,Steve Jobs,978-1451648539,2011-10-24,19.99,en,656,12,Walter Isaacson's authorized biography of Apple co-founder.,Biography,Business,Technology
+156,Elon Musk,978-0062301239,2015-05-12,18.99,en,400,13,Ashlee Vance chronicles the life of SpaceX and Tesla founder.,Biography,Business,Technology
+157,The Code Breaker,978-1982115852,2021-03-09,18.99,en,560,14,Walter Isaacson tells story of CRISPR and Jennifer Doudna.,Biography,Science,Biotechnology
+158,Leonardo da Vinci,978-1501139154,2017-10-17,19.99,en,624,12,Walter Isaacson explores genius of Renaissance polymath.,Biography,History,Art,Science
+159,The Wright Brothers,978-1476728742,2015-05-05,17.99,en,320,15,David McCullough recounts aviation pioneers' achievement.,Biography,History,Technology
+160,Alexander Hamilton,978-0143034759,2004-04-01,18.99,en,818,1,Ron Chernow's biography inspired the hit musical.,Biography,History,Politics
+161,John Adams,978-0743223133,2001-05-22,18.99,en,751,16,David McCullough portrays America's second president.,Biography,History,Politics
+162,Benjamin Franklin,978-0743258074,2003-07-01,18.99,en,608,17,Walter Isaacson chronicles Franklin's remarkable life.,Biography,History,Science,Politics
+163,Churchill: A Life,978-0805023961,1991-10-01,24.99,en,1066,18,Martin Gilbert's single-volume biography of Winston Churchill.,Biography,History,WWII,Politics
+164,Team of Rivals,978-0743270755,2005-10-25,21.99,en,916,19,Doris Kearns Goodwin shows how Lincoln led his cabinet.,Biography,History,Politics,Leadership
+165,The Rise of Theodore Roosevelt,978-0375756788,1979-01-01,19.99,en,886,20,Edmund Morris covers TR's life up to presidency.,Biography,History,Politics
+166,Catherine the Great,978-0679456728,2011-11-01,19.99,en,626,21,Robert Massie's biography of Russia's longest-ruling female leader.,Biography,History,Politics
+167,Cleopatra: A Life,978-0316001946,2010-11-01,17.99,en,368,22,Stacy Schiff separates myth from reality of Egypt's last pharaoh.,Biography,History,Ancient History
+168,The Rape of Nanking,978-0465068364,1997-12-01,16.99,en,290,23,Iris Chang documents the 1937 massacre in China.,History,WWII,War Crimes
+169,The Warmth of Other Suns,978-0679763888,2010-09-07,18.99,en,622,24,Isabel Wilkerson chronicles the Great Migration of Black Americans.,History,Social History,Race
+170,The Devil in the White City,978-0375725609,2003-02-11,17.99,en,447,25,Erik Larson interweaves 1893 World's Fair with serial killer's story.,History,True Crime,Architecture
+171,Dead Wake,978-0307408860,2015-03-10,17.99,en,430,25,Erik Larson recounts the sinking of the Lusitania.,History,WWI,Maritime
+172,In the Garden of Beasts,978-0307408853,2011-05-10,16.99,en,448,25,Erik Larson portrays American ambassador in Nazi Germany.,History,WWII,Biography
+173,The Lost City of Z,978-1400078455,2009-02-24,16.99,en,339,26,David Grann searches for explorer who vanished in Amazon.,Biography,Adventure,History
+174,Killers of the Flower Moon,978-0307742483,2017-04-18,17.99,en,399,27,David Grann investigates murders of Osage Nation members.,True Crime,History,Native American
+175,The Professor and the Madman,978-0060175962,1998-09-01,15.99,en,242,28,Simon Winchester tells story of Oxford English Dictionary's creation.,History,Biography,Linguistics
+176,The Ghost Map,978-1594482694,2006-10-19,15.99,en,299,29,Steven Johnson recounts 1854 cholera outbreak that changed cities.,History,Science,Medicine,Urban Planning
+177,The Innovators,978-1476708690,2014-10-07,19.99,en,542,12,Walter Isaacson chronicles digital revolution's pioneers.,History,Technology,Biography
+178,Bad Blood,978-1524731656,2018-05-21,17.99,en,339,30,John Carreyrou exposes Theranos fraud.,True Crime,Business,Technology
+179,Say Nothing,978-0385521314,2019-02-26,17.99,en,464,31,Patrick Radden Keefe investigates murder during the Troubles.,True Crime,History,Political Violence
+180,Empire of Pain,978-0385545686,2021-04-13,18.99,en,560,32,Patrick Radden Keefe traces Sackler family and opioid crisis.,True Crime,Business,Medical History
+181,I Promessi Sposi,978-8817014632,1827-06-01,14.99,it,720,1,Alessandro Manzoni racconta amore e ingiustizia nella Lombardia del 1600.,Fiction,Historical,Romance,Classic
+182,Il Nome della Rosa,978-8845292606,1980-09-01,16.99,it,503,2,Frate francescano indaga misteriose morti in abbazia medievale.,Mystery,Historical,Literary
+183,Se questo è un uomo,978-8806181178,1947-01-01,13.99,it,174,3,Primo Levi testimonia orrori di Auschwitz.,Biography,History,WWII,Classic
+184,Il Gattopardo,978-8807880353,1958-11-01,15.99,it,286,4,Principe siciliano osserva il tramonto dell'aristocrazia.,Fiction,Historical,Literary
+185,La Storia,978-8806220068,1974-06-01,17.99,it,651,5,Elsa Morante racconta una famiglia durante la Seconda Guerra Mondiale.,Fiction,Historical,Literary
+186,Il Giardino dei Finzi-Contini,978-8807880612,1962-06-01,14.99,it,229,6,Amicizia e amore in una famiglia ebraica prima della Shoah.,Fiction,Historical,Romance
+187,Cristo si è fermato a Eboli,978-8806220181,1945-01-01,13.99,it,230,7,Carlo Levi descrive esilio in Lucania durante fascismo.,Biography,History,Social Commentary
+188,Fontamara,978-8804668237,1933-01-01,12.99,it,156,8,Ignazio Silone racconta sofferenze dei cafoni abruzzesi.,Fiction,Social Commentary,Classic
+189,La Coscienza di Zeno,978-8807900242,1923-01-01,14.99,it,437,9,Zeno Cosini analizza la propria vita in chiave psicoanalitica.,Fiction,Psychological,Modernist
+190,Il Fu Mattia Pascal,978-8807900358,1904-01-01,12.99,it,268,10,Uomo approfitta della propria morte presunta per rifarsi una vita.,Fiction,Philosophical,Classic
+191,Uno Nessuno e Centomila,978-8807900549,1926-01-01,13.99,it,218,10,Vitangelo Moscarda scopre di essere diverso per ciascuno.,Fiction,Philosophical,Modernist
+192,Il Deserto dei Tartari,978-8817070843,1940-01-01,14.99,it,212,11,Ufficiale attende invano battaglia nella fortezza Bastiani.,Fiction,Existentialist,Literary
+193,Le Città Invisibili,978-8804668015,1972-11-01,14.99,it,165,12,Marco Polo descrive città immaginarie a Kublai Khan.,Fiction,Fantasy,Literary,Postmodern
+194,Se una notte d'inverno un viaggiatore,978-8804668022,1979-11-01,15.99,it,254,12,Lettore insegue dieci romanzi incompiuti.,Fiction,Metafiction,Postmodern
+195,Il Barone Rampante,978-8804668091,1957-06-01,13.99,it,277,12,Nobile bambino sale su un albero e non scende più.,Fiction,Fantasy,Philosophical
+196,Il Visconte Dimezzato,978-8804668107,1952-01-01,12.99,it,122,12,Visconte tagliato a metà da palla di cannone.,Fiction,Fantasy,Philosophical
+197,Il Cavaliere Inesistente,978-8804668114,1959-01-01,12.99,it,138,12,Armatura vuota combatte nelle guerre di Carlomagno.,Fiction,Fantasy,Philosophical
+198,La Giornata d'uno Scrutatore,978-8804668121,1963-01-01,11.99,it,82,12,Intellettuale comunista fa lo scrutatore in manicomio.,Fiction,Political,Philosophical
+199,Il Sentiero dei Nidi di Ragno,978-8804668138,1947-01-01,12.99,it,186,12,Bambino vive resistenza partigiana in Liguria.,Fiction,War,Coming of Age
+200,La Luna e i Falò,978-8806220495,1950-04-01,13.99,it,174,13,Emigrato torna nelle Langhe dopo la guerra.,Fiction,Literary,Post-War
+201,Paesi Tuoi,978-8806220501,1941-01-01,11.99,it,122,13,Storia violenta nelle campagne piemontesi.,Fiction,Neorealism
+202,La Casa in Collina,978-8806220518,1948-09-01,13.99,it,202,13,Intellettuale fugge dalla guerra civile torinese.,Fiction,War,Literary
+203,L'Amica Geniale,978-8866320319,2011-10-31,16.99,it,331,14,Amicizia tra due donne nel rione napoletano.,Fiction,Literary,Coming of Age
+204,Storia del Nuovo Cognome,978-8866321989,2012-11-01,17.99,it,471,14,Elena e Lila negli anni sessanta tra matrimonio e trasformazione.,Fiction,Literary,Social
+205,Storia di Chi Fugge e di Chi Resta,978-8866323419,2013-11-01,17.99,it,415,14,Elena studia a Pisa mentre Lila resta nel rione.,Fiction,Literary,Feminist
+206,Storia della Bambina Perduta,978-8866324805,2014-11-01,18.99,it,470,14,Maturità e vecchiaia di Elena e Lila.,Fiction,Literary,Feminist
+207,Gomorra,978-8804560807,2006-03-01,15.99,it,331,15,Roberto Saviano svela il sistema camorristico.,Non-fiction,True Crime,Social Commentary
+208,La Solitudine dei Numeri Primi,978-8804571773,2008-01-01,15.99,it,304,16,Due anime ferite si cercano per tutta la vita.,Fiction,Literary,Coming of Age
+209,Io Non Ho Paura,978-8807880711,2001-01-01,14.99,it,211,17,Bambino scopre terribile segreto nel grano del Sud.,Fiction,Thriller,Coming of Age
+210,Come Dio Comanda,978-8807880728,2006-01-01,15.99,it,378,17,Padre e figlio nella provincia italiana violenta.,Fiction,Literary,Social
+211,Tre Metri Sopra il Cielo,978-8817070256,1992-01-01,13.99,it,394,11,Storia d'amore adolescenziale a Roma.,Romance,Young Adult
+212,Il Codice da Vinci,978-8804559344,2003-03-01,16.99,it,512,15,Simbologista indaga omicidio al Louvre.,Thriller,Mystery,Historical
+213,Le Avventure di Pinocchio,978-8811685296,1883-01-01,11.99,it,159,18,Burattino di legno vuole diventare bambino vero.,Fantasy,Young Adult,Classic
+214,Cuore,978-8811689812,1886-10-01,10.99,it,278,18,Diario scolastico di bambino torinese.,Fiction,Young Adult,Classic
+215,Il Piccolo Principe,978-8845292613,1943-04-06,12.99,it,96,2,Principino viaggia tra pianeti cercando senso della vita.,Fiction,Fantasy,Philosophical,Classic
+216,La Metamorfosi,978-8807900594,1915-01-01,10.99,it,80,9,Gregor Samsa si sveglia trasformato in insetto.,Fiction,Absurdist,Classic
+217,Il Processo,978-8807900600,1925-01-01,14.99,it,280,9,Josef K è arrestato senza sapere perché.,Fiction,Absurdist,Philosophical,Classic
+218,Le Città Invisibili,978-8804668015,1972-11-01,14.99,it,165,12,Marco Polo descrive città fantastiche.,Fiction,Literary,Postmodern
+219,Cent'Anni di Solitudine,978-8807880919,1967-05-30,17.99,it,430,19,Saga della famiglia Buendía a Macondo.,Fiction,Magical Realism,Literary
+220,L'Amore ai Tempi del Colera,978-8807880926,1985-01-01,16.99,it,428,19,Storia d'amore che dura cinquant'anni.,Romance,Literary,Magical Realism
+221,La Fattoria degli Animali,978-8804668237,1945-08-17,11.99,it,122,8,Animali si ribellano contro il fattore.,Fiction,Political Satire,Classic
+222,1984,978-8804668244,1949-06-08,13.99,it,340,8,Stato totalitario controlla ogni aspetto della vita.,Fiction,Dystopian,Classic
+223,Il Signore degli Anelli,978-8845292620,1954-07-29,26.99,it,1255,2,Frodo deve distruggere Anello del Potere.,Fantasy,Epic Fantasy,Adventure,Classic
+224,Harry Potter e la Pietra Filosofale,978-8831003384,1997-06-26,16.99,it,302,20,Ragazzino scopre di essere mago.,Fantasy,Young Adult,Adventure
+225,Le Cronache di Narnia,978-8804668251,1950-10-16,24.99,it,767,8,Bambini entrano in mondo magico attraverso armadio.,Fantasy,Young Adult,Adventure,Classic
+226,Lo Hobbit,978-8845292637,1937-09-21,15.99,it,323,2,Bilbo Baggins parte per avventura con nani.,Fantasy,Adventure,Classic
+227,La Storia Infinita,978-8830100916,1979-09-01,16.99,it,505,21,Bastian legge libro magico e diventa parte della storia.,Fantasy,Young Adult,Metafiction
+228,Momo,978-8830100923,1973-01-01,14.99,it,267,21,Bambina combatte ladri di tempo.,Fantasy,Young Adult,Philosophical
+229,Il Conte di Montecristo,978-8811363637,1844-08-28,18.99,it,1312,18,Edmond Dantès si vendica dopo ingiusta prigionia.,Fiction,Adventure,Classic
+230,I Tre Moschettieri,978-8811363644,1844-03-01,15.99,it,645,18,D'Artagnan si unisce ai tre moschettieri.,Fiction,Adventure,Historical,Classic
+231,I Miserabili,978-8811363651,1862-04-03,21.99,it,1506,18,Jean Valjean cerca redenzione nella Francia post-rivoluzionaria.,Fiction,Historical,Classic
+232,Delitto e Castigo,978-8807902611,1866-01-01,14.99,it,560,9,Raskolnikov uccide per provare teoria sull'uomo straordinario.,Fiction,Philosophical,Crime,Classic
+233,I Fratelli Karamazov,978-8807902628,1880-01-01,19.99,it,823,9,Tre fratelli si confrontano con fede morale e parricidio.,Fiction,Philosophical,Classic
+234,Guerra e Pace,978-8806220082,1869-01-01,23.99,it,1337,3,Aristocrazia russa durante invasione napoleonica.,Fiction,Historical,Epic,Classic
+235,Anna Karenina,978-8806220099,1877-01-01,18.99,it,891,3,Storia di adulterio e tragedia nell'alta società russa.,Fiction,Romance,Classic
+236,Don Chisciotte,978-8806220105,1605-01-01,18.99,it,1056,3,Hidalgo impazzito si crede cavaliere errante.,Fiction,Classic,Satire
+237,La Divina Commedia,978-8807902635,1320-01-01,16.99,it,798,9,Dante viaggia attraverso Inferno Purgatorio e Paradiso.,Poetry,Epic,Classic,Religion
+238,Le Petit Prince,978-2070408504,1943-04-06,12.99,fr,96,22,Petit prince voyage entre planètes cherchant sens de la vie.,Fiction,Fantasy,Philosophical,Classic
+239,L'Étranger,978-2070360024,1942-01-01,11.99,fr,186,23,Meursault commet meurtre et fait face à procès existentiel.,Fiction,Existentialist,Classic
+240,La Peste,978-2070360147,1947-06-01,14.99,fr,279,23,Épidémie de peste à Oran révèle nature humaine.,Fiction,Existentialist,Philosophical
+241,Les Misérables,978-2253096344,1862-04-03,21.99,fr,1632,24,Jean Valjean cherche rédemption dans France post-révolutionnaire.,Fiction,Historical,Classic
+242,Le Comte de Monte-Cristo,978-2253098508,1844-08-28,19.99,fr,1344,24,Edmond Dantès s'évade pour se venger.,Fiction,Adventure,Classic
+243,Les Trois Mousquetaires,978-2253098515,1844-03-01,16.99,fr,704,24,D'Artagnan rejoint trois mousquetaires.,Fiction,Adventure,Historical,Classic
+244,Madame Bovary,978-2253183877,1856-12-01,13.99,fr,417,24,Emma Bovary cherche romance au-delà de mariage ennuyeux.,Fiction,Literary,Classic
+245,Germinal,978-2253004226,1885-03-01,15.99,fr,591,24,Mineurs luttent contre exploitation au 19ème siècle.,Fiction,Social Commentary,Classic
+246,Le Rouge et le Noir,978-2253098522,1830-11-01,14.99,fr,746,24,Julien Sorel tente ascension sociale dans France de Restauration.,Fiction,Literary,Classic
+247,À la Recherche du Temps Perdu,978-2070108169,1913-11-14,24.99,fr,2408,23,Marcel explore mémoire temps et société à travers madeleine.,Fiction,Literary,Modernist,Classic
+248,Candide,978-2253003854,1759-01-01,10.99,fr,156,24,Candide voyage à travers monde cruel mais garde optimisme.,Fiction,Satire,Philosophical,Classic
+249,Le Père Goriot,978-2253085416,1835-03-01,13.99,fr,368,24,Père se sacrifie pour filles ingrates dans Paris de 1819.,Fiction,Literary,Classic
+250,Bel-Ami,978-2253004332,1885-06-01,13.99,fr,416,24,Georges Duroy séduit femmes pour grimper échelle sociale.,Fiction,Literary,Social Commentary
+251,Notre-Dame de Paris,978-2253002840,1831-03-16,15.99,fr,698,24,Quasimodo aime bohémienne Esmeralda dans Paris médiéval.,Fiction,Historical,Romance,Classic
+252,Le Horla,978-2253006343,1887-05-26,10.99,fr,96,24,Homme est hanté par présence invisible.,Horror,Psychological,Classic
+253,Rhinocéros,978-2070368778,1959-01-01,12.99,fr,246,23,Habitants se transforment en rhinocéros un par un.,Drama,Absurdist,Satire
+254,Huis Clos,978-2070360031,1944-05-27,11.99,fr,109,23,Trois personnages enfermés dans pièce découvrent que l'enfer c'est les autres.,Drama,Existentialist,Philosophical
+255,Der Prozess,978-3596900732,1925-01-01,13.99,de,282,25,Josef K wird verhaftet ohne zu wissen warum.,Fiction,Absurdist,Philosophical,Classic
+256,Die Verwandlung,978-3596900749,1915-01-01,10.99,de,74,25,Gregor Samsa erwacht als riesiges Insekt.,Fiction,Absurdist,Classic
+257,Faust,978-3150000014,1808-01-01,12.99,de,364,26,Gelehrter Faust verkauft Seele an Teufel.,Drama,Tragedy,Classic,Philosophy
+258,Der Steppenwolf,978-3518368015,1927-01-01,14.99,de,288,27,Harry Haller kämpft zwischen bürgerlicher und künstlerischer Existenz.,Fiction,Philosophical,Modernist
+259,Siddhartha,978-3518368022,1922-01-01,11.99,de,136,27,Junger Brahmane sucht Erleuchtung.,Fiction,Philosophical,Spiritual
+260,Das Parfum,978-3257228007,1985-03-01,15.99,de,320,28,Mörder mit übernatürlichem Geruchssinn kreiert ultimatives Parfüm.,Fiction,Historical,Crime
+261,Die Blechtrommel,978-3423115827,1959-01-01,16.99,de,736,29,Oskar weigert sich zu wachsen während Nazi-Zeit.,Fiction,Magical Realism,Historical
+262,Im Westen Nichts Neues,978-3462041699,1929-01-29,13.99,de,288,30,Junge Soldaten erleben Schrecken des Ersten Weltkriegs.,Fiction,War,Classic
+263,Die Leiden des Jungen Werthers,978-3150000021,1774-09-01,10.99,de,147,26,Werther leidet an unerfüllter Liebe zu Charlotte.,Fiction,Romance,Epistolary,Classic
+264,Unterm Rad,978-3518368039,1906-01-01,12.99,de,208,27,Begabter Schüler zerbricht an Erwartungen.,Fiction,Coming of Age,Tragedy
+265,El Quijote,978-8408176664,1605-01-01,18.99,es,1376,31,Hidalgo enloquecido se cree caballero andante.,Fiction,Classic,Satire
+266,Cien Años de Soledad,978-0307474728,1967-05-30,17.99,es,471,32,Saga de familia Buendía en Macondo mágico.,Fiction,Magical Realism,Literary
+267,La Casa de los Espíritus,978-9500425681,1982-01-01,16.99,es,433,33,Saga familiar chilena a través de generaciones.,Fiction,Magical Realism,Historical
+268,El Amor en los Tiempos del Cólera,978-0307387288,1985-01-01,16.99,es,368,32,Historia de amor que dura cincuenta años.,Romance,Literary,Magical Realism
+269,Rayuela,978-8420410678,1963-01-01,15.99,es,635,34,Novela experimental que lector puede reordenar.,Fiction,Experimental,Literary
+270,Pedro Páramo,978-8426413369,1955-03-19,13.99,es,142,35,Juan Preciado busca padre en pueblo de muertos.,Fiction,Magical Realism,Gothic
+271,The Picture of Dorian Gray,978-0486278070,1890-07-01,10.99,en,254,22,Portrait ages while Dorian remains eternally young.,Fiction,Gothic,Philosophical,Classic
+272,Heart of Darkness,978-0486264646,1899-02-01,9.99,en,72,22,Marlow journeys into Congo seeking ivory trader Kurtz.,Fiction,Colonialism,Psychological,Classic
+273,Lord Jim,978-0486424538,1900-10-01,11.99,en,278,22,Ship officer seeks redemption after abandoning passengers.,Fiction,Adventure,Psychological,Classic
+274,Nostromo,978-0375757808,1904-10-01,14.99,en,480,1,Silver mine corrupts men in fictional South American republic.,Fiction,Political,Adventure,Classic
+275,The Secret Agent,978-0486424927,1907-09-01,11.99,en,246,22,Anarchist shopkeeper becomes unwitting terrorist in London.,Fiction,Spy Thriller,Classic
+276,Ulysses,978-0394703800,1922-02-02,19.99,en,732,2,Leopold Bloom's day parallels Odyssey in Dublin.,Fiction,Modernist,Literary,Classic
+277,Dubliners,978-0486268705,1914-06-15,10.99,en,160,22,Fifteen stories depict middle-class life in Dublin.,Fiction,Short Stories,Modernist,Classic
+278,A Portrait of the Artist as a Young Man,978-0486280509,1916-12-29,10.99,en,253,22,Stephen Dedalus' intellectual and spiritual awakening.,Fiction,Coming of Age,Modernist,Classic
+279,Mrs Dalloway,978-0156628709,1925-05-14,13.99,en,194,3,Single day in Clarissa Dalloway's life in post-WWI London.,Fiction,Modernist,Literary,Classic
+280,To the Lighthouse,978-0156907392,1927-05-05,13.99,en,209,3,Ramsay family summers on Isle of Skye.,Fiction,Modernist,Literary,Classic
+281,Orlando,978-0156701600,1928-10-11,13.99,en,228,3,Nobleman lives through centuries changing sex.,Fiction,Fantasy,LGBT,Modernist
+282,The Waves,978-0156949606,1931-10-08,14.99,en,209,3,Six friends' inner lives from childhood to old age.,Fiction,Modernist,Experimental
+283,The Sound and the Fury,978-0679732242,1929-10-07,14.99,en,326,4,Compson family's decline in Mississippi.,Fiction,Modernist,Southern Gothic,Classic
+284,As I Lay Dying,978-0679732259,1930-10-06,13.99,en,267,4,Bundren family transports mother's corpse for burial.,Fiction,Modernist,Southern Gothic,Classic
+285,Light in August,978-0679732266,1932-10-09,15.99,en,480,4,Lena Grove searches for child's father in Mississippi.,Fiction,Modernist,Southern Gothic,Classic
+286,Absalom Absalom!,978-0679732181,1936-10-26,16.99,en,313,4,Sutpen family saga reveals South's tragic history.,Fiction,Modernist,Southern Gothic,Classic
+287,The Grapes of Wrath,978-0143039433,1939-04-14,15.99,en,464,1,Joad family migrates to California during Dust Bowl.,Fiction,Social Commentary,Classic
+288,Of Mice and Men,978-0142000670,1937-02-25,11.99,en,107,1,Migrant workers George and Lennie dream of own farm.,Fiction,Tragedy,Classic
+289,East of Eden,978-0142004234,1952-09-19,17.99,en,601,1,Multigenerational saga explores nature of good and evil.,Fiction,Family Saga,Classic
+290,Cannery Row,978-0143039587,1945-01-01,13.99,en,181,1,Colorful characters in Monterey California during Depression.,Fiction,Humor,Classic
+291,The Pearl,978-0142000694,1947-01-01,10.99,en,90,1,Poor fisherman finds pearl bringing tragedy.,Fiction,Parable,Classic
+292,Tortilla Flat,978-0143039495,1935-05-28,12.99,en,156,1,Paisanos enjoy carefree life in Monterey after WWI.,Fiction,Humor,Classic
+293,In Cold Blood,978-0679745587,1966-01-01,15.99,en,343,4,Truman Capote reconstructs murder of Kansas family.,True Crime,Non-fiction,Classic
+294,Breakfast at Tiffany's,978-0679745655,1958-01-01,11.99,en,179,4,Holly Golightly enchants narrator in New York.,Fiction,Literary,Romance
+295,A Clockwork Orange,978-0393312836,1962-01-01,14.99,en,192,5,Alex leads gang in ultra-violent future before being reformed.,Science Fiction,Dystopian,Philosophical
+296,The Spy Who Came in from the Cold,978-0143124757,1963-09-01,14.99,en,224,1,Burned-out spy Leamas undertakes last mission in Cold War.,Spy Thriller,Classic
+297,Tinker Tailor Soldier Spy,978-0143120933,1974-01-01,15.99,en,379,1,George Smiley hunts Soviet mole in British intelligence.,Spy Thriller,Mystery
+298,The Russia House,978-0345418265,1989-06-01,14.99,en,353,6,Publisher Barley Blair becomes unlikely spy.,Spy Thriller,Romance
+299,The Constant Gardener,978-0743262484,2001-01-04,15.99,en,492,7,Diplomat investigates wife's murder in Kenya.,Thriller,Political,Mystery
+300,The Remains of the Day,978-0679731726,1989-05-01,14.99,en,245,4,Butler reflects on life of service and lost love.,Fiction,Historical,Literary
+301,Never Let Me Go,978-1400078776,2005-04-05,15.99,en,288,8,Students discover they're clones raised for organ donation.,Science Fiction,Dystopian,Literary
+302,Klara and the Sun,978-0593318171,2021-03-02,16.99,en,307,9,Artificial Friend Klara observes human behavior from store.,Science Fiction,Literary,Philosophical
+303,On Chesil Beach,978-1400075997,2007-05-29,13.99,en,166,8,Newlyweds' disastrous wedding night in 1962.,Fiction,Historical,Literary
+304,Atonement,978-0385721790,2001-09-20,16.99,en,351,10,Briony's lie destroys lives on eve of WWII.,Fiction,Historical,Literary,Romance
+305,The Sense of an Ending,978-0307957122,2011-10-05,13.99,en,150,11,Tony Webster confronts past after ex-girlfriend's suicide.,Fiction,Literary,Psychological
+306,The Blind Assassin,978-0385720953,2000-09-02,16.99,en,637,12,Iris Chase recounts sister's suicide and family secrets.,Fiction,Literary,Mystery
+307,Alias Grace,978-0385490443,1996-09-01,16.99,en,468,13,Servant convicted of murder in 1843 Canada.,Fiction,Historical,Mystery
+308,The Handmaid's Tale,978-0385490818,1985-06-01,14.99,en,311,14,Offred survives as reproductive servant in theocratic regime.,Fiction,Dystopian,Feminist
+309,Oryx and Crake,978-0385721677,2003-05-01,15.99,en,376,12,Snowman survives bioengineered apocalypse.,Science Fiction,Dystopian,Literary
+310,Cat's Eye,978-0385491204,1988-09-01,15.99,en,462,15,Painter returns to Toronto confronting traumatic childhood.,Fiction,Literary,Psychological
+311,Life of Pi,978-0156027328,2001-09-11,15.99,en,319,3,Pi Patel survives 227 days at sea with Bengal tiger.,Fiction,Adventure,Philosophical
+312,Midnight's Children,978-0812976533,1981-04-18,17.99,en,646,4,Saleem Sinai born at India's independence possesses telepathy.,Fiction,Magical Realism,Historical
+313,The Satanic Verses,978-0812976717,1988-09-26,17.99,en,546,4,Two Indian actors fall from exploding plane over England.,Fiction,Magical Realism,Philosophical
+314,Shame,978-0812976700,1983-09-01,16.99,en,287,4,Allegorical history of Pakistan through two families.,Fiction,Magical Realism,Political
+315,White Teeth,978-0375703867,2000-01-27,16.99,en,448,5,Two families navigate multicultural London across generations.,Fiction,Literary,Comedy
+316,On Beauty,978-0143037743,2005-09-06,15.99,en,443,1,Academic families clash over politics art and love.,Fiction,Literary,Contemporary
+317,NW,978-0143123934,2012-09-04,15.99,en,333,1,Four Londoners from same estate live different lives.,Fiction,Literary,Contemporary
+318,Swing Time,978-0143111641,2016-11-15,16.99,en,453,1,Two girls bond over dance but take different paths.,Fiction,Literary,Contemporary
+319,The Remains of the Day,978-0679731726,1989-05-01,14.99,en,245,4,Stevens reflects on life as butler at Darlington Hall.,Fiction,Historical,Literary
+320,An Artist of the Floating World,978-0679722663,1986-05-01,13.99,en,206,4,Retired artist confronts his role in Japanese nationalism.,Fiction,Historical,Literary
+321,The Unconsoled,978-0679735878,1995-05-09,15.99,en,535,4,Pianist Ryder navigates surreal European city.,Fiction,Surrealism,Literary
+322,When We Were Orphans,978-0375724404,2000-09-12,14.99,en,313,5,Detective returns to Shanghai seeking kidnapped parents.,Fiction,Mystery,Historical
+323,A Pale View of Hills,978-0679722670,1982-02-04,13.99,en,183,4,Japanese woman in England recalls postwar Nagasaki.,Fiction,Literary,Psychological
+324,Half of a Yellow Sun,978-1400095209,2006-09-12,16.99,en,433,6,Biafran War seen through eyes of Igbo family.,Fiction,Historical,War
+325,Americanah,978-0307455925,2013-05-14,16.99,en,477,7,Nigerian woman navigates race in America and returns home.,Fiction,Literary,Contemporary
+326,Purple Hibiscus,978-1565129419,2003-10-01,14.99,en,307,8,Nigerian teen finds voice in oppressive religious household.,Fiction,Coming of Age,Contemporary
+327,Things Fall Apart,978-0385474542,1958-06-17,13.99,en,209,9,Okonkwo's life and Igbo culture disrupted by colonialism.,Fiction,Historical,Postcolonial,Classic
+328,No Longer at Ease,978-0385474511,1960-01-01,12.99,en,169,9,Okonkwo's grandson faces corruption in modern Nigeria.,Fiction,Postcolonial,Contemporary
+329,Arrow of God,978-0385478403,1964-01-01,13.99,en,230,9,Chief priest confronts colonial administration.,Fiction,Historical,Postcolonial
+330,Disgrace,978-0140296396,1999-01-01,14.99,en,220,10,Disgraced professor retreats to daughter's farm in post-apartheid South Africa.,Fiction,Literary,Contemporary
+331,Waiting for the Barbarians,978-0140154764,1980-01-01,13.99,en,156,10,Magistrate questions Empire's treatment of nomadic people.,Fiction,Allegory,Postcolonial
+332,Life & Times of Michael K,978-0140072792,1983-09-01,13.99,en,184,10,Simple man seeks peace during South African civil war.,Fiction,Literary,War
+333,The God of Small Things,978-0812979657,1997-04-04,15.99,en,340,11,Twins in Kerala face forbidden love and family tragedy.,Fiction,Literary,Postcolonial
+334,The Ministry for the Future,978-0316300131,2020-10-06,17.99,en,576,12,Global efforts to combat climate change.,Science Fiction,Climate Fiction,Political
+335,Red Mars,978-0553560732,1992-10-01,17.99,en,519,13,First hundred colonists terraform Mars.,Science Fiction,Hard SF,Space Colonization
+336,Green Mars,978-0553572391,1993-10-01,17.99,en,535,13,Revolution brews on partially terraformed Mars.,Science Fiction,Hard SF,Political
+337,Blue Mars,978-0553573350,1996-06-01,18.99,en,609,13,Mars becomes independent as Earth deteriorates.,Science Fiction,Hard SF,Political
+338,2312,978-0316198387,2012-05-22,16.99,en,561,12,Swan Er Hong investigates conspiracy in colonized solar system.,Science Fiction,Hard SF,Space Opera
+339,Aurora,978-0316098106,2015-07-07,16.99,en,466,12,Generation ship approaches Tau Ceti.,Science Fiction,Hard SF,Generation Ship
+340,The Years of Rice and Salt,978-0553580075,2002-03-01,17.99,en,763,14,Alternate history where Black Death killed 99% of Europeans.,Science Fiction,Alternate History,Literary
+341,Shaman,978-0316097529,2013-10-08,16.99,en,447,12,Young man trains as shaman in Ice Age.,Fiction,Historical,Prehistoric
+342,The Dispossessed,978-0061054884,1974-05-01,14.99,en,387,15,Physicist from anarchist moon visits capitalist planet.,Science Fiction,Political,Philosophical
+343,The Word for World is Forest,978-0765324641,1972-02-01,13.99,en,189,16,Colonists exploit forest planet's peaceful inhabitants.,Science Fiction,Political,Environmental
+344,The Fifth Season,978-0316229296,2015-08-04,16.99,en,468,17,Continent plagued by catastrophic climate change.,Fantasy,Apocalyptic,Literary
+345,The Obelisk Gate,978-0316229265,2016-08-16,16.99,en,410,17,Essun searches for daughter as world ends.,Fantasy,Apocalyptic,Literary
+346,The Stone Sky,978-0316229241,2017-08-15,17.99,en,464,17,Final confrontation to save or end the world.,Fantasy,Apocalyptic,Literary
+347,The Broken Earth Trilogy,978-0316527194,2018-11-13,24.99,en,1344,17,Complete trilogy in one volume.,Fantasy,Apocalyptic,Literary
+348,How Long 'til Black Future Month?,978-0316491372,2018-11-27,15.99,en,400,17,Short story collection exploring futures.,Science Fiction,Fantasy,Short Stories
+349,The City We Became,978-0316509848,2020-03-24,17.99,en,434,17,New York City comes alive to fight extradimensional threat.,Fantasy,Urban Fantasy,Contemporary
+350,Ancillary Justice,978-0316246620,2013-10-01,15.99,en,409,18,AI warship seeks revenge for destroyed consciousness.,Science Fiction,Space Opera,Military SF
+351,Ancillary Sword,978-0316246651,2014-10-07,15.99,en,356,18,Breq commands ship on civilized station.,Science Fiction,Space Opera,Political
+352,Ancillary Mercy,978-0316246682,2015-10-06,16.99,en,330,18,Breq must choose sides in brewing civil war.,Science Fiction,Space Opera,Political
+353,The Long Way to a Small Angry Planet,978-0062444134,2014-07-29,15.99,en,518,19,Diverse crew tunnels wormholes through space.,Science Fiction,Space Opera,Character-driven
+354,A Closed and Common Orbit,978-0062569370,2016-10-18,15.99,en,365,19,AI learns to be human in illegal body.,Science Fiction,Character-driven,Philosophical
+355,Record of a Spaceborn Few,978-0062699237,2018-07-24,16.99,en,359,19,Life in aging Exodus Fleet generation ships.,Science Fiction,Character-driven,Slice of Life
+356,The Galaxy and the Ground Within,978-0062936011,2021-02-16,16.99,en,336,19,Five strangers stranded at rest stop.,Science Fiction,Character-driven,Slice of Life
+357,To Be Taught If Fortunate,978-0062936042,2019-09-03,13.99,en,144,19,Four astronauts explore exoplanets.,Science Fiction,Hard SF,Philosophical
+358,Gideon the Ninth,978-1250313195,2019-09-10,16.99,en,448,20,Necromancer and cavalier compete for immortality.,Fantasy,Gothic,Sapphic,Space Opera
+359,Harrow the Ninth,978-1250313218,2020-08-04,17.99,en,512,20,Harrowhark serves God as Lyctor.,Fantasy,Gothic,Psychological,Space Opera
+360,Nona the Ninth,978-1250313225,2022-09-13,17.99,en,480,20,Nona has six months before world ends.,Fantasy,Gothic,Contemporary,Space Opera
+361,The Poppy War,978-0062662569,2018-05-01,16.99,en,530,19,War orphan Rin discovers dangerous shamanic powers.,Fantasy,Military,Dark,Chinese Mythology
+362,The Dragon Republic,978-0062662620,2019-08-06,17.99,en,658,19,Rin becomes pirate seeking vengeance.,Fantasy,Military,Dark,Political
+363,The Burning God,978-0062662668,2020-11-17,18.99,en,640,19,Final war between warlord and goddess.,Fantasy,Military,Dark,Epic
+364,A Memory Called Empire,978-1250186430,2019-03-26,16.99,en,462,21,Ambassador investigates predecessor's murder in alien empire.,Science Fiction,Space Opera,Political
+365,A Desolation Called Peace,978-1250186447,2021-03-02,17.99,en,496,21,Mahit and Three Seagrass negotiate with alien threat.,Science Fiction,Space Opera,First Contact
+366,This Is How You Lose the Time War,978-1534431003,2019-07-16,14.99,en,198,22,Two time-traveling agents from opposing sides fall in love.,Science Fiction,Romance,Epistolary
+367,The Space Between Worlds,978-1250209603,2020-08-04,16.99,en,329,23,Woman can travel to parallel Earths where her doppelgängers died.,Science Fiction,Multiverse,Thriller
+368,Mexican Gothic,978-0525620785,2020-06-30,16.99,en,301,24,Socialite investigates cousin's disturbing marriage in creepy mansion.,Horror,Gothic,Historical
+369,The Only Good Indians,978-1982136437,2020-07-14,15.99,en,308,25,Four men hunted by vengeful entity from their past.,Horror,Thriller,Native American
+370,Ring Shout,978-1250767028,2020-10-13,13.99,en,192,26,Sword-wielding woman fights Ku Klux Klan monsters in 1920s Georgia.,Horror,Fantasy,Alternate History
+371,A Song for a New Day,978-0358042082,2019-09-10,15.99,en,374,27,Musicians navigate world after terrorist attacks ban gatherings.,Science Fiction,Dystopian,Music
+372,The Vanished Birds,978-1250169808,2020-01-14,16.99,en,421,28,Ship captain and mute boy travel through time-dilated space.,Science Fiction,Literary,Time Dilation
+373,The Lesson,978-1250782687,2022-05-10,16.99,en,320,29,Alien invasion told from perspective of Black British family.,Science Fiction,Alien Invasion,Contemporary
+374,Piranesi,978-1635575637,2020-09-15,16.99,en,245,30,Man lives in infinite house with tides and statues.,Fantasy,Literary,Mystery,Surrealism
+375,The Invisible Life of Addie LaRue,978-0765387561,2020-10-06,17.99,en,444,31,Woman cursed to be forgotten makes deal with devil.,Fantasy,Historical,Romance
+376,The Ten Thousand Doors of January,978-0316421997,2019-09-10,16.99,en,374,32,Girl discovers doors to other worlds.,Fantasy,Historical,Portal Fantasy
+377,The Night Circus,978-0307744432,2011-09-13,15.99,en,387,33,Two magicians compete in mysterious circus.,Fantasy,Romance,Historical
+378,The Starless Sea,978-1101971383,2019-11-05,17.99,en,498,34,Graduate student discovers underground library.,Fantasy,Literary,Metafiction
+379,House of Leaves,978-0375703768,2000-03-07,18.99,en,709,35,Family moves into house larger inside than outside.,Horror,Experimental,Psychological
+380,The Library at Mount Char,978-0553418620,2015-06-16,16.99,en,388,1,Orphans raised by godlike Father possess strange powers.,Fantasy,Horror,Dark
+381,The Bear and the Nightingale,978-1101885956,2017-01-10,16.99,en,322,2,Girl with magical sight defends village from darkness in medieval Russia.,Fantasy,Historical,Russian Folklore
+382,The Girl and the Stars,978-0008284695,2020-01-30,16.99,en,416,3,Girl thrown into pit discovers civilization beneath ice.,Fantasy,YA,Survival
+383,Circe,978-0316556347,2018-04-10,16.99,en,333,4,Witch Circe exiled to island discovers her powers.,Fantasy,Mythology,Literary,Feminist
+384,The Song of Achilles,978-0062060624,2011-09-20,15.99,en,352,5,Patroclus and Achilles' relationship during Trojan War.,Fantasy,Mythology,Historical,Romance
+385,A Thousand Ships,978-0525656654,2019-08-29,16.99,en,368,6,Trojan War told from women's perspectives.,Fantasy,Mythology,Historical,Feminist
+386,The Silence of the Girls,978-0525563938,2018-08-23,15.99,en,291,7,Briseis recounts life as Achilles' war prize.,Fiction,Mythology,Historical,Feminist
+387,Lavinia,978-0547247496,2008-04-03,14.99,en,279,8,Roman woman from Aeneid tells her story.,Fantasy,Mythology,Historical
+388,Till We Have Faces,978-0062565426,1956-09-10,13.99,en,308,9,Psyche myth retold from ugly sister's perspective.,Fantasy,Mythology,Philosophical,Classic
+389,The Mists of Avalon,978-0345441188,1982-01-01,17.99,en,876,10,Arthurian legend from female characters' viewpoints.,Fantasy,Historical,Feminist
+390,The Once and Future Witches,978-0316422048,2020-10-13,16.99,en,512,32,Three sisters join suffragettes and witches in 1893 New Salem.,Fantasy,Historical,Feminist
+391,The Priory of the Orange Tree,978-1635570304,2019-02-26,19.99,en,848,11,Queendom threatened by ancient dragon enemy.,Fantasy,Epic Fantasy,Dragons,LGBT
+392,Black Sun,978-1534437678,2020-10-13,16.99,en,454,22,Blind man travels to holy city on winter solstice.,Fantasy,Epic Fantasy,Pre-Columbian
+393,Fevered Star,978-1534437692,2022-04-19,17.99,en,400,22,Gods walk earth as war brews.,Fantasy,Epic Fantasy,Pre-Columbian
+394,She Who Became the Sun,978-1250621795,2021-07-20,16.99,en,416,12,Girl assumes brother's identity to escape death.,Fantasy,Historical,Chinese History,LGBT
+395,He Who Drowned the World,978-1250621818,2023-09-05,17.99,en,480,12,Zhu Chongba fights to claim Mandate of Heaven.,Fantasy,Historical,Chinese History,LGBT
+396,The Jasmine Throne,978-0316538558,2021-06-01,17.99,en,560,13,Imprisoned princess and maidservant with forbidden magic.,Fantasy,Epic Fantasy,South Asian,LGBT
+397,The Oleander Sword,978-0316538602,2022-07-05,18.99,en,576,13,Malini and Priya wage war across empire.,Fantasy,Epic Fantasy,South Asian,LGBT
+398,Babel,978-0063021426,2022-08-23,18.99,en,545,14,Oxford student uncovers truth about empire's translation magic.,Fantasy,Historical,Academia,Postcolonial
+399,The Atlas Six,978-1250854445,2020-03-03,16.99,en,372,15,Six magicians compete for place in secret society.,Fantasy,Dark Academia,Contemporary
+400,The Atlas Paradox,978-1250854506,2022-10-25,17.99,en,464,15,Magical society members face consequences of initiation.,Fantasy,Dark Academia,Contemporary
+401,Ninth House,978-1250313072,2019-10-08,17.99,en,458,16,Survivor sees ghosts and monitors Yale's secret societies.,Fantasy,Dark Academia,Urban Fantasy
+402,Hell Bent,978-1250313102,2023-01-10,18.99,en,480,16,Galaxy and Dawes attempt to rescue soul from hell.,Fantasy,Dark Academia,Urban Fantasy
+403,A Deadly Education,978-0593128527,2020-09-29,15.99,en,313,17,Students survive magical school designed to kill them.,Fantasy,Dark Academia,YA
+404,The Last Graduate,978-0593128541,2021-09-28,15.99,en,388,17,El must save classmates during deadly graduation.,Fantasy,Dark Academia,YA
+405,The Golden Enclaves,978-0593128565,2022-09-27,16.99,en,405,17,El hunts monstrous threat to magical enclaves.,Fantasy,Dark Academia,YA
+406,Legendborn,978-1534441606,2020-09-15,16.99,en,501,18,Black teen infiltrates secret society hunting magical creatures.,Fantasy,YA,Arthurian,Contemporary
+407,Bloodmarked,978-1534441620,2022-11-08,17.99,en,544,18,Bree embraces powers to fight coming war.,Fantasy,YA,Arthurian,Contemporary
+408,Elatsoe,978-1646140039,2020-08-25,15.99,en,368,19,Lipan Apache teen investigates cousin's death with ghost dog.,Fantasy,YA,Mystery,Native American
+409,A Snake Falls to Earth,978-1646140596,2021-11-09,15.99,en,352,19,Teen and cottonmouth person face environmental disaster.,Fantasy,YA,Native American,Climate
+410,The Gilded Wolves,978-1250144546,2019-01-15,16.99,en,432,20,Diverse crew pulls off heist in 1889 Paris.,Fantasy,Historical,Heist,YA
+411,Ace of Spades,978-1250800817,2021-06-01,15.99,en,424,21,Two Black students targeted by anonymous texter at elite school.,Thriller,YA,Contemporary,Mystery
+412,Cemetery Boys,978-1250250469,2020-09-01,15.99,en,352,22,Trans brujo tries to prove himself and accidentally summons ghost.,Fantasy,YA,LGBT,Contemporary
+413,The Extraordinaries,978-1250231260,2020-06-23,15.99,en,416,23,Fanboy writes fic about superhero who's secretly his friend.,Fantasy,YA,LGBT,Superhero
+414,Red White & Royal Blue,978-1250316776,2019-05-14,15.99,en,421,24,President's son falls for Prince of Wales.,Romance,LGBT,Contemporary
+415,One Last Stop,978-1250244499,2021-06-01,16.99,en,432,25,Girl falls for time-displaced punk from 1970s on subway.,Romance,LGBT,Time Travel,Contemporary
+416,The House in the Cerulean Sea,978-1250217318,2020-03-17,15.99,en,394,26,Caseworker investigates orphanage of dangerous magical children.,Fantasy,LGBT,Contemporary,Feel-good
+417,Under the Whispering Door,978-1250217349,2021-09-21,16.99,en,373,26,Dead man learns about life at tea shop way-station.,Fantasy,LGBT,Contemporary,Philosophical
+418,The Midnight Library,978-0525559474,2020-08-13,15.99,en,304,27,Nora explores infinite library of lives she could have lived.,Fiction,Fantasy,Philosophical,Contemporary
+419,Klara and the Sun,978-0593318171,2021-03-02,16.99,en,307,9,Artificial Friend observes humans from store window.,Science Fiction,Literary,Philosophical
+420,Cloud Cuckoo Land,978-1982168438,2021-09-28,18.99,en,626,28,Five characters connected across time by ancient text.,Fiction,Historical,Literary
+421,The Lincoln Highway,978-0735222359,2021-10-05,18.99,en,592,29,Four boys road trip across 1950s America.,Fiction,Historical,Adventure
+422,Apples Never Fall,978-1250220264,2021-09-14,17.99,en,480,30,Mother disappears and four siblings suspect father.,Thriller,Mystery,Family Drama
+423,The Silent Patient,978-1250301697,2019-02-05,16.99,en,325,31,Psychotherapist obsessed with mute woman who killed husband.,Thriller,Psychological,Mystery
+424,The Woman in the Window,978-0062678416,2018-01-02,16.99,en,427,32,Agoraphobic woman witnesses crime across the street.,Thriller,Psychological,Domestic
+425,The Last Thing He Told Me,978-1501171345,2021-05-04,16.99,en,309,33,Woman searches for truth when husband vanishes.,Thriller,Mystery,Contemporary
+426,The Guest List,978-0062868930,2020-06-02,15.99,en,320,34,Murder during wedding on remote Irish island.,Thriller,Mystery,Domestic
+427,The Hunting Party,978-1250221551,2019-02-12,15.99,en,288,35,One of nine friends found dead during New Year celebration.,Thriller,Mystery,Locked Room
+428,The Thursday Murder Club,978-0241425459,2020-09-03,15.99,en,368,1,Four retirees investigate cold cases.,Mystery,Cozy,Humor,Contemporary
+429,The Man Who Died Twice,978-0241425466,2021-09-16,16.99,en,421,1,Thursday Murder Club tackles diamonds and assassins.,Mystery,Cozy,Humor,Contemporary
+430,The Bullet That Missed,978-0241425473,2022-09-15,16.99,en,389,1,Club investigates murder of TV presenter.,Mystery,Cozy,Humor,Contemporary
+431,Finlay Donovan Is Killing It,978-1250241702,2021-02-02,15.99,en,336,2,Struggling author mistaken for contract killer.,Mystery,Comedy,Contemporary
+432,Finlay Donovan Knocks 'Em Dead,978-1250241726,2022-02-01,15.99,en,352,2,Finlay accidentally becomes actual hitwoman.,Mystery,Comedy,Contemporary
+433,The Seven Husbands of Evelyn Hugo,978-1501139239,2017-06-13,16.99,en,388,3,Aging actress tells life story to unknown journalist.,Fiction,Historical,LGBT,Hollywood
+434,Daisy Jones & The Six,978-1524798628,2019-03-05,16.99,en,355,4,Oral history of fictional 1970s rock band.,Fiction,Historical,Music
+435,Malibu Rising,978-1524798659,2021-06-01,16.99,en,369,4,Four siblings throw epic party as past crashes in.,Fiction,Historical,Family Drama
+436,The Dutch House,978-0062963673,2019-09-24,17.99,en,337,5,Siblings shaped by grand house and stepmother's betrayal.,Fiction,Literary,Family Drama
+437,The Nightingale,978-1250080400,2015-02-03,16.99,en,440,6,Two French sisters resist Nazi occupation in different ways.,Fiction,Historical,WWII
+438,The Great Alone,978-0312577230,2018-02-06,17.99,en,440,7,Family seeks fresh start in 1970s Alaska wilderness.,Fiction,Historical,Survival
+439,The Four Winds,978-1250178602,2021-02-02,17.99,en,454,8,Mother fights for family during Dust Bowl.,Fiction,Historical,Great Depression
+440,Where the Crawdads Sing,978-0735219090,2018-08-14,15.99,en,370,9,Marsh girl suspected of murder in 1960s North Carolina.,Fiction,Mystery,Coming of Age
+441,Lessons in Chemistry,978-0385547345,2022-04-05,17.99,en,391,10,Female chemist becomes TV cooking show host in 1960s.,Fiction,Historical,Feminist
+442,Tomorrow and Tomorrow and Tomorrow,978-0593321201,2022-07-05,18.99,en,416,11,Two friends build video game empire over decades.,Fiction,Contemporary,Gaming
+443,The Invisible Man,978-0486270715,1897-01-01,10.99,en,151,22,Scientist discovers invisibility formula with terrible consequences.,Science Fiction,Horror,Classic
+444,The Island of Doctor Moreau,978-0486290270,1896-01-01,9.99,en,104,22,Shipwreck survivor discovers doctor creating human-animal hybrids.,Science Fiction,Horror,Classic
+445,Kindred,978-0807083697,1979-06-01,14.99,en,287,12,Black woman pulled back to antebellum South.,Science Fiction,Time Travel,Historical,Classic
+446,Parable of the Sower,978-1538732182,1993-10-01,15.99,en,329,13,Teen prophet leads group through dystopian California.,Science Fiction,Dystopian,Afrofuturism
+447,Parable of the Talents,978-1538732199,1998-10-01,15.99,en,365,13,Lauren Olamina's daughter recounts mother's religious movement.,Science Fiction,Dystopian,Afrofuturism
+448,Dawn,978-0446603775,1987-05-01,14.99,en,248,14,Aliens resurrect humanity after nuclear war.,Science Fiction,Alien Contact,Biological
+449,The Broken Earth Trilogy Box Set,978-0316527194,2018-11-13,24.99,en,1344,17,Three complete novels in beautiful box set.,Fantasy,Apocalyptic,Literary
+450,Contact,978-0671004101,1985-09-01,16.99,en,432,15,Scientist makes first contact with extraterrestrial intelligence.,Science Fiction,Hard SF,First Contact

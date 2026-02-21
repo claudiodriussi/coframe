@@ -1,0 +1,181 @@
+id,first_name,last_name,birth_date,nationality
+1,George,Orwell,1903-06-25,British
+2,Jane,Austen,1775-12-16,British
+3,Ernest,Hemingway,1899-07-21,American
+4,Virginia,Woolf,1882-01-25,British
+5,F. Scott,Fitzgerald,1896-09-24,American
+6,James,Joyce,1882-02-02,Irish
+7,Franz,Kafka,1883-07-03,Czech
+8,Gabriel,García Márquez,1927-03-06,Colombian
+9,Toni,Morrison,1931-02-18,American
+10,Haruki,Murakami,1949-01-12,Japanese
+11,Margaret,Atwood,1939-11-18,Canadian
+12,Salman,Rushdie,1947-06-19,British-Indian
+13,Chimamanda,Ngozi Adichie,1977-09-15,Nigerian
+14,Zadie,Smith,1975-10-25,British
+15,Jonathan,Franzen,1959-08-17,American
+16,Don,DeLillo,1936-11-20,American
+17,Cormac,McCarthy,1933-07-20,American
+18,Philip,Roth,1933-03-19,American
+19,John,Updike,1932-03-18,American
+20,Saul,Bellow,1915-06-10,American
+21,Vladimir,Nabokov,1899-04-22,Russian-American
+22,Jorge,Luis Borges,1899-08-24,Argentine
+23,Italo,Calvino,1923-10-15,Italian
+24,Umberto,Eco,1932-01-05,Italian
+25,Elena,Ferrante,1943-01-01,Italian
+26,Primo,Levi,1919-07-31,Italian
+27,Alberto,Moravia,1907-11-28,Italian
+28,Pier,Paolo Pasolini,1922-03-05,Italian
+29,Natalia,Ginzburg,1916-07-14,Italian
+30,Cesare,Pavese,1908-09-09,Italian
+31,Albert,Camus,1913-11-07,French
+32,Jean-Paul,Sartre,1905-06-21,French
+33,Simone,de Beauvoir,1908-01-09,French
+34,Marcel,Proust,1871-07-10,French
+35,Gustave,Flaubert,1821-12-12,French
+36,Victor,Hugo,1802-02-26,French
+37,Alexandre,Dumas,1802-07-24,French
+38,Jules,Verne,1828-02-08,French
+39,Émile,Zola,1840-04-02,French
+40,Honoré,de Balzac,1799-05-20,French
+41,Hermann,Hesse,1877-07-02,German
+42,Thomas,Mann,1875-06-06,German
+43,Günter,Grass,1927-10-16,German
+44,Heinrich,Böll,1917-12-21,German
+45,Patrick,Süskind,1949-03-26,German
+46,Miguel,de Cervantes,1547-09-29,Spanish
+47,Federico,García Lorca,1898-06-05,Spanish
+48,Carlos,Ruiz Zafón,1964-09-25,Spanish
+49,Javier,Marías,1951-09-20,Spanish
+50,Arturo,Pérez-Reverte,1951-11-25,Spanish
+51,Leo,Tolstoy,1828-09-09,Russian
+52,Fyodor,Dostoevsky,1821-11-11,Russian
+53,Anton,Chekhov,1860-01-29,Russian
+54,Nikolai,Gogol,1809-03-31,Russian
+55,Alexander,Pushkin,1799-06-06,Russian
+56,Isabel,Allende,1942-08-02,Chilean
+57,Paulo,Coelho,1947-08-24,Brazilian
+58,Mario,Vargas Llosa,1936-03-28,Peruvian
+59,Octavio,Paz,1914-03-31,Mexican
+60,Julio,Cortázar,1914-08-26,Argentine
+61,J.K.,Rowling,1965-07-31,British
+62,J.R.R.,Tolkien,1892-01-03,British
+63,C.S.,Lewis,1898-11-29,British
+64,Roald,Dahl,1916-09-13,British
+65,Agatha,Christie,1890-09-15,British
+66,Arthur,Conan Doyle,1859-05-22,British
+67,Ian,Fleming,1908-05-28,British
+68,Graham,Greene,1904-10-02,British
+69,Evelyn,Waugh,1903-10-28,British
+70,Aldous,Huxley,1894-07-26,British
+71,Ray,Bradbury,1920-08-22,American
+72,Isaac,Asimov,1920-01-02,American
+73,Arthur C.,Clarke,1917-12-16,British
+74,Philip K.,Dick,1928-12-16,American
+75,Ursula K.,Le Guin,1929-10-21,American
+76,Kurt,Vonnegut,1922-11-11,American
+77,Margaret,Mitchell,1900-11-08,American
+78,Harper,Lee,1926-04-28,American
+79,John,Steinbeck,1902-02-27,American
+80,William,Faulkner,1897-09-25,American
+81,Mark,Twain,1835-11-30,American
+82,Edgar,Allan Poe,1809-01-19,American
+83,Walt,Whitman,1819-05-31,American
+84,Emily,Dickinson,1830-12-10,American
+85,Henry,James,1843-04-15,American
+86,Edith,Wharton,1862-01-24,American
+87,Willa,Cather,1873-12-07,American
+88,Truman,Capote,1924-09-30,American
+89,Tennessee,Williams,1911-03-26,American
+90,Arthur,Miller,1915-10-17,American
+91,Yuval Noah,Harari,1976-02-24,Israeli
+92,Jared,Diamond,1937-09-10,American
+93,Steven,Pinker,1954-09-18,Canadian-American
+94,Malcolm,Gladwell,1963-09-03,Canadian
+95,Daniel,Kahneman,1934-03-05,Israeli-American
+96,Nassim,Nicholas Taleb,1960-09-12,Lebanese-American
+97,Noam,Chomsky,1928-12-07,American
+98,Richard,Dawkins,1941-03-26,British
+99,Stephen,Hawking,1942-01-08,British
+100,Carl,Sagan,1934-11-09,American
+101,Oliver,Sacks,1933-07-09,British-American
+102,Atul,Gawande,1965-11-05,American
+103,Siddhartha,Mukherjee,1970-07-21,Indian-American
+104,Rebecca,Skloot,1972-09-19,American
+105,Mary,Roach,1959-03-20,American
+106,Bill,Bryson,1951-12-08,American
+107,Jon,Krakauer,1954-04-12,American
+108,Sebastian,Junger,1962-01-17,American
+109,Erik,Larson,1954-01-03,American
+110,David,McCullough,1933-07-07,American
+111,Doris,Kearns Goodwin,1943-01-04,American
+112,Ron,Chernow,1949-03-03,American
+113,Walter,Isaacson,1952-05-20,American
+114,Robert,Caro,1935-10-30,American
+115,David,Grann,1967-03-10,American
+116,Michelle,Obama,1964-01-17,American
+117,Barack,Obama,1961-08-04,American
+118,Hillary,Clinton,1947-10-26,American
+119,Malala,Yousafzai,1997-07-12,Pakistani
+120,Nelson,Mandela,1918-07-18,South African
+121,Maya,Angelou,1928-04-04,American
+122,James,Baldwin,1924-08-02,American
+123,Ta-Nehisi,Coates,1975-09-30,American
+124,Ibram X.,Kendi,1982-08-13,American
+125,Robin,DiAngelo,1956-09-08,American
+126,Brené,Brown,1965-11-18,American
+127,Adam,Grant,1981-08-13,American
+128,Angela,Duckworth,1970-01-01,American
+129,Carol,Dweck,1946-10-17,American
+130,Simon,Sinek,1973-10-09,British-American
+131,Cal,Newport,1982-06-23,American
+132,James,Clear,1986-01-22,American
+133,Ryan,Holiday,1987-06-16,American
+134,Tim,Ferriss,1977-07-20,American
+135,Tony,Robbins,1960-02-29,American
+136,Dale,Carnegie,1888-11-24,American
+137,Stephen,Covey,1932-10-24,American
+138,Daniel,Pink,1964-07-23,American
+139,Gretchen,Rubin,1965-12-14,American
+140,Marie,Kondo,1984-10-09,Japanese
+141,Yuval,Harari,1976-02-24,Israeli
+142,Sapiens,Author,1976-02-24,Israeli
+143,Naomi,Klein,1970-05-08,Canadian
+144,Thomas,Piketty,1971-05-07,French
+145,Michael,Lewis,1960-10-15,American
+146,Nate,Silver,1978-01-13,American
+147,Freakonomics,Authors,1967-01-01,American
+148,Thinking,Fast,1934-03-05,Israeli
+149,Quiet,Author,1968-01-01,American
+150,Educated,Author,1986-09-27,American
+151,Anne,Frank,1929-06-12,German-Dutch
+152,Viktor,Frankl,1905-03-26,Austrian
+153,Elie,Wiesel,1928-09-30,Romanian-American
+154,Khaled,Hosseini,1965-03-04,Afghan-American
+155,Markus,Zusak,1975-06-23,Australian
+156,Yann,Martel,1963-06-25,Canadian
+157,Audrey,Niffenegger,1963-06-13,American
+158,Kazuo,Ishiguro,1954-11-08,British-Japanese
+159,Ian,McEwan,1948-06-21,British
+160,Julian,Barnes,1946-01-19,British
+161,Hilary,Mantel,1952-07-06,British
+162,Donna,Tartt,1963-12-23,American
+163,Michael,Chabon,1963-05-24,American
+164,Jennifer,Egan,1962-09-07,American
+165,Colson,Whitehead,1969-11-06,American
+166,George,Saunders,1958-12-02,American
+167,Lydia,Davis,1947-07-15,American
+168,Alice,Munro,1931-07-10,Canadian
+169,David,Foster Wallace,1962-02-21,American
+170,Thomas,Pynchon,1937-05-08,American
+171,William,Gibson,1948-03-17,American-Canadian
+172,Neal,Stephenson,1959-10-31,American
+173,China,Miéville,1972-09-06,British
+174,N.K.,Jemisin,1972-09-19,American
+175,Ted,Chiang,1967-10-20,American
+176,Andy,Weir,1972-06-16,American
+177,Blake,Crouch,1978-10-15,American
+178,Hugh,Howey,1975-06-23,American
+179,Ernest,Cline,1972-03-29,American
+180,Suzanne,Collins,1962-08-10,American

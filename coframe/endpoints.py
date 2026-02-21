@@ -17,6 +17,10 @@ def endpoint(name: str) -> Callable[[Callable], Callable]:
     """
     Decorator to register an endpoint function.
 
+    All endpoints require authentication by convention — the @endpoint system
+    is designed for authenticated Coframe clients. For truly public routes
+    (e.g. login, health check) use dedicated server routes instead.
+
     Args:
         name: The name of the endpoint for registration
 
