@@ -1,0 +1,8 @@
+name: panels
+version: 0.0.1
+description: test protocol for panel def
+license: MIT
+author: Claudio Driussi
+url: https://claudiodriussi.it
+date: 2026-02-23
+depends_on: [common]

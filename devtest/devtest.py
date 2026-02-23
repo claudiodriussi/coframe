@@ -20,6 +20,42 @@ def add_numbers(data):
     }
 
 
+def inspect_panels(plugins):
+    """
+    Inspect the merged panels/views data from plugins.
+    Set a breakpoint here to explore plugins.data in the debugger.
+    """
+    import json
+
+    panels = plugins.data.get('panels', {})
+    views = plugins.data.get('views', {})
+
+    print(f"\n=== PANELS ({len(panels)}) ===")
+    for panel_id, panel in panels.items():
+        if panel_id.startswith('_'):
+            continue
+        content_ref = panel.get('content', {}).get('ref', '(inline)')
+        split_areas = [p['id'] for p in panel.get('panels', [])]
+        print(f"  [{panel_id}]  content={content_ref}  splits={split_areas}")
+
+    print(f"\n=== VIEWS ({len(views)}) ===")
+    for view_id, view in views.items():
+        if view_id.startswith('_'):
+            continue
+        vtype = view.get('type', '?')
+        model = view.get('source', {}).get('model', '?')
+        n_cols = len(view.get('columns', view.get('fields', [])))
+        print(f"  [{view_id}]  type={vtype}  model={model}  fields/cols={n_cols}")
+
+    # Simulate get_panel: use plugins.get() + resolve_refs()
+    panel_id = 'book_list'
+    panel = plugins.get(f"panels.{panel_id}")
+    if panel:
+        resolved = plugins.resolve_refs(panel)
+        print(f"\n=== get_panel('{panel_id}') — refs resolved ===")
+        print(json.dumps(resolved, indent=2, default=str))
+
+
 def main():
 
     # load plugins
@@ -27,6 +63,8 @@ def main():
     plugins.load_config("config.yaml")
     coframe.utils.register_standard_handlers(plugins)
     plugins.load_plugins()
+
+    inspect_panels(plugins)
 
     print(plugins.export_pythonpath())
 

@@ -117,8 +117,36 @@ def load_books(session, csv_path):
     return count
 
 
+def load_book_authors_from_column(session, books_csv_path):
+    """Load book-author relationships from the `authors` column in books.csv."""
+    print(f"\n🔗 Loading book-author relationships from {books_csv_path} (authors column)...")
+    count = 0
+
+    with open(books_csv_path, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        if 'authors' not in (reader.fieldnames or []):
+            print("   ⚠️  No 'authors' column found, skipping")
+            return 0
+        for row in reader:
+            authors_str = row.get('authors', '').strip()
+            if not authors_str:
+                continue
+            for author_id_str in authors_str.split():
+                book_author = model.BookAuthor(
+                    book_id=int(row['id']),
+                    author_id=int(author_id_str),
+                    notes='Primary author'
+                )
+                session.add(book_author)
+                count += 1
+
+    session.commit()
+    print(f"   ✅ Loaded {count} book-author relationships")
+    return count
+
+
 def load_book_authors(session, csv_path):
-    """Load book-author relationships from CSV."""
+    """Load book-author relationships from CSV (fallback when no authors column)."""
     print(f"\n🔗 Loading book-author relationships from {csv_path}...")
     count = 0
 
@@ -203,11 +231,21 @@ def main():
     books_csv = data_dir / 'books.csv'
     book_authors_csv = data_dir / 'books_authors.csv'
 
-    # Check files exist
-    for csv_file in [publishers_csv, authors_csv, books_csv, book_authors_csv]:
+    # Check required files exist
+    for csv_file in [publishers_csv, authors_csv, books_csv]:
         if not csv_file.exists():
             print(f"❌ Error: {csv_file} not found!")
             return 1
+
+    # Detect whether to use inline authors column or fallback CSV
+    use_inline_authors = False
+    with open(books_csv, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        use_inline_authors = 'authors' in (reader.fieldnames or [])
+
+    if not use_inline_authors and not book_authors_csv.exists():
+        print(f"❌ Error: no 'authors' column in books.csv and {book_authors_csv} not found!")
+        return 1
 
     try:
         # Use context manager for session
@@ -218,7 +256,10 @@ def main():
             total_publishers = load_publishers(session, publishers_csv)
             total_authors = load_authors(session, authors_csv)
             total_books = load_books(session, books_csv)
-            total_relationships = load_book_authors(session, book_authors_csv)
+            if use_inline_authors:
+                total_relationships = load_book_authors_from_column(session, books_csv)
+            else:
+                total_relationships = load_book_authors(session, book_authors_csv)
 
             # Summary
             print("\n" + "=" * 60)

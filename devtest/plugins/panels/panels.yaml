@@ -1,0 +1,182 @@
+# Panel descriptor protocol — test / fake data
+#
+# Root keys:
+#   panels:   keyed by panel_id — stack pages (layout + content + split areas)
+#   views:    keyed by view_id  — renderable units (table, form, kanban, ...)
+#
+# Merge behavior (PluginsManager):
+#   Both are dicts keyed by id → deep_merge per plugin priority works naturally.
+#   A plugin can override any specific panel/view without touching the others.
+
+panels:
+
+  # ── Minimal panel: inline view, no splits ────────────────────────────────
+  book_list:
+    title: Books
+    content:
+      $ref: "views.book_list_view"
+
+  # ── Panel with a split area on the right ─────────────────────────────────
+  book_detail:
+    title: Book
+    breadcrumb: "$props.title"     # uses $props passed via stack.push
+    confirm_on_leave: true
+    content:
+      $ref: "views.book_edit_view"
+    panels:
+      - id: authors
+        pos: right
+        width: 320
+        collapsed: false
+        trigger:
+          on: form_load            # fires when the form loads a record
+          pass: [id]
+        $ref: "views.book_authors_view"
+
+  # ── Panel cascade: content → lines → line_detail ─────────────────────────
+  loan_manager:
+    title: Loans
+    content:
+      $ref: "views.loan_list_view"
+    panels:
+      - id: detail
+        pos: right
+        width: 380
+        trigger:
+          on: row_click            # fires when user clicks a row
+          from: content            # default, explicit here for clarity
+          pass: [id]
+        $ref: "views.loan_detail_view"
+
+
+views:
+
+  # ── Table view: simple, FK join via dot notation ──────────────────────────
+  book_list_view:
+    type: table
+    source:
+      model: Book
+      joins:
+        - Publisher                # auto-resolved from publisher_id FK
+      order_by: [title]
+    columns:
+      - field: id
+      - field: title
+      - field: Publisher.name      # joined field — Model.field notation
+        title: Publisher
+      - field: price
+      - field: status
+    actions:
+      toolbar: [add, search, export]
+      row:
+        - id: edit
+          action: stack_push
+          panel: book_detail
+          pass: [id, title]
+        - id: delete
+          action: endpoint
+          op: db
+          params: {table: Book, method: delete}
+          confirm: true
+
+  # ── Form view: groups, FK widget, $props.id for new/edit ─────────────────
+  book_edit_view:
+    type: form
+    source:
+      model: Book
+      id: $props.id                # null → new record; int → load existing
+    fields:
+      - name: title
+      - name: isbn
+      - name: publisher_id
+        widget: combobox           # FK widget
+      - name: publication_date
+      - name: price
+      - group: Details
+        fields:
+          - name: language
+          - name: pages
+          - name: tags
+          - name: description
+            widget: textarea
+    actions:
+      toolbar: [save, cancel]
+
+  # ── Read-only form view: detail panel ─────────────────────────────────────
+  book_detail_view:
+    type: form
+    source:
+      model: Book
+      id: $trigger.id              # set from trigger (row_click event)
+    fields:
+      - name: title
+      - name: isbn
+      - name: publisher_id
+      - name: publication_date
+      - name: price
+    policy:
+      editable: false
+
+  # ── Table view: M2M join via explicit join chain ───────────────────────────
+  book_authors_view:
+    type: table
+    source:
+      model: Author
+      joins:
+        - via: BookAuthor          # M2M: Author ← BookAuthor.author_id
+          where: [BookAuthor.book_id = $trigger.id]
+      order_by: [Author.last_name]
+    columns:
+      - field: Author.last_name
+        title: Last Name
+      - field: Author.first_name
+        title: First Name
+      - field: Author.nationality
+    policy:
+      editable: false
+      selection: false
+
+  # ── Table view with two FK joins ──────────────────────────────────────────
+  loan_list_view:
+    type: table
+    source:
+      model: Loan
+      joins:
+        - Book                     # via book_id FK
+        - LibraryUser              # via library_user_id FK
+      order_by: [-borrowed_at]     # minus prefix = descending
+    columns:
+      - field: LibraryUser.name
+        title: User
+      - field: Book.title
+        title: Book
+      - field: borrowed_at
+      - field: due_date
+      - field: returned_at
+    actions:
+      toolbar: [add, search, export]
+      row:
+        - id: edit
+          action: stack_push
+          panel: loan_manager
+          pass: [id]
+
+  # ── Form view: trigger-based loading ──────────────────────────────────────
+  loan_detail_view:
+    type: form
+    source:
+      model: Loan
+      id: $trigger.id
+      joins:
+        - Book
+        - LibraryUser
+    fields:
+      - name: library_user_id
+        widget: combobox
+      - name: book_id
+        widget: combobox
+      - name: borrowed_at
+      - name: due_date
+      - name: returned_at
+    policy:
+      editable: false

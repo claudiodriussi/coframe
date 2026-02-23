@@ -384,6 +384,71 @@ class PluginsManager:
         plugins_timestamp = self.get_timestamp()
         return file_timestamp < plugins_timestamp
 
+    def get(self, path: str) -> Any:
+        """
+        Get a value from plugins.data by dotted path.
+
+        Args:
+            path: Dot-notation path, e.g. "views.book_list_view"
+
+        Returns:
+            The value at that path, or None if not found
+        """
+        current = self.data
+        for part in path.split('.'):
+            if not isinstance(current, dict):
+                return None
+            current = current.get(part)
+            if current is None:
+                return None
+        return current
+
+    def resolve_refs(self, obj: Any, _seen: Optional[frozenset] = None) -> Any:
+        """
+        Recursively resolve all ``ref`` fields in obj.
+
+        A dict containing ``ref: "section.key"`` is replaced by the object
+        at that path in plugins.data.  Any sibling keys are merged on top
+        of the resolved value (allowing local overrides).
+
+        Args:
+            obj: Object to resolve (dict, list, or scalar)
+            _seen: Internal set of already-visited ref paths (cycle detection)
+
+        Returns:
+            Object with all refs resolved
+
+        Raises:
+            ValueError: If a circular ref is detected
+        """
+        if _seen is None:
+            _seen = frozenset()
+
+        if isinstance(obj, dict):
+            if '$ref' in obj and isinstance(obj['$ref'], str):
+                ref_path = obj['$ref']
+                if ref_path in _seen:
+                    raise ValueError(f"Circular ref detected: {ref_path}")
+                target = self.get(ref_path)
+                if target is None:
+                    self.logger.warning(f"Unresolved ref: '{ref_path}'")
+                    return obj
+                resolved = self.resolve_refs(target, _seen | {ref_path})
+                # Merge sibling keys on top of the resolved object
+                if isinstance(resolved, dict):
+                    result = dict(resolved)
+                    for k, v in obj.items():
+                        if k != '$ref':
+                            result[k] = self.resolve_refs(v, _seen | {ref_path})
+                    return result
+                return resolved
+            return {k: self.resolve_refs(v, _seen) for k, v in obj.items()}
+
+        if isinstance(obj, list):
+            return [self.resolve_refs(item, _seen) for item in obj]
+
+        return obj
+
     def get_sources(self, to_str: bool = False) -> List[Path]:
         """
         Get a list of all Python source files from all plugins.
