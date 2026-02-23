@@ -32,7 +32,7 @@ def inspect_panels(plugins):
 
     print(f"\n=== PANELS ({len(panels)}) ===")
     for panel_id, panel in panels.items():
-        if panel_id.startswith('_'):
+        if panel_id.startswith('$'):
             continue
         content_ref = panel.get('content', {}).get('ref', '(inline)')
         split_areas = [p['id'] for p in panel.get('panels', [])]
@@ -40,7 +40,7 @@ def inspect_panels(plugins):
 
     print(f"\n=== VIEWS ({len(views)}) ===")
     for view_id, view in views.items():
-        if view_id.startswith('_'):
+        if view_id.startswith('$'):
             continue
         vtype = view.get('type', '?')
         model = view.get('source', {}).get('model', '?')

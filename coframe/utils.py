@@ -385,8 +385,8 @@ def register_standard_handlers(pm) -> None:
             if not name:
                 # If no name, just append
                 new_copy = new_item.copy()
-                if '_plugin' not in new_copy:
-                    new_copy['_plugin'] = plugin
+                if '$plugin' not in new_copy:
+                    new_copy['$plugin'] = plugin
                 result.append(new_copy)
                 continue
 
@@ -401,12 +401,12 @@ def register_standard_handlers(pm) -> None:
                 # Merge attributes (new values overwrite old ones)
                 deep_merge(existing, new_item)
                 # Update plugin marker
-                existing['_plugin'] = plugin
+                existing['$plugin'] = plugin
             else:
                 # Add new item
                 new_copy = new_item.copy()
-                if '_plugin' not in new_copy:
-                    new_copy['_plugin'] = plugin
+                if '$plugin' not in new_copy:
+                    new_copy['$plugin'] = plugin
                 result.append(new_copy)
 
         return result

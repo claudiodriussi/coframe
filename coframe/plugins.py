@@ -242,10 +242,10 @@ class PluginsManager:
                 if isinstance(v1, dict):
                     self.logger.debug(f"[{plugin}] Merging dict at key '{key_path}'")
                     result[key] = self._recursive_merge(v1, v2, plugin, current_path + [key])
-                    if '_plugin' in v1:
-                        result[key]['_plugin'] = v1['_plugin']
+                    if '$plugin' in v1:
+                        result[key]['$plugin'] = v1['$plugin']
                     else:
-                        result[key]['_plugin'] = plugin
+                        result[key]['$plugin'] = plugin
 
                 elif isinstance(v1, list):
                     # Check if there's a custom merge handler for this path
@@ -258,11 +258,11 @@ class PluginsManager:
                         result[key] = v1 + [item for item in v2 if item not in v1]
                         for item in result[key]:
                             if isinstance(item, dict):
-                                if '_plugin' not in item:
+                                if '$plugin' not in item:
                                     if item in v2:
-                                        item['_plugin'] = plugin
+                                        item['$plugin'] = plugin
                                     else:
-                                        item['_plugin'] = v1[0].get('_plugin', plugin)
+                                        item['$plugin'] = v1[0].get('$plugin', plugin)
                 else:
                     self.logger.warning(f"[{plugin}] Overlapping value for key '{key_path}': {v1} -> {v2}")
                     result[key] = v2
@@ -270,12 +270,12 @@ class PluginsManager:
                 self.logger.info(f"[{plugin}] Adding new key '{key_path}'")
                 if isinstance(new[key], dict):
                     result[key] = self._recursive_merge({}, new[key], plugin, current_path + [key])
-                    result[key]['_plugin'] = plugin
+                    result[key]['$plugin'] = plugin
                 elif isinstance(new[key], list):
                     result[key] = new[key]
                     for item in result[key]:
-                        if isinstance(item, dict) and '_plugin' not in item:
-                            item['_plugin'] = plugin
+                        if isinstance(item, dict) and '$plugin' not in item:
+                            item['$plugin'] = plugin
                 else:
                     result[key] = new[key]
 

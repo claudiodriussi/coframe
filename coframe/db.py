@@ -122,12 +122,12 @@ class DB:
         # The merge handlers have already combined columns with the same name
         tables = self.pm.data.get('tables', {})
         for table_name, value in tables.items():
-            # Skip metadata keys (those starting with _)
-            if table_name.startswith('_'):
+            # Skip metadata keys (those starting with $)
+            if table_name.startswith('$'):
                 continue
 
             # Get the plugin that defined/last modified this table
-            plugin_name = value.get('_plugin', 'unknown')
+            plugin_name = value.get('$plugin', 'unknown')
             plugin = self.pm.plugins.get(plugin_name)
 
             table = DbTable(table_name, plugin, value)
@@ -441,7 +441,7 @@ class DbType:
         """
         result: Dict[str, Any] = {
             'inheritance': self.inheritance,
-            'builtin':     self.plugin == "",
+            'builtin': self.plugin == "",
         }
         if self.inheritance:
             result['base'] = self.inheritance[0]
