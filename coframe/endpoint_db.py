@@ -292,23 +292,47 @@ def db_query(data: Dict[str, Any]) -> Dict[str, Any]:
     Parameters:
         - format: The desired format for the result from the ones provided by execute_query method
         - query: Dict for DynamicQueryBuilder
+        - count (bool, default false): if true, also return total_count (runs a COUNT subquery)
+        - limit (int, optional): shorthand — merged into query dict if not already set there
+        - offset (int, optional): shorthand — merged into query dict if not already set there
 
     Returns:
-        Dictionary with query result
+        - count=false: { status, data: [...] }
+        - count=true:  { status, data: { records: [...], total: int, offset: int, limit: int|null } }
     """
-    format = data.get("format", "tuples")
-    query = data.get("query")
-    if not query:
+    fmt = data.get("format", "tuples")
+    query_def = data.get("query")
+    want_count = bool(data.get("count", False))
+
+    if not query_def:
         return {"status": "error", "message": "Query not defined", "code": 400}
+
+    # Allow top-level limit/offset as a convenience shorthand
+    if 'limit' in data and 'limit' not in query_def:
+        query_def = {**query_def, 'limit': data['limit']}
+    if 'offset' in data and 'offset' not in query_def:
+        query_def = {**query_def, 'offset': data['offset']}
+
     try:
         app = coframe.utils.get_app()
         with app.get_session() as session:
             builder = DynamicQueryBuilder(session, app.models)
-            data = builder.execute_query(query, result_format=format)
-            return {
-                "status": "success",
-                "data": data
-            }
+            records = builder.execute_query(query_def, result_format=fmt)
+
+            if want_count:
+                total = builder.count_query(query_def)
+                return {
+                    "status": "success",
+                    "data": {
+                        "records": records,
+                        "total": total,
+                        "offset": query_def.get('offset', 0),
+                        "limit": query_def.get('limit'),
+                    }
+                }
+
+            return {"status": "success", "data": records}
+
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -472,17 +496,26 @@ def update_context(data):
         return {"status": "error", "message": str(e), "code": 500}
 
 
-@endpoint('get_type_schema')
-def get_type_schema(data: Dict[str, Any]) -> Dict[str, Any]:
+@endpoint('get_server_config')
+def get_server_config(data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Return the resolved type registry for client-side rendering.
+    Return server configuration and type registry for client-side use.
+
+    Single startup call — replaces the former get_type_schema endpoint.
 
     Parameters:
         include_builtin (bool, default false) — include SQLAlchemy built-in types
 
     Response data:
-        { types: { TypeName: { inheritance, base, python_type, builtin,
-                               ...yaml_attrs, columns? } } }
+        {
+          config: {
+            page_size: int,           # global DataView page size default
+            # (future) page_size_by_type: { reference, master, transaction, log }
+            # Any other client-relevant keys from config.yaml dataview section
+          },
+          types: { TypeName: { inheritance, base, python_type, builtin,
+                               ...yaml_attrs, columns? } }
+        }
 
     The server exposes raw type metadata without widget inference.
     Each client (web, mobile, desktop, …) applies its own rendering logic.
@@ -493,7 +526,10 @@ def get_type_schema(data: Dict[str, Any]) -> Dict[str, Any]:
         include_builtin = bool(data.get('include_builtin', False))
         return {
             'status': 'success',
-            'data': {'types': app.get_type_schema(include_builtin)},
+            'data': {
+                'config': app.pm.config.get('dataview', {}),
+                'types': app.get_type_schema(include_builtin),
+            },
             'code': 200,
         }
     except Exception as e:

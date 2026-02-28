@@ -335,6 +335,29 @@ class DynamicQueryBuilder:
             # Default behavior: return only the data
             return result.all()
 
+    def count_query(self, query_def: Union[Dict[str, Any], str]) -> int:
+        """
+        Count total rows for a query definition, ignoring limit/offset.
+        Works correctly with GROUP BY queries by wrapping in a subquery.
+
+        Args:
+            query_def: Either a JSON string or a dictionary defining the query
+
+        Returns:
+            Total row count (int)
+        """
+        if isinstance(query_def, str):
+            try:
+                query_def = json.loads(query_def)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON: {str(e)}")
+
+        # Strip limit/offset so the count covers all matching rows
+        count_def = {k: v for k, v in query_def.items() if k not in ('limit', 'offset')}
+        inner = self.build_query(count_def)
+        count_q = select(func.count()).select_from(inner.subquery())
+        return self.session.execute(count_q).scalar() or 0
+
     def _prepare_data(self, data: List[Any]) -> List[List[Any]]:
         """
         Prepare data for JSON serialization, converting problematic types.

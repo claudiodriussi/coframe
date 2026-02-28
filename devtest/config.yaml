@@ -17,6 +17,17 @@ api:
   prefix: "coframe"  # API prefix - all endpoints will be under /coframe/* (or use "api/v1" for /api/v1/*, etc.)
   port: 8300         # Default Coframe server port (evocative: 8xxx HTTP-like, 3=C of Coframe)
 
+# DataView pagination defaults
+# page_size: rows loaded per page (overridable per-view via source.limit in YAML)
+# (future) page_size_by_type: per-category overrides matching DATA_MODEL.md §1 tags
+#   reference: 500   — small lookup tables, load more at once
+#   master:    100   — core entities
+#   transaction: 100 — date-stamped records, sorted desc so recent rows come first
+#   log:        50   — append-only, can grow large — strict limit
+#   detail:    null  — always filtered by parent FK, no limit needed
+dataview:
+  page_size: 100
+
 # table and fields used for authentication
 authentication:
   user_table: User
