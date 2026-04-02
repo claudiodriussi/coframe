@@ -60,6 +60,7 @@ print(f"✓ Refresh interval: {auth.refresh_interval_minutes}min")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = SECRET_KEY
+app.json.sort_keys = False   # prevent TypeError on dicts with mixed-type keys
 CORS(app)
 
 
