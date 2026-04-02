@@ -924,7 +924,7 @@ class JoinBuilder:
             Modified query with joins applied
 
         Raises:
-            ValueError: If join format is invalid
+            ValueError: If join format is invalid or 'on' condition is missing
         """
         if not joins_def:
             return query
@@ -933,9 +933,14 @@ class JoinBuilder:
             # Handle various join formats
             if isinstance(join_def, dict):
                 if 'table' in join_def:
-                    # Verbose or semi-concise format
+                    # Verbose format: { table: X, on: '...', type: 'inner' }
                     table_name = join_def['table']
                     join_type = join_def.get('type', 'inner').lower()
+                    if 'on' not in join_def:
+                        raise ValueError(
+                            f"Join '{table_name}' is missing the 'on' condition. "
+                            f"Use: `- {table_name}: 'SourceTable.fk_col = {table_name}.pk_col'`"
+                        )
                     join_condition = self._parse_join_condition(join_def['on'])
 
                 elif len(join_def) == 1:
@@ -953,8 +958,12 @@ class JoinBuilder:
                         join_condition = self._parse_join_condition(join_value)
                 else:
                     raise ValueError(f"Invalid join format: {join_def}")
+            elif isinstance(join_def, str):
+                raise ValueError(
+                    f"Join '{join_def}' is missing the condition. "
+                    f"Use: `- {join_def}: 'SourceTable.fk_col = {join_def}.pk_col'`"
+                )
             else:
-                # Invalid format
                 raise ValueError(f"Invalid join format: {join_def}")
 
             # Verify the table exists
