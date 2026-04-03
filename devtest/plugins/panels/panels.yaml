@@ -10,6 +10,144 @@
 
 panels:
 
+  # ── Book Detail Demo — Layout A: bottom spans full width ─────────────────
+  #    panels order: [detail(right), bottom] → last=bottom is outermost
+  #    ┌────────────────┬──────────┐
+  #    │  Book table    │  detail  │
+  #    ├────────────────┴──────────┤
+  #    │         bottom            │
+  #    └───────────────────────────┘
+  book_demo_bottom_full:
+    title: Book Demo — bottom full width
+    content:
+      $ref: "views.book_list_view"
+    panels:
+      - id: detail
+        pos: right
+        width: 400
+        type: plugin
+        component: library.hello
+        props:
+          message: "Book detail form (DataForm — coming next)"
+          userName: "Detail"
+      - id: bottom
+        pos: bottom
+        height: 250
+        type: plugin
+        component: library.hello
+        props:
+          message: "Loans / Reviews tabs (TabView — coming next)"
+          userName: "Bottom Tabs"
+
+  # ── Nested splits stress test ────────────────────────────────────────────
+  #    Layout A base (bottom full width) with sub-splits in both side areas:
+  #
+  #    ┌─────────────────┬────────────────────┐
+  #    │                 │   Detail-A (top)   │
+  #    │   Book table    ├────────────────────┤
+  #    │                 │   Detail-B (bot)   │cd c
+  #    ├──────────┬──────┴────────────────────┤
+  #    │ Bottom-A │        Bottom-B           │
+  #    └──────────┴──────────────────────────┘
+  #
+  #    detail area  → horizontal gutter (top/bottom via pos:bottom)
+  #    bottom area  → vertical gutter   (left/right via pos:right)
+  book_demo_nested:
+    title: Book Demo — Nested Splits
+    content:
+      $ref: "views.book_list_view"
+    panels:
+      - id: detail
+        pos: right
+        width: 420
+        content:
+          type: plugin
+          component: library.hello
+          props:
+            message: "Detail — top half (DataForm coming next)"
+            userName: "Detail-A"
+        panels:
+          - id: detail_bottom
+            pos: bottom
+            height: 180
+            type: plugin
+            component: library.hello
+            props:
+              message: "Detail — bottom half (related data)"
+              userName: "Detail-B"
+      - id: bottom
+        pos: bottom
+        height: 280
+        content:
+          type: plugin
+          component: library.hello
+          props:
+            message: "Bottom — left half (Loans)"
+            userName: "Bottom-A"
+        panels:
+          - id: bottom_right
+            pos: right
+            width: 360
+            type: plugin
+            component: library.hello
+            props:
+              message: "Bottom — right half (Reviews)"
+              userName: "Bottom-B"
+
+  # ── Book Detail Demo — Layout B: right spans full height ─────────────────
+  #    panels order: [bottom, detail(right)] → last=detail is outermost
+  #    ┌────────────────┬──────────┐
+  #    │  Book table    │          │
+  #    ├────────────────┤  detail  │
+  #    │     bottom     │          │
+  #    └────────────────┴──────────┘
+  book_demo_right_full:
+    title: Book Demo — right full height
+    content:
+      $ref: "views.book_list_view"
+    panels:
+      - id: bottom
+        pos: bottom
+        height: 250
+        type: plugin
+        component: library.hello
+        props:
+          message: "Loans / Reviews tabs (TabView — coming next)"
+          userName: "Bottom Tabs"
+      - id: detail
+        pos: right
+        width: 400
+        type: plugin
+        component: library.hello
+        props:
+          message: "Book detail form (DataForm — coming next)"
+          userName: "Detail"
+
+  # ── Trigger demo: book list → detail (right) + reviews (bottom) ─────────
+  #    Both split areas react to row_click from the book list.
+  #    detail uses type:form (placeholder until DataForm is implemented).
+  #    reviews uses type:table with $trigger.id to filter rows.
+  #    Both panels are collapsible; DataView skips loading when collapsed.
+  book_with_reviews:
+    title: Books & Reviews
+    content:
+      $ref: "views.book_list_view"
+    panels:
+      - id: detail
+        pos: right
+        width: 340
+        trigger:
+          event: row_click
+          pass: [id]
+        $ref: "views.book_detail_view"
+      - id: reviews
+        pos: bottom
+        height: 220
+        trigger:
+          event: row_click
+          pass: [id]
+        $ref: "views.book_reviews_view"
+
   # ── Minimal panel: inline view, no splits ────────────────────────────────
   book_list:
     title: Books
@@ -29,7 +167,7 @@ panels:
         width: 320
         collapsed: false
         trigger:
-          on: form_load            # fires when the form loads a record
+          event: form_load            # fires when the form loads a record
           pass: [id]
         $ref: "views.book_authors_view"
 
@@ -43,7 +181,7 @@ panels:
         pos: right
         width: 380
         trigger:
-          on: row_click            # fires when user clicks a row
+          event: row_click            # fires when user clicks a row
           from: content            # default, explicit here for clarity
           pass: [id]
         $ref: "views.loan_detail_view"
@@ -57,7 +195,7 @@ views:
     source:
       model: Book
       joins:
-        - Publisher                # auto-resolved from publisher_id FK
+        - Publisher: "Book.publisher_id = Publisher.id"
       order_by: [title]
     columns:
       - field: id
@@ -65,9 +203,11 @@ views:
       - field: Publisher.name      # joined field — Model.field notation
         title: Publisher
       - field: price
+        align: center
+        formatter: price_color
       - field: status
     actions:
-      toolbar: [add, search, export]
+      toolbar: [add, search, filter, select, export]
       row:
         - id: edit
           action: stack_push
@@ -142,8 +282,8 @@ views:
     source:
       model: Loan
       joins:
-        - Book                     # via book_id FK
-        - LibraryUser              # via library_user_id FK
+        - Book: "Loan.book_id = Book.id"
+        - LibraryUser: "Loan.library_user_id = LibraryUser.id"
       order_by: [-borrowed_at]     # minus prefix = descending
     columns:
       - field: LibraryUser.name
@@ -161,6 +301,35 @@ views:
           panel: loan_manager
           pass: [id]
 
+  # ── Table view: reviews for a book (trigger-driven) ──────────────────────
+  book_reviews_view:
+    type: table
+    source:
+      model: Review
+      joins:
+        - LibraryUser: "Review.library_user_id = LibraryUser.id"
+      filters:
+        conditions:
+          - Review.book_id: ["=", "$trigger.id"]
+      order_by: [-created_at]
+    columns:
+      - field: LibraryUser.name
+        title: User
+      - field: rating
+        title: Rating
+        width: 120
+        align: center
+        formatter: star,5
+      - field: comment
+        title: Comment
+      - field: created_at
+        title: Date
+        width: 160
+        formatter: date
+    policy:
+      editable: false
+      selection: false
+
   # ── Form view: trigger-based loading ──────────────────────────────────────
   loan_detail_view:
     type: form
@@ -168,8 +337,8 @@ views:
       model: Loan
       id: $trigger.id
       joins:
-        - Book
-        - LibraryUser
+        - Book: "Loan.book_id = Book.id"
+        - LibraryUser: "Loan.library_user_id = LibraryUser.id"
     fields:
       - name: library_user_id
         widget: combobox

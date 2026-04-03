@@ -27,6 +27,7 @@ api:
 #   detail:    null  — always filtered by parent FK, no limit needed
 dataview:
   page_size: 100
+  reload_all_threshold: 5000   # on refresh: silent restore if rowCount ≤ threshold, banner if above
 
 # table and fields used for authentication
 authentication:
