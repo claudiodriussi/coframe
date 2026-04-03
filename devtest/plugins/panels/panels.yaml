@@ -45,7 +45,7 @@ panels:
   #    ┌─────────────────┬────────────────────┐
   #    │                 │   Detail-A (top)   │
   #    │   Book table    ├────────────────────┤
-  #    │                 │   Detail-B (bot)   │cd c
+  #    │                 │   Detail-B (bot)   │
   #    ├──────────┬──────┴────────────────────┤
   #    │ Bottom-A │        Bottom-B           │
   #    └──────────┴──────────────────────────┘
@@ -123,31 +123,6 @@ panels:
           message: "Book detail form (DataForm — coming next)"
           userName: "Detail"
 
-  # ── Trigger demo: book list → detail (right) + reviews (bottom) ─────────
-  #    Both split areas react to row_click from the book list.
-  #    detail uses type:form (placeholder until DataForm is implemented).
-  #    reviews uses type:table with $trigger.id to filter rows.
-  #    Both panels are collapsible; DataView skips loading when collapsed.
-  book_with_reviews:
-    title: Books & Reviews
-    content:
-      $ref: "views.book_list_view"
-    panels:
-      - id: detail
-        pos: right
-        width: 340
-        trigger:
-          event: row_click
-          pass: [id]
-        $ref: "views.book_detail_view"
-      - id: reviews
-        pos: bottom
-        height: 220
-        trigger:
-          event: row_click
-          pass: [id]
-        $ref: "views.book_reviews_view"
-
   # ── Minimal panel: inline view, no splits ────────────────────────────────
   book_list:
     title: Books
@@ -182,7 +157,7 @@ panels:
         width: 380
         trigger:
           event: row_click            # fires when user clicks a row
-          from: content            # default, explicit here for clarity
+          from: content               # default, explicit here for clarity
           pass: [id]
         $ref: "views.loan_detail_view"
 
@@ -300,35 +275,6 @@ views:
           action: stack_push
           panel: loan_manager
           pass: [id]
-
-  # ── Table view: reviews for a book (trigger-driven) ──────────────────────
-  book_reviews_view:
-    type: table
-    source:
-      model: Review
-      joins:
-        - LibraryUser: "Review.library_user_id = LibraryUser.id"
-      filters:
-        conditions:
-          - Review.book_id: ["=", "$trigger.id"]
-      order_by: [-created_at]
-    columns:
-      - field: LibraryUser.name
-        title: User
-      - field: rating
-        title: Rating
-        width: 120
-        align: center
-        formatter: star,5
-      - field: comment
-        title: Comment
-      - field: created_at
-        title: Date
-        width: 160
-        formatter: date
-    policy:
-      editable: false
-      selection: false
 
   # ── Form view: trigger-based loading ──────────────────────────────────────
   loan_detail_view:

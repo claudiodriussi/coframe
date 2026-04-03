@@ -1,0 +1,104 @@
+# Trigger system demo — panels and views that react to inter-area events.
+#
+# Demonstrates:
+#   - row_click trigger propagation from content → split areas
+#   - collapsed: true (area starts hidden, skips loading while invisible)
+#   - type: tabs  (tab switcher inside a split area)
+#   - $ref resolution inside tabs[] entries
+#
+# Loaded automatically by PluginsManager (all .yaml except config.yaml).
+
+panels:
+
+  # ── Trigger demo: book list → detail (right) + tabs (bottom) ─────────────
+  #    Both split areas react to row_click from the book list.
+  #    detail starts collapsed; TabView bottom switches between Reviews/Loans.
+  book_with_reviews:
+    title: Books & Reviews
+    content:
+      $ref: "views.book_list_view"
+    panels:
+      - id: detail
+        pos: right
+        width: 340
+        collapsed: true
+        trigger:
+          event: row_click
+          pass: [id]
+        $ref: "views.book_detail_view"
+      - id: bottom_tabs
+        pos: bottom
+        height: 220
+        trigger:
+          event: row_click
+          pass: [id]
+        type: tabs
+        tabs:
+          - id: reviews
+            label: Reviews
+            $ref: "views.book_reviews_view"
+          - id: loans
+            label: Loans
+            $ref: "views.book_loans_by_book_view"
+
+
+views:
+
+  # ── Table view: reviews for a book (trigger-driven) ──────────────────────
+  book_reviews_view:
+    type: table
+    source:
+      model: Review
+      joins:
+        - LibraryUser: "Review.library_user_id = LibraryUser.id"
+      filters:
+        conditions:
+          - Review.book_id: ["=", "$trigger.id"]
+      order_by: [-created_at]
+    columns:
+      - field: LibraryUser.name
+        title: User
+      - field: rating
+        title: Rating
+        width: 120
+        align: center
+        formatter: star,5
+      - field: comment
+        title: Comment
+      - field: created_at
+        title: Date
+        width: 160
+        formatter: date
+    policy:
+      editable: false
+      selection: false
+
+  # ── Table view: loans for a book (trigger-driven) ────────────────────────
+  book_loans_by_book_view:
+    type: table
+    source:
+      model: Loan
+      joins:
+        - LibraryUser: "Loan.library_user_id = LibraryUser.id"
+      filters:
+        conditions:
+          - Loan.book_id: ["=", "$trigger.id"]
+      order_by: [-borrowed_at]
+    columns:
+      - field: LibraryUser.name
+        title: User
+      - field: borrowed_at
+        title: Borrowed
+        formatter: date
+        width: 140
+      - field: due_date
+        title: Due
+        formatter: date
+        width: 140
+      - field: returned_at
+        title: Returned
+        formatter: date
+        width: 140
+    policy:
+      editable: false
+      selection: false
