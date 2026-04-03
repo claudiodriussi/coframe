@@ -279,15 +279,7 @@ class PluginsManager:
                         self.logger.debug(f"[{plugin}] Merging list at key '{key_path}' using custom handler")
                         result[key] = handler(v1, v2, plugin)
                     else:
-                        self.logger.debug(f"[{plugin}] Extending list at key '{key_path}'")
-                        result[key] = v1 + [item for item in v2 if item not in v1]
-                        for item in result[key]:
-                            if isinstance(item, dict):
-                                if '$plugin' not in item:
-                                    if item in v2:
-                                        item['$plugin'] = plugin
-                                    else:
-                                        item['$plugin'] = v1[0].get('$plugin', plugin)
+                        result[key] = self._merge_lists(v1, v2, plugin, key_path)
                 else:
                     self.logger.warning(f"[{plugin}] Overlapping value for key '{key_path}': {v1} -> {v2}")
                     result[key] = v2
@@ -304,6 +296,130 @@ class PluginsManager:
                 else:
                     result[key] = new[key]
 
+        return result
+
+    # Identity keys checked in priority order to find how a list item is identified.
+    _IDENTITY_KEYS = ('id', 'name', 'field', 'group')
+
+    def _detect_identity_key(self, items: list) -> Optional[str]:
+        """
+        Return the identity key for a list of dicts, or None for scalar/unkeyed lists.
+
+        Scans the first dict item for the first key in _IDENTITY_KEYS.
+        Pure string lists and dicts without a recognised identity key are treated
+        as plain sequences (append semantics, unchanged from previous behaviour).
+        """
+        for item in items:
+            if isinstance(item, dict):
+                for k in self._IDENTITY_KEYS:
+                    if k in item:
+                        return k
+                return None  # dict items without a recognised identity key
+        return None  # all items are scalars
+
+    def _merge_lists(self, base: list, new: list, plugin: str, key_path: str) -> list:
+        """
+        Merge two lists using identity-aware semantics when possible, plain append otherwise.
+
+        Identity-aware merge (triggered when list items are dicts with a known identity key):
+          - same identity           → deep-merge the item's properties
+          - $remove: true           → drop the item from the result
+          - $after: <id> / $before: <id>  → insert at the given position
+          - new identity            → append at the end
+
+        The $remove / $after / $before directives are consumed here and never
+        appear in the resolved descriptor sent to the frontend.
+
+        Plain-append fallback (string lists, unkeyed dicts):
+          result = base + [item for item in new if item not in base]
+        """
+        id_key = self._detect_identity_key(base) or self._detect_identity_key(new)
+
+        if id_key is None:
+            # Plain sequence: extend without duplicates (original behaviour)
+            self.logger.debug(f"[{plugin}] Extending plain list at '{key_path}'")
+            merged = base + [item for item in new if item not in base]
+            return merged
+
+        self.logger.debug(f"[{plugin}] Smart-merging list at '{key_path}' by '{id_key}'")
+
+        # Build an ordered index of base items keyed by identity value.
+        # Use a list of (identity, item) pairs to preserve insertion order.
+        index: Dict[str, Any] = {}   # identity → item dict
+        order: list = []             # identity values in base order
+
+        for item in base:
+            if isinstance(item, dict):
+                identity = item.get(id_key)
+                if identity is not None:
+                    index[identity] = dict(item)
+                    order.append(identity)
+            else:
+                # Scalar mixed into an otherwise-identified list — keep as-is
+                order.append(item)
+
+        # Deferred positional inserts: list of (anchor_id, position, item)
+        deferred: list = []
+
+        for item in new:
+            if not isinstance(item, dict):
+                if item not in order:
+                    order.append(item)
+                continue
+
+            identity = item.get(id_key)
+            remove   = item.get('$remove', False)
+            after    = item.get('$after')
+            before   = item.get('$before')
+
+            # Strip merge directives from the item before storing
+            clean = {k: v for k, v in item.items() if k not in ('$remove', '$after', '$before')}
+            clean.setdefault('$plugin', plugin)
+
+            if remove:
+                if identity in index:
+                    del index[identity]
+                    order.remove(identity)
+                continue
+
+            if identity in index:
+                # Deep-merge properties into existing item
+                existing = index[identity]
+                for k, v in clean.items():
+                    if k == id_key:
+                        continue
+                    if isinstance(v, dict) and isinstance(existing.get(k), dict):
+                        existing[k] = self._recursive_merge(existing[k], v, plugin, [])
+                    else:
+                        existing[k] = v
+                existing['$plugin'] = plugin
+            else:
+                # New item
+                index[identity] = clean
+                if after or before:
+                    deferred.append((after, before, identity))
+                else:
+                    order.append(identity)
+
+        # Apply deferred positional inserts
+        for (after, before, identity) in deferred:
+            anchor = after or before
+            if anchor in order:
+                pos = order.index(anchor)
+                order.insert(pos + 1 if after else pos, identity)
+            else:
+                self.logger.warning(
+                    f"[{plugin}] Positional anchor '{anchor}' not found in '{key_path}', appending '{identity}'"
+                )
+                order.append(identity)
+
+        # Rebuild the ordered list
+        result = []
+        for entry in order:
+            if isinstance(entry, str) and entry in index:
+                result.append(index[entry])
+            elif not isinstance(entry, str):
+                result.append(entry)  # scalar passthrough
         return result
 
     def _add_to_history(self, key_path: str, plugin: str) -> None:

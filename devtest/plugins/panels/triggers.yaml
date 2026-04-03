@@ -25,7 +25,11 @@ panels:
         trigger:
           event: row_click
           pass: [id]
-        $ref: "views.book_detail_view"
+        type: tabs
+        tabs:
+          - id: detail
+            label: Detail
+            $ref: "views.book_detail_view"
       - id: bottom_tabs
         pos: bottom
         height: 220
