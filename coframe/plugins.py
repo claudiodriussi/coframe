@@ -34,10 +34,6 @@ class PluginsManager:
         self.original_handlers = None
         self.merge_handlers: Dict[str, Any] = {}
 
-        # Sections that receive automatic namespace wrapping per plugin.
-        # Extendable before load_plugins(): pm.namespace_sections.add('reports')
-        self.namespace_sections: set = {'panels', 'views'}
-
         # Initialize logging
         self.logger = get_logger(logger_name)
         set_formatter(self.logger, '%(name)s|%(levelname)s|%(message)s')
@@ -185,26 +181,6 @@ class PluginsManager:
 
         self.sorted = result
 
-    def _namespace_plugin_data(self, data: dict, plugin: str) -> dict:
-        """
-        Wrap namespace_sections under the plugin name before merging.
-
-        Input:  {panels: {book_list: {...}}, views: {book_list_view: {...}}, tables: {...}}
-        Output: {panels: {panels: {book_list: {...}}}, views: {panels: {...}}, tables: {...}}
-
-        Args:
-            data: Raw YAML data dict from a plugin file
-            plugin: Plugin name used as namespace key
-
-        Returns:
-            New dict with namespaced sections wrapped under plugin name
-        """
-        result = dict(data)
-        for section in self.namespace_sections:
-            if section in result:
-                result[section] = {plugin: result[section]}
-        return result
-
     def merge_dicts(self, d: Dict[str, Any], plugin: str) -> Dict[str, Any]:
         """
         Entry point for merging a new dictionary into existing data.
@@ -216,8 +192,7 @@ class PluginsManager:
         Returns:
             Merged dictionary
         """
-        d_namespaced = self._namespace_plugin_data(d, plugin)
-        self.data = self._recursive_merge(self.data, d_namespaced, plugin)
+        self.data = self._recursive_merge(self.data, d, plugin)
         return self.data
 
     def _recursive_merge(self,
@@ -544,31 +519,6 @@ class PluginsManager:
                 return None
         return current
 
-    def _qualify_ref(self, ref_path: str, plugin_context: Optional[str]) -> str:
-        """
-        Qualify a relative $ref with the plugin namespace.
-
-        Relative ref (section.id, 1 dot):
-            "views.book_list_view" + plugin "panels" → "views.panels.book_list_view"
-        Absolute ref (section.plugin.id, 2+ dots): unchanged
-        Non-namespaced section: unchanged
-
-        Args:
-            ref_path: Raw $ref string from YAML
-            plugin_context: Plugin name providing the namespace, or None
-
-        Returns:
-            Qualified path ready for self.get()
-        """
-        if plugin_context is None:
-            return ref_path
-        parts = ref_path.split('.')
-        if len(parts) == 2:
-            section, entity_id = parts
-            if section in self.namespace_sections:
-                return f"{section}.{plugin_context}.{entity_id}"
-        return ref_path
-
     def resolve_refs(self, obj: Any, _seen: Optional[frozenset] = None,
                      plugin_context: Optional[str] = None) -> Any:
         """
@@ -600,21 +550,20 @@ class PluginsManager:
 
             if '$ref' in obj and isinstance(obj['$ref'], str):
                 ref_path = obj['$ref']
-                qualified = self._qualify_ref(ref_path, current_plugin)
-                if qualified in _seen:
+                if ref_path in _seen:
                     raise ValueError(f"Circular ref detected: {ref_path}")
-                target = self.get(qualified)
+                target = self.get(ref_path)
                 if target is None:
-                    self.logger.warning(f"Unresolved ref: '{ref_path}' (qualified: '{qualified}')")
+                    self.logger.warning(f"Unresolved ref: '{ref_path}'")
                     return obj
                 target_plugin = target.get('$plugin', current_plugin) if isinstance(target, dict) else current_plugin
-                resolved = self.resolve_refs(target, _seen | {qualified}, target_plugin)
+                resolved = self.resolve_refs(target, _seen | {ref_path}, target_plugin)
                 # Merge sibling keys on top of the resolved object
                 if isinstance(resolved, dict):
                     result = dict(resolved)
                     for k, v in obj.items():
                         if k != '$ref':
-                            result[k] = self.resolve_refs(v, _seen | {qualified}, current_plugin)
+                            result[k] = self.resolve_refs(v, _seen | {ref_path}, current_plugin)
                     return result
                 return resolved
 

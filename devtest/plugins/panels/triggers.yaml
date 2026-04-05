@@ -8,7 +8,7 @@
 #
 # Loaded automatically by PluginsManager (all .yaml except config.yaml).
 
-panels:
+pages:
 
   # ── Trigger demo: book list → detail (right) + tabs (bottom) ─────────────
   #    Both split areas react to row_click from the book list.

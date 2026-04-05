@@ -8,7 +8,7 @@
 #   Both are dicts keyed by id → deep_merge per plugin priority works naturally.
 #   A plugin can override any specific panel/view without touching the others.
 
-panels:
+pages:
 
   # ── Book Detail Demo — Layout A: bottom spans full width ─────────────────
   #    panels order: [detail(right), bottom] → last=bottom is outermost
