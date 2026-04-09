@@ -39,13 +39,15 @@ def db_operations(data: Dict[str, Any]) -> Dict[str, Any]:
         if not model_class:
             return {"status": "error", "message": f"Table '{table_name}' not found", "code": 404}
 
+        db_table = app.tables.get(table_name)
+
         # Execute the requested method
         if method == 'get':
-            return handle_get(app, model_class, data)
+            return handle_get(app, model_class, data, db_table)
         elif method == 'create':
-            return handle_create(app, model_class, data)
+            return handle_create(app, model_class, data, db_table)
         elif method == 'update':
-            return handle_update(app, model_class, data)
+            return handle_update(app, model_class, data, db_table)
         elif method == 'delete':
             return handle_delete(app, model_class, data)
         else:
@@ -57,7 +59,7 @@ def db_operations(data: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "message": str(e), "code": 500}
 
 
-def handle_get(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
+def handle_get(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle GET operations (list or single record)"""
     record_id = params.get('id')
     start = int(params.get('start', 0))
@@ -75,7 +77,7 @@ def handle_get(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
 
             return {
                 "status": "success",
-                "data": coframe.utils.serialize_model(record),
+                "data": coframe.utils.serialize_model(record, db_table=db_table),
                 "code": 200
             }
         else:
@@ -105,7 +107,7 @@ def handle_get(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
 
             # Execute query and serialize results
             records = query.all()
-            result = [coframe.utils.serialize_model(record) for record in records]
+            result = [coframe.utils.serialize_model(record, db_table=db_table) for record in records]
 
             return {
                 "status": "success",
@@ -119,7 +121,7 @@ def handle_get(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
             }
 
 
-def handle_create(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
+def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle CREATE operations"""
     record_data = params.get('data')
 
@@ -139,7 +141,7 @@ def handle_create(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
 
             return {
                 "status": "success",
-                "data": coframe.utils.serialize_model(new_record),
+                "data": coframe.utils.serialize_model(new_record, db_table=db_table),
                 "message": "Record created successfully",
                 "code": 201
             }
@@ -147,7 +149,7 @@ def handle_create(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "message": f"Creation failed: {str(e)}", "code": 400}
 
 
-def handle_update(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
+def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle UPDATE operations"""
     record_id = params.get('id')
     if not record_id:
@@ -172,7 +174,7 @@ def handle_update(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
             session.commit()
             return {
                 "status": "success",
-                "data": coframe.utils.serialize_model(record),
+                "data": coframe.utils.serialize_model(record, db_table=db_table),
                 "message": "Record updated successfully",
                 "code": 200
             }
@@ -529,6 +531,7 @@ def get_server_config(data: Dict[str, Any]) -> Dict[str, Any]:
             'data': {
                 'config': app.pm.config.get('dataview', {}),
                 'types': app.get_type_schema(include_builtin),
+                'tables': app.get_table_schema(),
             },
             'code': 200,
         }

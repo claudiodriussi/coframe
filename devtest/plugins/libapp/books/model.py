@@ -10,6 +10,10 @@ class Author:
         """Hybrid property for full name"""
         return f"{self.first_name} {self.last_name}"
 
+    @full_name.expression
+    def full_name(cls):
+        return cls.first_name + ' ' + cls.last_name
+
     __table_args__ = (
         Index("name", "last_name", "first_name", unique=True),
     )

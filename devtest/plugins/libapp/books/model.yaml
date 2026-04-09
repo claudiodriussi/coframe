@@ -23,6 +23,12 @@ tables:
         type: String
         length: 50
 
+      - name: full_name
+        type: String
+        virtual: true
+        editable: false
+        label: "Full Name"
+
     # Compound indexes for better query performance
     indexes:
       - name: idx_author_fullname

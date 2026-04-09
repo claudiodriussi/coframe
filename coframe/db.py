@@ -130,7 +130,7 @@ class DB:
             plugin_name = value.get('$plugin', 'unknown')
             plugin = self.pm.plugins.get(plugin_name)
 
-            table = DbTable(table_name, plugin, value)
+            table = DbTable(table_name, plugin, value, self)
             self.tables[table_name] = table
             self.tables_list.append(table_name)
 
@@ -168,6 +168,8 @@ class DB:
                         composed_col.name = prefix + composed_col.name
                         composed_col.resolve(f"table: {table_name}")
                         self.tables[table_name].columns.append(composed_col)
+                elif col.attributes.get('virtual'):
+                    self.tables[table_name].virtual_columns.append(col)
                 else:
                     self.tables[table_name].columns.append(col)
 
@@ -281,6 +283,28 @@ class DB:
             for name, t in self.types.items()
             if include_builtin or t.plugin != ""
         }
+
+    def get_table_schema(self) -> Dict[str, Any]:
+        """
+        Return all tables with their effective_columns (real + mixin + virtual).
+        Used by the client to know the full column list for each table.
+
+        Returns:
+            { TableName: { columns: [ {name, type, virtual, editable, label, ...} ] } }
+        """
+        result = {}
+        for name, table in self.tables.items():
+            cols = []
+            for col in table.effective_columns:
+                col_dict = {'name': col.name}
+                for attr in ('type', 'label', 'virtual', 'editable', 'nullable', 'secret'):
+                    if attr in col.attributes:
+                        col_dict[attr] = col.attributes[attr]
+                    elif hasattr(col, 'db_type') and col.db_type and attr == 'type':
+                        col_dict['type'] = col.db_type.name
+                cols.append(col_dict)
+            result[name] = {'columns': cols}
+        return result
 
     def initialize_db(self, db_url: str, model: ModuleType) -> Any:
         """
@@ -479,7 +503,7 @@ class DbTable:
     - Table attributes and metadata
     """
 
-    def __init__(self, name: str, plugin: Plugin, attributes: Dict[str, Any]) -> None:
+    def __init__(self, name: str, plugin: Plugin, attributes: Dict[str, Any], db: 'DB' = None) -> None:
         """
         Initialize a new table definition.
 
@@ -487,15 +511,45 @@ class DbTable:
             name: Table class name
             plugin: Plugin that initially defines this table
             attributes: Table configuration and columns
+            db: Parent DB instance (for mixin/type resolution)
         """
+        self.db = db
         self.name: str = name
         self.table_name: str = attributes.get('name', name.lower())
         self.plugins: List[Plugin] = []
         self.attributes: Dict[str, Any] = {}
         self._columns: List[Dict[str, Any]] = []  # Temporary variable used to build columns
         self.columns: List[DbColumn] = []
+        self.virtual_columns: List[DbColumn] = []
+        self._effective_columns: Optional[List['DbColumn']] = None
 
         self.update(attributes, plugin)
+
+    @property
+    def effective_columns(self) -> List['DbColumn']:
+        """
+        Full column list: real columns + mixin columns + virtual columns.
+        Cached after first access. Used by serialization and schema export.
+        source.py uses .columns only (no virtuals, no mixin expansion).
+        """
+        if self._effective_columns is None:
+            cols: List[DbColumn] = list(self.columns)
+
+            if self.db:
+                # Expand mixin columns (real columns inherited via Python class)
+                for mixin_name in self.attributes.get('mixins', []):
+                    if mixin_name in self.db.types:
+                        for col in self.db.types[mixin_name].columns:
+                            if not any(c.name == col.name for c in cols):
+                                cols.append(col)
+
+            # Append virtual columns (hybrid_property, no mapped_column)
+            for col in self.virtual_columns:
+                if not any(c.name == col.name for c in cols):
+                    cols.append(col)
+
+            self._effective_columns = cols
+        return self._effective_columns
 
     def update(self, attributes: Dict[str, Any], plugin: Plugin) -> None:
         """

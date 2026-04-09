@@ -219,21 +219,27 @@ def resolve_table_name(model_name: str, base_table_name: str) -> str:
     return base_table_name
 
 
-def serialize_model(model, include_relationships=False):
+def serialize_model(model, include_relationships=False, db_table=None):
     """
     Convert SQLAlchemy model instance to dictionary.
 
     Args:
         model: SQLAlchemy model instance
         include_relationships: Whether to include relationship attributes
+        db_table: DbTable instance to include virtual columns (optional)
 
     Returns:
         Dictionary representation of the model
     """
     result = {}
-    # Add columns
+    # Add real + mixin columns (SQLAlchemy introspection covers both)
     for column in inspection.inspect(model.__class__).columns:
         result[column.name] = getattr(model, column.name)
+
+    # Add virtual columns (hybrid_property, not in __table__.columns)
+    if db_table:
+        for col in db_table.virtual_columns:
+            result[col.name] = getattr(model, col.name, None)
 
     # Optionally add relationships
     if include_relationships:
