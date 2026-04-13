@@ -127,6 +127,15 @@ types:
         type: String
         nullable: True
 
+  Archivable:
+    label: "Archivable"
+    columns:
+      - name: active
+        type: Boolean
+        default: true
+        nullable: false
+        label: "Active"
+
   Credentials:
     label: "Authentication Credentials"
     columns:

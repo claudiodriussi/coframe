@@ -544,12 +544,28 @@ class Generator:
         for mixin in self.mixins:
             if mixin in self.db.types:
                 type_def = self.db.types[mixin]
-                mixin_code = [f"class {mixin}:\n"]
 
+                # Inherit from plugin Python class if defined (carries methods/protocol)
+                plugin_classes = self.class_finder.get_class_inheritance(mixin)
+                if plugin_classes:
+                    for cls in plugin_classes:
+                        module_path = cls.rsplit('.', 1)[0]
+                        self.imports.standard_imports.add(f"import {module_path}")
+                    bases = ', '.join(plugin_classes)
+                    mixin_code = [f"class {mixin}({bases}):\n"]
+                else:
+                    mixin_code = [f"class {mixin}:\n"]
+
+                # Only generate real columns (virtual ones live as hybrid_property in Python)
+                has_columns = False
                 for column in type_def.columns:
                     column_code = self.column_generator.generate_column(column, type_def)
                     if column_code:
                         mixin_code.append(column_code)
+                        has_columns = True
+
+                if not has_columns:
+                    mixin_code.append("    pass\n")
 
                 code.append(''.join(mixin_code))
 

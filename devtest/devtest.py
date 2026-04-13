@@ -72,6 +72,9 @@ def main():
     app = coframe.utils.get_app()
     app.calc_db(plugins)
 
+    from plugins.common.model import Archivable
+    app.add_query_behavior(Archivable)
+
     model_file = "model.py"
     if plugins.should_regenerate(model_file):
         print("Require regeneration.")

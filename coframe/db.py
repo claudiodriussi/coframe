@@ -49,6 +49,20 @@ class DB:
         self.db_type: str = "unknown"
         self.multi_tenant_config: Dict[str, Any] = {}
         self.shared_tables: set = set()
+        self.query_behaviors: List[Any] = []
+
+    def add_query_behavior(self, behavior_class: Any) -> None:
+        """
+        Register a query behavior class.
+
+        A behavior class must implement:
+          applies_to(model_class) -> bool
+          apply(model_class, query_def, query) -> query
+
+        Called at startup after calc_db():
+          app.add_query_behavior(Archivable)
+        """
+        self.query_behaviors.append(behavior_class)
 
     def calc_db(self, plugins: PluginsManager) -> None:
         """
@@ -147,12 +161,15 @@ class DB:
         Raises:
             ValueError: If duplicate column names are found or invalid foreign keys are referenced
         """
-        # Process composite type columns
+        # Process composite type columns (includes mixin types)
         for type_name in self.types:
             for column in self.types[type_name].attributes.get('columns', []):
                 col = DbColumn(column, self)
                 col.resolve(f"type: {type_name}")
-                self.types[type_name].columns.append(col)
+                if col.attributes.get('virtual'):
+                    self.types[type_name].virtual_columns.append(col)
+                else:
+                    self.types[type_name].columns.append(col)
 
         # Process table columns
         for table_name in self.tables:
@@ -303,7 +320,13 @@ class DB:
                     elif hasattr(col, 'db_type') and col.db_type and attr == 'type':
                         col_dict['type'] = col.db_type.name
                 cols.append(col_dict)
-            result[name] = {'columns': cols}
+
+            table_dict: Dict[str, Any] = {'columns': cols}
+            mixins = table.attributes.get('mixins', [])
+            if mixins:
+                table_dict['mixins'] = mixins
+
+            result[name] = table_dict
         return result
 
     def initialize_db(self, db_url: str, model: ModuleType) -> Any:
@@ -415,6 +438,7 @@ class DbType:
         self.attributes: Dict[str, Any] = attributes or {}
         self.inheritance: List[str] = []
         self.columns: List['DbColumn'] = []
+        self.virtual_columns: List['DbColumn'] = []
 
     def resolve(self, types: Dict[str, 'DbType']) -> None:
         """
@@ -536,14 +560,15 @@ class DbTable:
             cols: List[DbColumn] = list(self.columns)
 
             if self.db:
-                # Expand mixin columns (real columns inherited via Python class)
+                # Expand mixin columns (real + virtual, inherited via Python class)
                 for mixin_name in self.attributes.get('mixins', []):
                     if mixin_name in self.db.types:
-                        for col in self.db.types[mixin_name].columns:
+                        mixin_type = self.db.types[mixin_name]
+                        for col in mixin_type.columns + mixin_type.virtual_columns:
                             if not any(c.name == col.name for c in cols):
                                 cols.append(col)
 
-            # Append virtual columns (hybrid_property, no mapped_column)
+            # Append own virtual columns (hybrid_property, no mapped_column)
             for col in self.virtual_columns:
                 if not any(c.name == col.name for c in cols):
                     cols.append(col)

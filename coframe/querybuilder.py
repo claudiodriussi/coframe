@@ -236,6 +236,18 @@ class DynamicQueryBuilder:
         if 'joins' in query_def:
             query = join_builder.apply_joins(query, query_def['joins'])
 
+        # Apply registered query behaviors (e.g. Archivable auto-filter)
+        # Lazy import: keeps querybuilder usable standalone without coframe stack
+        main_model = self.models[main_table]
+        try:
+            import coframe.utils
+            behaviors = coframe.utils.get_app().query_behaviors
+        except Exception:
+            behaviors = []
+        for behavior in behaviors:
+            if behavior.applies_to(main_model):
+                query = behavior.apply(main_model, query_def, query)
+
         # Apply filters (WHERE)
         if 'filters' in query_def:
             query = filter_builder.apply_filters(query, query_def['filters'])

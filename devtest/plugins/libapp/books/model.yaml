@@ -66,6 +66,7 @@ tables:
   Book:
     name: books
     tags: [anag]
+    mixins: [Archivable]
     columns:
       - name: id
         type: ID
