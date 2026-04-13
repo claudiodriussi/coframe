@@ -49,7 +49,7 @@ def db_operations(data: Dict[str, Any]) -> Dict[str, Any]:
         elif method == 'update':
             return handle_update(app, model_class, data, db_table)
         elif method == 'delete':
-            return handle_delete(app, model_class, data)
+            return handle_delete(app, model_class, data, db_table)
         else:
             return {"status": "error", "message": f"Unsupported method: '{method}'", "code": 400}
 
@@ -59,9 +59,17 @@ def db_operations(data: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "message": str(e), "code": 500}
 
 
+def _pk_field(db_table) -> str:
+    """Return the first PK field name for a table, defaulting to 'id'."""
+    if db_table is None:
+        return 'id'
+    pk_cols = [col.name for col in db_table.effective_columns if col.attributes.get('primary_key')]
+    return pk_cols[0] if pk_cols else 'id'
+
+
 def handle_get(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle GET operations (list or single record)"""
-    record_id = params.get('id')
+    record_id = params.get(_pk_field(db_table))
     start = int(params.get('start', 0))
     limit = int(params.get('limit', 100))
     query_filters = params.get('query', {})
@@ -151,7 +159,7 @@ def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Di
 
 def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle UPDATE operations"""
-    record_id = params.get('id')
+    record_id = params.get(_pk_field(db_table))
     if not record_id:
         return {"status": "error", "message": "Record ID is required for updates", "code": 400}
 
@@ -183,9 +191,9 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
             return {"status": "error", "message": f"Update failed: {str(e)}", "code": 400}
 
 
-def handle_delete(app, model_class, params: Dict[str, Any]) -> Dict[str, Any]:
+def handle_delete(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle DELETE operations"""
-    record_id = params.get('id')
+    record_id = params.get(_pk_field(db_table))
     if not record_id:
         return {"status": "error", "message": "Record ID is required for deletion", "code": 400}
 

@@ -307,7 +307,14 @@ class DB:
         Used by the client to know the full column list for each table.
 
         Returns:
-            { TableName: { columns: [ {name, type, virtual, editable, label, ...} ] } }
+            {
+              TableName: {
+                pk_fields: ['id'],           # single-col PK (normal tables)
+                pk_fields: ['a_id', 'b_id'], # composite PK (M2M tables)
+                columns: [ {name, type, virtual, editable, label, ...} ],
+                mixins: [...],               # optional
+              }
+            }
         """
         result = {}
         for name, table in self.tables.items():
@@ -321,7 +328,25 @@ class DB:
                         col_dict['type'] = col.db_type.name
                 cols.append(col_dict)
 
-            table_dict: Dict[str, Any] = {'columns': cols}
+            # Determine PK fields:
+            # - M2M tables: composite PK from many_to_many target columns
+            # - Regular tables: columns where primary_key attr is True
+            m2m = table.attributes.get('many_to_many')
+            if m2m:
+                pk_fields = [
+                    m2m['target1']['column'],
+                    m2m['target2']['column'],
+                ]
+            else:
+                pk_fields = [
+                    col.name for col in table.effective_columns
+                    if col.attributes.get('primary_key')
+                ]
+
+            table_dict: Dict[str, Any] = {
+                'pk_fields': pk_fields,
+                'columns': cols,
+            }
             mixins = table.attributes.get('mixins', [])
             if mixins:
                 table_dict['mixins'] = mixins

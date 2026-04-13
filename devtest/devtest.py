@@ -56,6 +56,32 @@ def inspect_panels(plugins):
         print(json.dumps(resolved, indent=2, default=str))
 
 
+# ── Shared app setup ───────────────────────────────────────────────────────────
+
+def setup_schema():
+    """
+    Load plugins and compute DB schema — no DB engine, no model.py generation.
+    Sufficient for introspection commands (dump-page, dump-tables, …).
+    Returns the initialized app.
+    """
+    plugins = coframe.plugins.PluginsManager()
+    plugins.load_config("config.yaml")
+    coframe.utils.register_standard_handlers(plugins)
+    plugins.load_plugins()
+
+    app = coframe.utils.get_app()
+    app.calc_db(plugins)
+
+    from plugins.common.model import Archivable
+    app.add_query_behavior(Archivable)
+
+    return app
+
+
+
+
+# ── Main (existing test suite) ─────────────────────────────────────────────────
+
 def main():
 
     # load plugins
@@ -341,5 +367,14 @@ def populate_db(app):
             session.rollback()
 
 
+# ── CLI entry point ────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
-    main()
+    from coframe.cli import make_parser, run_cli
+
+    args = make_parser().parse_args()
+
+    if args.command:
+        run_cli(setup_schema(), args, output_dir=Path('data'))
+    else:
+        main()
