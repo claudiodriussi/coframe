@@ -14,7 +14,8 @@ Two layers:
                     so callers can point it at their project's data folder.
 
 Planned sections:
-  dump_*     — read-only introspection (pages, tables, types, plugins)
+  dump_*     — read-only introspection (pages, tables, types, plugins, endpoints)
+  [future]   — dump-endpoints: catalogo endpoint registrati con metadata
   [future]   — schema migrations (alembic wrappers)
   [future]   — backup / restore
   [future]   — db engine migration

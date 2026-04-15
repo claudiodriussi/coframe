@@ -11,8 +11,42 @@ This allows the same logic to be used with Flask, FastAPI, Django, or any other 
 """
 
 from datetime import datetime, timezone, timedelta
+import traceback as _traceback
 import jwt
 from typing import Dict, Any, Optional, Tuple
+
+
+def _error_response(message: str, status_code: int = 500,
+                    error_type: Optional[str] = None,
+                    traceback: Optional[str] = None) -> Dict[str, Any]:
+    """Build a uniform error response dict."""
+    r: Dict[str, Any] = {'status': 'error', 'message': message, 'status_code': status_code}
+    if error_type:
+        r['error_type'] = error_type
+    if traceback:
+        r['traceback'] = traceback
+    return r
+
+
+def _error_from_exc(e: Exception, status_code: int = 500) -> Dict[str, Any]:
+    """Build error response from a live exception (captures current traceback)."""
+    return _error_response(
+        message=str(e),
+        status_code=status_code,
+        error_type=type(e).__name__,
+        traceback=_traceback.format_exc()
+    )
+
+
+def _error_from_result(result: Dict[str, Any], default_message: str = 'Operation failed',
+                       status_code: int = 400) -> Dict[str, Any]:
+    """Build error response propagating traceback from a CommandResult dict."""
+    return _error_response(
+        message=result.get('message', default_message),
+        status_code=status_code,
+        error_type=result.get('error_type'),
+        traceback=result.get('traceback')
+    )
 
 
 # ============================================
@@ -193,11 +227,7 @@ def handle_auth(
             }
 
     except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e),
-            'status_code': 500
-        }
+        return _error_from_exc(e)
 
 
 def handle_update_context(
@@ -243,11 +273,7 @@ def handle_update_context(
         }
 
     except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e),
-            'status_code': 500
-        }
+        return _error_from_exc(e)
 
 
 def handle_db_operation(
@@ -293,24 +319,12 @@ def handle_db_operation(
         result = command_processor.send(command)
 
         if result.get('status') == 'success':
-            return {
-                'status': 'success',
-                'data': result.get('data'),
-                'status_code': 200
-            }
+            return {'status': 'success', 'data': result.get('data'), 'status_code': 200}
         else:
-            return {
-                'status': 'error',
-                'message': result.get('message', 'Operation failed'),
-                'status_code': 400
-            }
+            return _error_from_result(result, 'Operation failed')
 
     except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e),
-            'status_code': 500
-        }
+        return _error_from_exc(e)
 
 
 def handle_query(
@@ -341,24 +355,12 @@ def handle_query(
         result = command_processor.send(command)
 
         if result.get('status') == 'success':
-            return {
-                'status': 'success',
-                'data': result.get('data'),
-                'status_code': 200
-            }
+            return {'status': 'success', 'data': result.get('data'), 'status_code': 200}
         else:
-            return {
-                'status': 'error',
-                'message': result.get('message', 'Query failed'),
-                'status_code': 400
-            }
+            return _error_from_result(result, 'Query failed')
 
     except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e),
-            'status_code': 500
-        }
+        return _error_from_exc(e)
 
 
 def handle_generic_endpoint(
@@ -391,24 +393,12 @@ def handle_generic_endpoint(
         result = command_processor.send(command)
 
         if result.get('status') == 'success':
-            return {
-                'status': 'success',
-                'data': result.get('data'),
-                'status_code': 200
-            }
+            return {'status': 'success', 'data': result.get('data'), 'status_code': 200}
         else:
-            return {
-                'status': 'error',
-                'message': result.get('message', 'Operation failed'),
-                'status_code': 400
-            }
+            return _error_from_result(result, 'Operation failed')
 
     except Exception as e:
-        return {
-            'status': 'error',
-            'message': str(e),
-            'status_code': 500
-        }
+        return _error_from_exc(e)
 
 
 # ============================================

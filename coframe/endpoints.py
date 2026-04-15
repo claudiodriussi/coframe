@@ -3,6 +3,7 @@ import threading
 import time
 import uuid
 import asyncio
+import traceback as _traceback
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import Dict, List, Any, Optional, Union, Callable
@@ -49,7 +50,9 @@ class CommandResult:
                  data: Any = None,
                  message: Optional[str] = None,
                  request_id: Optional[str] = None,
-                 code: int = 200) -> None:
+                 code: int = 200,
+                 error_type: Optional[str] = None,
+                 traceback: Optional[str] = None) -> None:
         """
         Initialize a command result.
 
@@ -59,12 +62,16 @@ class CommandResult:
             message: Error message (for error status)
             request_id: Unique identifier of the request
             code: Status code (similar to HTTP status codes)
+            error_type: Exception class name (e.g. "ValueError")
+            traceback: Full Python traceback string (always included for errors)
         """
         self.status = status
         self.data = data
         self.message = message
         self.request_id = request_id
         self.code = code
+        self.error_type = error_type
+        self.traceback = traceback
         self.timestamp = int(time.time())
 
     def to_dict(self) -> Dict[str, Any]:
@@ -87,6 +94,10 @@ class CommandResult:
             result["data"] = self.data
         else:
             result["message"] = self.message or "Unknown error"
+            if self.error_type:
+                result["error_type"] = self.error_type
+            if self.traceback:
+                result["traceback"] = self.traceback
 
         return result
 
@@ -115,7 +126,9 @@ class CommandResult:
                    data=data.get("data"),
                    message=data.get("message"),
                    request_id=data.get("request_id"),
-                   code=data.get("code", 200))
+                   code=data.get("code", 200),
+                   error_type=data.get("error_type"),
+                   traceback=data.get("traceback"))
 
     @classmethod
     def from_json(cls, json_str: str) -> 'CommandResult':
@@ -385,14 +398,20 @@ class CommandProcessor:
                         status="error",
                         message=str(e),
                         request_id=command.request_id,
-                        code=500
+                        code=500,
+                        error_type=type(e).__name__,
+                        traceback=_traceback.format_exc()
                     )
 
             except Exception as e:
-                result = CommandResult(status="error",
-                                       message=str(e),
-                                       request_id=command.request_id,
-                                       code=500)
+                result = CommandResult(
+                    status="error",
+                    message=str(e),
+                    request_id=command.request_id,
+                    code=500,
+                    error_type=type(e).__name__,
+                    traceback=_traceback.format_exc()
+                )
 
         # Save the result
         with self.command_lock:
