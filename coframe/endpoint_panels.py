@@ -5,13 +5,18 @@ from coframe.endpoints import endpoint
 # endpoint functions receive only (data).
 
 
+_JSON_SCALARS = (str, int, float, bool, type(None))
+
 def _strip_meta(obj: Any) -> Any:
-    """Remove $plugin metadata keys (internal, not needed by client)."""
+    """Remove $plugin metadata keys and non-JSON-serializable objects."""
     if isinstance(obj, dict):
         return {k: _strip_meta(v) for k, v in obj.items() if k != '$plugin'}
     if isinstance(obj, list):
         return [_strip_meta(item) for item in obj]
-    return obj
+    if isinstance(obj, _JSON_SCALARS):
+        return obj
+    # Drop anything else (DbTable, DbColumn, etc.) that can't be JSON-serialized
+    return None
 
 
 def _auto_list_page(table_name: str, table: Any) -> Dict[str, Any]:
@@ -53,21 +58,91 @@ def _auto_list_page(table_name: str, table: Any) -> Dict[str, Any]:
     }
 
 
+def _auto_form_page(table_name: str, table: Any) -> Dict[str, Any]:
+    """
+    Auto-generate a form page descriptor for a table.
+
+    Convention: '{table_name}_form' (e.g. 'book_form').
+    Skips primary-key and secret columns.
+    Timestamps with a default and no user input (created_at, updated_at) are skipped.
+    Type info and widget hints are passed through for client-side widget resolution.
+    """
+    fields = []
+    for col in table.effective_columns:
+        attrs = col.attributes
+
+        # Skip PK, secret, virtual (read-only computed), and auto-managed columns
+        if attrs.get('primary_key'):
+            continue
+        if attrs.get('secret'):
+            continue
+        if attrs.get('virtual'):
+            continue
+        # Skip auto-timestamps: default present AND nullable=False AND no user-facing label
+        if attrs.get('default') is not None and attrs.get('nullable') is False \
+                and col.name in ('created_at', 'updated_at'):
+            continue
+
+        entry: Dict[str, Any] = {'name': col.name}
+
+        col_type = attrs.get('type')
+        if col_type:
+            entry['type'] = col_type
+
+        label = attrs.get('label')
+        if label:
+            entry['label'] = label
+
+        help_text = attrs.get('help')
+        if help_text:
+            entry['help'] = help_text
+
+        # Explicit widget override (from type registry, e.g. Password → 'password')
+        widget = attrs.get('widget')
+        if widget:
+            entry['widget'] = widget
+
+        # FK: pass target info for future combobox resolution (strip DbTable object)
+        fk = attrs.get('foreign_key')
+        if fk:
+            entry['foreign_key'] = {k: v for k, v in fk.items() if k != 'table'}
+
+        # Required if nullable=False and no default (field needs explicit user input)
+        if attrs.get('nullable') is False and attrs.get('default') is None:
+            entry['required'] = True
+
+        fields.append(entry)
+
+    return {
+        'title': table_name,
+        '_auto': True,
+        'content': {
+            'type': 'form',
+            'source': {'model': table_name},
+            'fields': fields,
+            'policy': {'editable': True},
+            'actions': {'toolbar': ['save', 'cancel']},
+        },
+    }
+
+
 def _resolve_auto_page(app: Any, panel_id: str) -> Dict[str, Any] | None:
     """
     Try to auto-generate a page from a conventional id.
 
     Supported patterns:
       {table_name}_list  →  auto list view for that table
+      {table_name}_form  →  auto form descriptor for that table
 
     Table name matching is case-insensitive (e.g. 'author_list' → 'Author').
     Returns None if no matching table is found.
     """
-    if panel_id.endswith('_list'):
-        base = panel_id[:-5]  # strip '_list'
-        for t_name, t_obj in app.tables.items():
-            if t_name.lower() == base.lower():
-                return _auto_list_page(t_name, t_obj)
+    for suffix, builder in (('_list', _auto_list_page), ('_form', _auto_form_page)):
+        if panel_id.endswith(suffix):
+            base = panel_id[:-len(suffix)]
+            for t_name, t_obj in app.tables.items():
+                if t_name.lower() == base.lower():
+                    return builder(t_name, t_obj)
     return None
 
 
@@ -83,9 +158,10 @@ def get_page(data: Dict[str, Any]) -> Dict[str, Any]:
       1. Explicit pages dict (YAML plugin pages)
       2. Auto-generated fallback:
            {table}_list  →  minimal table view for that DB table
+           {table}_form  →  auto form descriptor for that table
 
     Parameters:
-        id: Page id (e.g. "book_list", "Author_list")
+        id: Page id (e.g. "book_list", "book_form", "Author_list")
 
     Returns:
         { status, data: <resolved page descriptor>, code }

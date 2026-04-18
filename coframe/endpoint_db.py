@@ -3,6 +3,8 @@ from coframe.endpoints import endpoint
 from coframe.querybuilder import DynamicQueryBuilder
 from typing import Dict, Any, Optional
 from sqlalchemy import and_, or_, desc, asc
+from sqlalchemy import Date, DateTime, Integer, inspect as sa_inspect
+import datetime
 
 
 @endpoint('db')
@@ -129,6 +131,27 @@ def handle_get(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[
             }
 
 
+def _coerce_value(model_class, key: str, value: Any) -> Any:
+    """Coerce string values to the Python type expected by the SQLAlchemy column."""
+    if not isinstance(value, str) or value == '':
+        return value
+    try:
+        mapper = sa_inspect(model_class)
+        col = mapper.columns.get(key)
+        if col is None:
+            return value
+        col_type = col.type
+        if isinstance(col_type, DateTime):
+            return datetime.datetime.fromisoformat(value)
+        if isinstance(col_type, Date):
+            return datetime.date.fromisoformat(value)
+        if isinstance(col_type, Integer):
+            return int(value)
+    except Exception:
+        pass
+    return value
+
+
 def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle CREATE operations"""
     record_data = params.get('data')
@@ -138,7 +161,8 @@ def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Di
 
     # Create new instance
     try:
-        new_record = model_class(**record_data)
+        coerced = {k: _coerce_value(model_class, k, v) for k, v in record_data.items()}
+        new_record = model_class(**coerced)
 
         with app.get_session() as session:
             session.add(new_record)
@@ -173,10 +197,13 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
         if not record:
             return {"status": "error", "message": f"Record with id {record_id} not found", "code": 404}
 
-        # Update record attributes
+        # Update record attributes (skip read-only hybrid/virtual properties)
         for key, value in record_data.items():
             if hasattr(record, key):
-                setattr(record, key, value)
+                try:
+                    setattr(record, key, _coerce_value(model_class, key, value))
+                except AttributeError:
+                    pass
 
         try:
             session.commit()
