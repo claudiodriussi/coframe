@@ -63,51 +63,31 @@ def _auto_form_page(table_name: str, table: Any) -> Dict[str, Any]:
     Auto-generate a form page descriptor for a table.
 
     Convention: '{table_name}_form' (e.g. 'book_form').
-    Skips primary-key and secret columns.
-    Timestamps with a default and no user input (created_at, updated_at) are skipped.
-    Type info and widget hints are passed through for client-side widget resolution.
+    PK columns are included as read-only. Secret and virtual columns are skipped.
+    All column attributes are forwarded to the client (which applies what it knows).
+    The only exception is foreign_key['table'] which is a non-serializable DbTable object.
     """
     fields = []
     for col in table.effective_columns:
         attrs = col.attributes
 
-        # Skip PK, secret, virtual (read-only computed), and auto-managed columns
-        if attrs.get('primary_key'):
-            continue
         if attrs.get('secret'):
             continue
         if attrs.get('virtual'):
             continue
-        # Skip auto-timestamps: default present AND nullable=False AND no user-facing label
-        if attrs.get('default') is not None and attrs.get('nullable') is False \
-                and col.name in ('created_at', 'updated_at'):
-            continue
 
         entry: Dict[str, Any] = {'name': col.name}
 
-        col_type = attrs.get('type')
-        if col_type:
-            entry['type'] = col_type
+        # Pass all attributes through; strip non-serializable objects
+        for k, v in attrs.items():
+            if k == 'foreign_key':
+                entry[k] = {fk_k: fk_v for fk_k, fk_v in v.items() if fk_k != 'table'}
+            elif isinstance(v, _JSON_SCALARS) or isinstance(v, (list, dict)):
+                entry[k] = v
 
-        label = attrs.get('label')
-        if label:
-            entry['label'] = label
-
-        help_text = attrs.get('help')
-        if help_text:
-            entry['help'] = help_text
-
-        # Explicit widget override (from type registry, e.g. Password → 'password')
-        widget = attrs.get('widget')
-        if widget:
-            entry['widget'] = widget
-
-        # FK: pass target info for future combobox resolution (strip DbTable object)
-        fk = attrs.get('foreign_key')
-        if fk:
-            entry['foreign_key'] = {k: v for k, v in fk.items() if k != 'table'}
-
-        # Required if nullable=False and no default (field needs explicit user input)
+        # Derived client hints not present in raw attributes
+        if attrs.get('primary_key'):
+            entry['readonly'] = True
         if attrs.get('nullable') is False and attrs.get('default') is None:
             entry['required'] = True
 

@@ -101,10 +101,12 @@ types:
     columns:
       - name: created_at
         type: DateTime
+        granularity: second
         default: datetime.now()
         nullable: False
       - name: updated_at
         type: DateTime
+        granularity: second
         default: datetime.now()
         nullable: False
 
