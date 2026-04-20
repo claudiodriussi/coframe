@@ -181,8 +181,8 @@ views:
         align: center
         formatter: price_color
       - field: status
+    navigator: true
     actions:
-      toolbar: [add, search, filter, select, export]
       row:
         - id: edit
           action: stack_push

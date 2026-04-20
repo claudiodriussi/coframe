@@ -42,7 +42,8 @@ def _auto_list_page(table_name: str, table: Any) -> Dict[str, Any]:
 
     # M2M tables have a composite PK — restrict to read-only actions
     m2m = table.attributes.get('many_to_many')
-    toolbar = ['search', 'filter', 'export'] if m2m else ['add', 'search', 'filter', 'export']
+
+    navigator: Any = {'hide': ['add', 'delete']} if m2m else True
 
     return {
         'title': table_name,
@@ -51,9 +52,7 @@ def _auto_list_page(table_name: str, table: Any) -> Dict[str, Any]:
             'type': 'table',
             'source': {'model': table_name},
             'columns': columns,
-            'actions': {
-                'toolbar': toolbar,
-            },
+            'navigator': navigator,
         },
     }
 
