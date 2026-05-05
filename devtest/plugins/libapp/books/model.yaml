@@ -3,6 +3,8 @@ tables:
   Author:
     name: authors
     tags: [anag]
+    display_field: full_name
+    search_fields: [first_name, last_name]
     columns:
       - name: id
         type: ID

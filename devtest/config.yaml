@@ -25,6 +25,9 @@ api:
 #   transaction: 100 — date-stamped records, sorted desc so recent rows come first
 #   log:        50   — append-only, can grow large — strict limit
 #   detail:    null  — always filtered by parent FK, no limit needed
+schema:
+  display_field_names: [name, title, description]  # ordered: first match wins
+
 dataview:
   page_size: 100
   reload_all_threshold: 5000   # on refresh: silent restore if rowCount ≤ threshold, banner if above

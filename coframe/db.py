@@ -301,6 +301,48 @@ class DB:
             if include_builtin or t.plugin != ""
         }
 
+    def _resolve_display_info(self, table: 'DbTable') -> tuple:
+        """
+        Compute display_field and search_fields for a table.
+
+        Priority:
+          1. Explicit display_field / search_fields in table YAML
+          2. Convention: first column name matching schema.display_field_names (ordered)
+          3. search_fields fallback: [display_field] if real column; first non-pk/virtual col if virtual
+
+        Returns: (display_field: str|None, search_fields: list[str])
+        """
+        convention = self.pm.config.get('schema', {}).get('display_field_names', ['name', 'title', 'description'])
+
+        explicit_display = table.attributes.get('display_field')
+        if explicit_display:
+            display_field = explicit_display
+        else:
+            col_names = {col.name for col in table.effective_columns}
+            display_field = next((n for n in convention if n in col_names), None)
+
+        if not display_field:
+            return None, []
+
+        display_col = next((c for c in table.effective_columns if c.name == display_field), None)
+        is_virtual = display_col is not None and display_col.attributes.get('virtual', False)
+
+        explicit_search = table.attributes.get('search_fields')
+        if explicit_search:
+            search_fields = explicit_search if isinstance(explicit_search, list) else [explicit_search]
+        elif not is_virtual:
+            search_fields = [display_field]
+        else:
+            # Virtual display field: fall back to first non-pk, non-virtual, string-type column
+            search_fields = [
+                col.name for col in table.effective_columns
+                if not col.attributes.get('virtual', False)
+                and not col.attributes.get('primary_key', False)
+                and getattr(col.db_type, 'python_type', None) is str
+            ][:1]
+
+        return display_field, search_fields
+
     def get_table_schema(self) -> Dict[str, Any]:
         """
         Return all tables with their effective_columns (real + mixin + virtual).
@@ -312,6 +354,8 @@ class DB:
                 pk_fields: ['id'],           # single-col PK (normal tables)
                 pk_fields: ['a_id', 'b_id'], # composite PK (M2M tables)
                 columns: [ {name, type, virtual, editable, label, ...} ],
+                display_field: 'name',       # column to show in FK comboboxes
+                search_fields: ['name'],     # real columns for SQL LIKE filtering
                 mixins: [...],               # optional
               }
             }
@@ -326,6 +370,9 @@ class DB:
                         col_dict[attr] = col.attributes[attr]
                     elif hasattr(col, 'db_type') and col.db_type and attr == 'type':
                         col_dict['type'] = col.db_type.name
+                fk = col.attributes.get('foreign_key')
+                if fk and 'table' in fk:
+                    col_dict['foreign_key'] = {'target': fk['table'].name, 'field': fk['id']}
                 cols.append(col_dict)
 
             # Determine PK fields:
@@ -350,6 +397,12 @@ class DB:
             mixins = table.attributes.get('mixins', [])
             if mixins:
                 table_dict['mixins'] = mixins
+
+            display_field, search_fields = self._resolve_display_info(table)
+            if display_field:
+                table_dict['display_field'] = display_field
+            if search_fields:
+                table_dict['search_fields'] = search_fields
 
             result[name] = table_dict
         return result

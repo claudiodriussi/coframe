@@ -80,7 +80,11 @@ def _auto_form_page(table_name: str, table: Any) -> Dict[str, Any]:
         # Pass all attributes through; strip non-serializable objects
         for k, v in attrs.items():
             if k == 'foreign_key':
-                entry[k] = {fk_k: fk_v for fk_k, fk_v in v.items() if fk_k != 'table'}
+                fk_table = v.get('table')
+                if fk_table:
+                    entry[k] = {'target': fk_table.name, 'field': v.get('id', 'id')}
+                else:
+                    entry[k] = {fk_k: fk_v for fk_k, fk_v in v.items() if fk_k != 'table'}
             elif isinstance(v, _JSON_SCALARS) or isinstance(v, (list, dict)):
                 entry[k] = v
 
