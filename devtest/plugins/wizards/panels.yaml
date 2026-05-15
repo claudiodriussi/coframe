@@ -1,0 +1,142 @@
+# Wizard panel descriptors — payment reminders demo
+#
+# Two panels loaded by the wizard orchestrator via get_panel:
+#   payment_wizard_params   — DataForm: input parameters (no model)
+#   payment_wizard_preview  — DataView: computed rows, batch mode
+
+pages:
+
+  payment_wizard_params:
+    title: Parametri solleciti
+    content:
+      $ref: "views.payment_wizard_params_form"
+
+  payment_wizard_preview:
+    title: Anteprima solleciti
+    content:
+      $ref: "views.payment_wizard_preview_table"
+
+  payment_wizard_row_form:
+    title: Modifica sollecito
+    content:
+      $ref: "views.payment_wizard_row_form"
+
+views:
+
+  payment_wizard_params_form:
+    type: form
+    source: {}
+    layout:
+      - type: section
+        label: Filtri di selezione
+        columns: 2
+        fields:
+          - name: min_amount
+            label: Saldo minimo (€)
+            type: Numeric
+            widget: number
+            help: Esclude i clienti con saldo inferiore a questo valore
+          - name: agent
+            label: Agente (opzionale)
+            type: String
+            help: Lascia vuoto per tutti gli agenti
+    policy:
+      editable: true
+    actions:
+      toolbar: [save, cancel]
+
+  payment_wizard_preview_table:
+    type: table
+    source: {}
+    columns:
+      - field: code
+        title: Codice
+      - field: customer
+        title: Cliente
+      - field: agent
+        title: Agente
+      - field: due_date
+        title: Scadenza
+      - field: overdue_days
+        title: Gg ritardo
+      - field: balance
+        title: Saldo €
+      - field: credit_limit
+        title: Fido €
+      - field: open_orders
+        title: Ord. aperti
+      - field: risk
+        title: Rischio
+      - field: email
+        title: Email
+    navigator:
+      mode: batch
+      form_id: payment_wizard_row_form
+
+  payment_wizard_row_form:
+    type: form
+    source: {}
+    layout:
+      - type: section
+        label: Anagrafica
+        columns:
+          - fields:
+              - name: code
+                label: Codice
+                readonly: true
+              - name: contact
+                label: Referente
+          - fields:
+              - name: customer
+                label: Cliente
+                readonly: true
+              - name: agent
+                label: Agente
+                readonly: true
+      - type: section
+        label: Contatti
+        columns:
+          - fields:
+              - name: email
+                label: Email
+              - name: phone
+                label: Telefono
+          - fields:
+              - name: address
+                label: Indirizzo
+      - type: hr
+      - type: section
+        label: Situazione contabile
+        border: true
+        columns:
+          - fields:
+              - name: balance
+                label: Saldo €
+                readonly: true
+              - name: credit_limit
+                label: Fido €
+                readonly: true
+          - fields:
+              - name: overdue_days
+                label: Gg ritardo
+                readonly: true
+              - name: open_orders
+                label: Ord. aperti
+                readonly: true
+          - fields:
+              - name: risk
+                label: Rischio
+                readonly: true
+              - name: order_value
+                label: Valore ordini €
+                readonly: true
+      - type: section
+        label: Note
+        fields:
+          - name: note
+            label: Note interne
+            widget: textarea
+    policy:
+      editable: true
+    actions:
+      toolbar: [save, cancel]

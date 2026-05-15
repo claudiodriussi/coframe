@@ -1,0 +1,4 @@
+name: wizards
+version: 0.0.1
+description: Multi-step wizard endpoint demos
+depends_on: [common]
