@@ -301,6 +301,11 @@ class DB:
             if include_builtin or t.plugin != ""
         }
 
+    def get_schema_registry(self) -> Dict[str, Any]:
+        """Return all declared schemas from plugin YAML as client-facing dicts."""
+        from coframe.types import get_schema_registry
+        return get_schema_registry(self.pm.data)
+
     def _resolve_display_info(self, table: 'DbTable') -> tuple:
         """
         Compute display_field and search_fields for a table.

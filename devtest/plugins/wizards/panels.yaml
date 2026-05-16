@@ -4,6 +4,41 @@
 #   payment_wizard_params   — DataForm: input parameters (no model)
 #   payment_wizard_preview  — DataView: computed rows, batch mode
 
+schemas:
+
+  payment_wizard_data:
+    id:            Integer
+    code:          String
+    customer:      String
+    contact:       String
+    agent:         String
+    address:       String
+    invoice_no:    String
+    invoice_date:  Date
+    due_date:      Date
+    overdue_days:  Integer
+    payment_terms: Integer
+    amount:
+      type: Decimal
+      scale: 2
+    paid:
+      type: Decimal
+      scale: 2
+    balance:
+      type: Decimal
+      scale: 2
+    credit_limit:
+      type: Decimal
+      scale: 2
+    open_orders:   Integer
+    order_value:
+      type: Decimal
+      scale: 2
+    risk:          String
+    email:         String
+    phone:         String
+    note:          Text
+
 pages:
 
   payment_wizard_params:
@@ -48,6 +83,7 @@ views:
   payment_wizard_preview_table:
     type: table
     source: {}
+    data_schema: payment_wizard_data
     columns:
       - field: code
         title: Codice
@@ -76,6 +112,7 @@ views:
   payment_wizard_row_form:
     type: form
     source: {}
+    data_schema: payment_wizard_data
     layout:
       - type: section
         label: Anagrafica

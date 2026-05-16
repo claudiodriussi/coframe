@@ -571,6 +571,7 @@ def get_server_config(data: Dict[str, Any]) -> Dict[str, Any]:
                 },
                 'types': app.get_type_schema(include_builtin),
                 'tables': app.get_table_schema(),
+                'schemas': app.get_schema_registry(),
             },
             'code': 200,
         }
