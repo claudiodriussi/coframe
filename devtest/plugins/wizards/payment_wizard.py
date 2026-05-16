@@ -18,65 +18,92 @@ _CUSTOMERS = [
 _AGENTS = ["North", "Central", "South", "Export"]
 
 
-@endpoint('payment_wizard')
-def payment_wizard(data: dict) -> dict:
-    """
-    Multi-step wizard — payment reminders.
+class PaymentWizardSet(MemorySet):
+    SCHEMA_ID = 'payment_wizard_data'
 
-    step=preview  build overdue rows via MemorySet → return data + schema
-    step=confirm  reconstruct MemorySet from client rows → process selected
-    """
-    step = data.get('step')
+    def __init__(self):
+        import coframe.utils
+        schema = coframe.utils.get_app().get_schema_registry()[self.SCHEMA_ID]
+        super().__init__(schema)
 
-    # ── Step 1: build preview ─────────────────────────────────────────────────
-    if step == 'preview':
-        min_amount = float(data.get('min_amount', 0) or 0)
-        ms = MemorySet.from_yaml('payment_wizard_data')
+    # ── Build (step: preview) ─────────────────────────────────────────────────
 
+    def build(self, min_amount: float = 0) -> 'PaymentWizardSet':
         random.seed(42)
         today = date.today()
-
-        for i, (name, code, contact, email, phone, address) in enumerate(_CUSTOMERS):
-            overdue_days  = random.randint(15, 180)
-            due_date      = today - timedelta(days=overdue_days)
-            invoice_date  = due_date - timedelta(days=random.randint(30, 90))
-            amount        = round(random.uniform(200, 8000), 2)
-            paid          = round(amount * random.uniform(0, 0.4), 2)
-            balance       = round(amount - paid, 2)
-            open_orders   = random.randint(0, 5)
-            order_value   = round(random.uniform(0, 3000), 2) if open_orders else 0.0
-            agent         = random.choice(_AGENTS)
-            credit_limit  = round(random.choice([5000, 10000, 20000, 50000]), 2)
-            risk          = "High" if balance > credit_limit * 0.8 else ("Medium" if balance > credit_limit * 0.4 else "Low")
-
-            if balance < min_amount:
+        for i, customer in enumerate(_CUSTOMERS):
+            row: dict = {}
+            self._build_row(row, i, customer, today)
+            if row.get('balance', 0) < min_amount:
                 continue
+            self.add(**row)
+        self.sort('balance', ascending=False)
+        return self
 
-            row = ms.add()
-            row['id']            = i + 1
-            row['code']          = code
-            row['customer']      = name
-            row['contact']       = contact
-            row['agent']         = agent
-            row['address']       = address
-            row['invoice_no']    = f"FT{2025000 + i + 1}"
-            row['invoice_date']  = invoice_date.isoformat()
-            row['due_date']      = due_date.isoformat()
-            row['overdue_days']  = overdue_days
-            row['payment_terms'] = random.choice([30, 60, 90])
-            row['amount']        = amount
-            row['paid']          = paid
-            row['balance']       = balance
-            row['credit_limit']  = credit_limit
-            row['open_orders']   = open_orders
-            row['order_value']   = order_value
-            row['risk']          = risk
-            row['email']         = email
-            row['phone']         = phone
-            row['note']          = "Instalment plan in progress" if i == 2 else ""
+    def _build_row(self, row: dict, i: int, customer: tuple, today: date) -> None:
+        name, code, contact, email, phone, address = customer
+        overdue_days  = random.randint(15, 180)
+        due_date      = today - timedelta(days=overdue_days)
+        invoice_date  = due_date - timedelta(days=random.randint(30, 90))
+        amount        = round(random.uniform(200, 8000), 2)
+        paid          = round(amount * random.uniform(0, 0.4), 2)
+        balance       = round(amount - paid, 2)
+        open_orders   = random.randint(0, 5)
+        order_value   = round(random.uniform(0, 3000), 2) if open_orders else 0.0
+        agent         = random.choice(_AGENTS)
+        credit_limit  = round(random.choice([5000, 10000, 20000, 50000]), 2)
+        risk          = "High" if balance > credit_limit * 0.8 else ("Medium" if balance > credit_limit * 0.4 else "Low")
+        row.update({
+            'id':            i + 1,
+            'code':          code,
+            'customer':      name,
+            'contact':       contact,
+            'agent':         agent,
+            'address':       address,
+            'invoice_no':    f"FT{2025000 + i + 1}",
+            'invoice_date':  invoice_date.isoformat(),
+            'due_date':      due_date.isoformat(),
+            'overdue_days':  overdue_days,
+            'payment_terms': random.choice([30, 60, 90]),
+            'amount':        amount,
+            'paid':          paid,
+            'balance':       balance,
+            'credit_limit':  credit_limit,
+            'open_orders':   open_orders,
+            'order_value':   order_value,
+            'risk':          risk,
+            'email':         email,
+            'phone':         phone,
+            'note':          "Instalment plan in progress" if i == 2 else "",
+        })
 
-        ms.sort('balance', ascending=False)
+    # ── Confirm (step: confirm) ───────────────────────────────────────────────
 
+    def process_confirm(self) -> dict:
+        sel = self.selected()
+        if len(sel) == 0:
+            sel = self
+        count     = len(sel)
+        total     = sum(float(r.get('balance') or 0) for r in sel)
+        high_risk = sum(1 for r in sel if r.get('risk') == 'High')
+        return {
+            'processed': count,
+            'total':     round(total, 2),
+            'high_risk': high_risk,
+            'message': (
+                f'{count} reminders sent — '
+                f'total outstanding: € {total:,.2f} '
+                f'({high_risk} high-risk customers)'
+            ),
+        }
+
+
+@endpoint('payment_wizard')
+def payment_wizard(data: dict) -> dict:
+    step = data.get('step')
+
+    if step == 'preview':
+        ms = PaymentWizardSet().build(float(data.get('min_amount', 0) or 0))
         return {
             'status':    'success',
             'data':      ms.to_list(),
@@ -85,29 +112,12 @@ def payment_wizard(data: dict) -> dict:
             'code':      200,
         }
 
-    # ── Step 2: process confirmed rows ────────────────────────────────────────
-    elif step == 'confirm':
-        ms  = MemorySet.from_list(data.get('rows', []), 'payment_wizard_data')
-        sel = ms.selected()
-        if len(sel) == 0:
-            sel = ms
-
-        count     = len(sel)
-        total     = sum(float(r.get('balance') or 0) for r in sel)
-        high_risk = sum(1 for r in sel if r.get('risk') == 'High')
-
+    if step == 'confirm':
+        ms = PaymentWizardSet()
+        ms.reload_data(data.get('rows', []))
         return {
-            'status': 'success',
-            'data': {
-                'processed': count,
-                'total':     round(total, 2),
-                'high_risk': high_risk,
-                'message': (
-                    f'{count} reminders sent — '
-                    f'total outstanding: € {total:,.2f} '
-                    f'({high_risk} high-risk customers)'
-                ),
-            },
+            'status':    'success',
+            'data':      ms.process_confirm(),
             'next_step': 'done',
             'code':      200,
         }
