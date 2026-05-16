@@ -1,13 +1,13 @@
 from sqlalchemy import Index
 from sqlalchemy.orm import validates
 from sqlalchemy.ext.hybrid import hybrid_property
+from coframe.i18n import _
 
 
 class Author:
 
     @hybrid_property
     def full_name(self):
-        """Hybrid property for full name"""
         return f"{self.first_name} {self.last_name}"
 
     @full_name.expression
@@ -25,26 +25,12 @@ class Author:
 class Book:
 
     @validates('isbn')
-    def validate_isbn(self, key, value):
-        """ISBN validation (accepts dashes)"""
+    def validate_isbn(self, _key, value):
         if value:
-            # Remove dashes for validation
             clean_isbn = value.replace('-', '')
             if not (len(clean_isbn) == 10 or len(clean_isbn) == 13):
-                raise ValueError("ISBN must be 10 or 13 digits (dashes optional)")
+                raise ValueError(_('ISBN must be 10 or 13 digits (dashes optional)'))
         return value
-
-    @hybrid_property
-    def is_available(self):
-        """Check if book is available for loan"""
-        return self.status == 'A'
-
-    @hybrid_property
-    def average_rating(self):
-        """Calculate average book rating"""
-        if not self.reviews:
-            return 0.0
-        return sum(review.rating for review in self.reviews) / len(self.reviews)
 
     def __repr__(self):
         return f"<Book {self.title}>"

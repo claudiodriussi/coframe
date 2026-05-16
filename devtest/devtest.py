@@ -117,6 +117,7 @@ def main():
     db_file = 'devtest.sqlite'
     is_db = Path(db_file).exists()
     app.initialize_db(f'sqlite:///{db_file}', model)
+    plugins.load_all_locales()
     if not is_db:
         populate_db(app)
 

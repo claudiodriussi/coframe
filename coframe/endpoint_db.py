@@ -1,6 +1,7 @@
 import coframe
 from coframe.endpoints import endpoint
 from coframe.querybuilder import DynamicQueryBuilder
+from coframe.i18n import _, _f
 from typing import Dict, Any, Optional
 from sqlalchemy import and_, or_, desc, asc
 from sqlalchemy import Date, DateTime, Integer, inspect as sa_inspect
@@ -32,14 +33,14 @@ def db_operations(data: Dict[str, Any]) -> Dict[str, Any]:
         method = data.get('method', 'get').lower()
 
         if not table_name:
-            return {"status": "error", "message": "Table name is required", "code": 400}
+            return {"status": "error", "message": _('Table name is required'), "code": 400}
 
         # Get database app and model class
         app = coframe.utils.get_app()
         model_class = app.find_model_class(table_name)
 
         if not model_class:
-            return {"status": "error", "message": f"Table '{table_name}' not found", "code": 404}
+            return {"status": "error", "message": _f("Table '{name}' not found", name=table_name), "code": 404}
 
         db_table = app.tables.get(table_name)
 
@@ -53,7 +54,7 @@ def db_operations(data: Dict[str, Any]) -> Dict[str, Any]:
         elif method == 'delete':
             return handle_delete(app, model_class, data, db_table)
         else:
-            return {"status": "error", "message": f"Unsupported method: '{method}'", "code": 400}
+            return {"status": "error", "message": _f("Unsupported method: '{method}'", method=method), "code": 400}
 
     except Exception as e:
         import traceback
@@ -83,7 +84,7 @@ def handle_get(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[
             # Get single record
             record = session.query(model_class).get(record_id)
             if not record:
-                return {"status": "error", "message": f"Record with id {record_id} not found", "code": 404}
+                return {"status": "error", "message": _f('Record with id {id} not found', id=record_id), "code": 404}
 
             return {
                 "status": "success",
@@ -157,7 +158,7 @@ def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Di
     record_data = params.get('data')
 
     if not record_data:
-        return {"status": "error", "message": "No data provided for creation", "code": 400}
+        return {"status": "error", "message": _('No data provided for creation'), "code": 400}
 
     # Create new instance
     try:
@@ -174,7 +175,7 @@ def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Di
             return {
                 "status": "success",
                 "data": coframe.utils.serialize_model(new_record, db_table=db_table),
-                "message": "Record created successfully",
+                "message": _('Record created successfully'),
                 "code": 201
             }
     except Exception as e:
@@ -185,11 +186,11 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
     """Handle UPDATE operations"""
     record_id = params.get(_pk_field(db_table))
     if not record_id:
-        return {"status": "error", "message": "Record ID is required for updates", "code": 400}
+        return {"status": "error", "message": _('Record ID is required for updates'), "code": 400}
 
     record_data = params.get('data')
     if not record_data:
-        return {"status": "error", "message": "No data provided for update", "code": 400}
+        return {"status": "error", "message": _('No data provided for update'), "code": 400}
 
     with app.get_session() as session:
         # Find the record
@@ -210,7 +211,7 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
             return {
                 "status": "success",
                 "data": coframe.utils.serialize_model(record, db_table=db_table),
-                "message": "Record updated successfully",
+                "message": _('Record updated successfully'),
                 "code": 200
             }
         except Exception as e:
@@ -222,7 +223,7 @@ def handle_delete(app, model_class, params: Dict[str, Any], db_table=None) -> Di
     """Handle DELETE operations"""
     record_id = params.get(_pk_field(db_table))
     if not record_id:
-        return {"status": "error", "message": "Record ID is required for deletion", "code": 400}
+        return {"status": "error", "message": _('Record ID is required for deletion'), "code": 400}
 
     with app.get_session() as session:
         # Find the record
@@ -235,7 +236,7 @@ def handle_delete(app, model_class, params: Dict[str, Any], db_table=None) -> Di
             session.commit()
             return {
                 "status": "success",
-                "message": "Record deleted successfully",
+                "message": _('Record deleted successfully'),
                 "code": 200
             }
         except Exception as e:
@@ -342,7 +343,7 @@ def db_query(data: Dict[str, Any]) -> Dict[str, Any]:
     want_count = bool(data.get("count", False))
 
     if not query_def:
-        return {"status": "error", "message": "Query not defined", "code": 400}
+        return {"status": "error", "message": _('Query not defined'), "code": 400}
 
     # Allow top-level limit/offset as a convenience shorthand
     if 'limit' in data and 'limit' not in query_def:
@@ -395,7 +396,7 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
         if not username or not password:
             return {
                 "status": "error",
-                "message": "Username and password are required",
+                "message": _('Username and password are required'),
                 "code": 400
             }
 
@@ -413,7 +414,7 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
         if not user:
             return {
                 "status": "error",
-                "message": "Invalid credentials",
+                "message": _('Invalid credentials'),
                 "code": 401
             }
 
@@ -423,7 +424,7 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
         if not bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8')):
             return {
                 "status": "error",
-                "message": "Invalid credentials",
+                "message": _('Invalid credentials'),
                 "code": 401
             }
         '''
@@ -431,7 +432,7 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
         if getattr(user, pass_field) != password:
             return {
                 "status": "error",
-                "message": "Invalid credentials",
+                "message": _('Invalid credentials'),
                 "code": 401
             }
 
@@ -439,7 +440,7 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
         if hasattr(user, 'is_active') and not user.is_active:
             return {
                 "status": "error",
-                "message": "Account is inactive",
+                "message": _('Account is inactive'),
                 "code": 401
             }
 
@@ -494,7 +495,7 @@ def update_context(data):
         if not current_context or 'id' not in current_context:
             return {
                 "status": "error",
-                "message": "User not authenticated",
+                "message": _('User not authenticated'),
                 "code": 401
             }
 
@@ -564,7 +565,10 @@ def get_server_config(data: Dict[str, Any]) -> Dict[str, Any]:
         return {
             'status': 'success',
             'data': {
-                'config': app.pm.config.get('dataview', {}),
+                'config': {
+                    **app.pm.config.get('dataview', {}),
+                    'locale': app.pm.config.get('locale', 'en'),
+                },
                 'types': app.get_type_schema(include_builtin),
                 'tables': app.get_table_schema(),
             },

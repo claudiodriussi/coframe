@@ -4,17 +4,17 @@ from coframe.endpoints import endpoint
 
 
 _CUSTOMERS = [
-    ("Acme SRL",       "C001", "Mario Rossi",    "info@acme.it",             "+39 02 1234567",  "Via Roma 1, Milano"),
-    ("Beta SpA",       "C002", "Luca Bianchi",   "amministrazione@beta.it",  "+39 011 9876543", "Corso Torino 22, Torino"),
-    ("Gamma & Co",     "C003", "Anna Verdi",     "contabilita@gamma.it",     "+39 06 5554433",  "Via Veneto 5, Roma"),
-    ("Delta Srl",      "C004", "Paolo Neri",     "dir@delta.eu",             "+39 051 3334422", "Via Marconi 8, Bologna"),
-    ("Epsilon Corp",   "C005", "Sara Gialli",    "ufficio@epsilon.it",       "+39 049 7778899", "Via Università 3, Padova"),
-    ("Zeta Trading",   "C006", "Giorgio Blu",    "zeta@zetatrading.com",     "+39 055 2223344", "Lungarno 14, Firenze"),
-    ("Eta Servizi",    "C007", "Marta Rosa",     "info@etaservizi.it",       "+39 080 6667788", "Via Sparano 10, Bari"),
-    ("Theta Group",    "C008", "Carlo Viola",    "billing@thetagroup.eu",    "+39 090 1112233", "Via Messina 7, Palermo"),
+    ("Acme Srl",        "C001", "Mario Rossi",      "info@acme.it",              "+39 02 1234567",   "Via Roma 1, Milan, Italy"),
+    ("Beta SpA",        "C002", "Luca Bianchi",      "admin@beta.it",             "+39 011 9876543",  "Corso Torino 22, Turin, Italy"),
+    ("Müller GmbH",     "C003", "Hans Müller",       "buchhaltung@mueller.de",    "+49 89 3456789",   "Leopoldstraße 12, Munich, Germany"),
+    ("Dupont & Fils",   "C004", "Claire Dupont",     "compta@dupont.fr",          "+33 1 4455 6677",  "Rue de Rivoli 45, Paris, France"),
+    ("Iberian Trade",   "C005", "Carlos García",     "facturacion@iberian.es",    "+34 93 2223344",   "Passeig de Gràcia 80, Barcelona, Spain"),
+    ("Nordic Supply",   "C006", "Erik Lindqvist",    "billing@nordicsupply.se",   "+46 8 7778899",    "Kungsgatan 34, Stockholm, Sweden"),
+    ("Atlas Corp",      "C007", "Sophie Bernard",    "finance@atlascorp.be",      "+32 2 5556677",    "Avenue Louise 100, Brussels, Belgium"),
+    ("Hellenic Trade",  "C008", "Nikos Papadopoulos","info@hellenic.gr",          "+30 21 0334455",   "Ermou 18, Athens, Greece"),
 ]
 
-_AGENTS = ["Nord", "Centro", "Sud", "Export"]
+_AGENTS = ["North", "Central", "South", "Export"]
 
 
 @endpoint('payment_wizard')
@@ -48,8 +48,8 @@ def payment_wizard(data: dict) -> dict:
             last_invoice  = f"FT{2025000 + i + 1}"
             payment_terms = random.choice([30, 60, 90])
             credit_limit  = round(random.choice([5000, 10000, 20000, 50000]), 2)
-            risk          = "Alto" if balance > credit_limit * 0.8 else ("Medio" if balance > credit_limit * 0.4 else "Basso")
-            note          = "Accordo rateale in corso" if i == 2 else ""
+            risk          = "High" if balance > credit_limit * 0.8 else ("Medium" if balance > credit_limit * 0.4 else "Low")
+            note          = "Instalment plan in progress" if i == 2 else ""
 
             if balance < min_amount:
                 continue
@@ -90,7 +90,7 @@ def payment_wizard(data: dict) -> dict:
         rows    = data.get('rows', [])
         count   = len(rows)
         total   = sum(float(r.get('balance', 0)) for r in rows)
-        high_risk = sum(1 for r in rows if r.get('risk') == 'Alto')
+        high_risk = sum(1 for r in rows if r.get('risk') == 'High')
 
         return {
             'status': 'success',
@@ -99,13 +99,13 @@ def payment_wizard(data: dict) -> dict:
                 'total':      round(total, 2),
                 'high_risk':  high_risk,
                 'message':    (
-                    f'{count} solleciti elaborati — '
-                    f'totale esposto: € {total:,.2f} '
-                    f'({high_risk} clienti ad alto rischio)'
+                    f'{count} reminders sent — '
+                    f'total outstanding: € {total:,.2f} '
+                    f'({high_risk} high-risk customers)'
                 ),
             },
             'next_step': 'done',
             'code':      200,
         }
 
-    return {'status': 'error', 'message': f'step sconosciuto: {step!r}', 'code': 400}
+    return {'status': 'error', 'message': f'Unknown step: {step!r}', 'code': 400}

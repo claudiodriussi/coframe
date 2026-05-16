@@ -15,7 +15,7 @@ Two layers:
 
 Planned sections:
   dump_*     — read-only introspection (pages, tables, types, plugins, endpoints)
-  [future]   — dump-endpoints: catalogo endpoint registrati con metadata
+  [future]   — dump-endpoints: catalog of registered endpoints with metadata
   [future]   — schema migrations (alembic wrappers)
   [future]   — backup / restore
   [future]   — db engine migration

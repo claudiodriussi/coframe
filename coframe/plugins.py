@@ -1,5 +1,7 @@
 import sys
 import os
+import importlib
+import importlib.util
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
@@ -573,6 +575,60 @@ class PluginsManager:
             return [self.resolve_refs(item, _seen, plugin_context) for item in obj]
 
         return obj
+
+    def load_locale(self, locale: str) -> None:
+        """
+        Load translations for the given locale from the core library and all plugins.
+
+        - Core: coframe.locale.{locale}  (standard importlib)
+        - Plugins: {plugin_dir}/locale/{locale}.py  (spec_from_file_location, no __init__ needed)
+
+        Call after load_plugins(). Safe to call with locale='en' (no-op).
+        """
+        if locale == 'en':
+            return
+
+        # Core library translations
+        try:
+            importlib.import_module(f'coframe.locale.{locale}')
+        except ModuleNotFoundError:
+            pass
+
+        # Plugin translations in dependency order
+        for name in self.sorted:
+            plugin = self.plugins[name]
+            locale_file = plugin.plugin_dir / 'locale' / f'{locale}.py'
+            if not locale_file.exists():
+                continue
+            spec = importlib.util.spec_from_file_location(
+                f'_coframe_locale_{name}_{locale}', locale_file
+            )
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)  # type: ignore[union-attr]
+                self.logger.info(f'[i18n] Loaded {locale_file}')
+
+    def load_all_locales(self) -> None:
+        """
+        Load every locale file found in the core library and all plugins.
+
+        Scans coframe/locale/*.py and {plugin_dir}/locale/*.py for each plugin,
+        then calls load_locale() for each unique locale found.
+        Replaces load_locale(single_locale) when multi-language support is needed.
+        """
+        core_locale_dir = Path(__file__).parent / 'locale'
+        dirs: List[Path] = [core_locale_dir]
+        for name in self.sorted:
+            dirs.append(self.plugins[name].plugin_dir / 'locale')
+
+        loaded: set = set()
+        for d in dirs:
+            if not d.exists():
+                continue
+            for f in sorted(d.glob('*.py')):
+                if f.stem != '__init__' and f.stem not in loaded:
+                    self.load_locale(f.stem)
+                    loaded.add(f.stem)
 
     def get_sources(self, to_str: bool = False) -> List[Path]:
         """

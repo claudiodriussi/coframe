@@ -17,6 +17,7 @@ from functools import wraps
 import coframe
 import coframe.server_utils as srv
 from coframe.utils import get_app
+from coframe.i18n import set_locale
 
 # ============================================================================
 # Initialize Coframe
@@ -40,6 +41,9 @@ coframe_app.add_query_behavior(Archivable)
 db_url = 'sqlite:///devtest.sqlite'
 import model  # type: ignore
 coframe_app.initialize_db(db_url, model)
+
+# Load locale translations for all plugins
+plugins.load_all_locales()
 
 # Get command processor
 command_processor = coframe_app.cp
@@ -109,6 +113,10 @@ def login_required(f):
         # If token was refreshed, save for after_request hook
         if new_token:
             g.new_token = new_token
+
+        # Set request-scoped locale from JWT or app config fallback
+        locale = payload.get('locale') or plugins.config.get('locale', 'en')
+        set_locale(locale)
 
         return f(*args, **kwargs)
 
