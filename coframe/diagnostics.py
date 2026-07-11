@@ -1,7 +1,8 @@
 """
 coframe.diagnostics — post-load validation and effective-state dump.
 
-Two entry points, both pure (no file I/O, no argparse):
+Two entry points (run_checks is pure; dump_app reads the plugin source files
+to embed them; neither uses argparse):
 
   run_checks(app)  -> List[issue]
       Validate the merged plugin data after everything is loaded
@@ -14,10 +15,11 @@ Two entry points, both pure (no file I/O, no argparse):
       Complete JSON-serializable snapshot of the effective application
       state: plugins, issues, tables, types, every descriptor section
       (pages, views, menus, menu_items, … with $ref resolved), endpoints,
-      merge history. $plugin attribution keys are kept so an external
-      viewer (web app, tkinter, jq, ...) can show which plugin contributed
-      each piece. DB/type sections (tables/types/schemas) are special-cased;
-      all other sections are treated uniformly.
+      merge history, and source_files (raw pre-merge YAML per plugin/file).
+      $plugin attribution keys are kept so an external viewer (web app,
+      tkinter, jq, ...) can show which plugin contributed each piece.
+      DB/type sections (tables/types/schemas) are special-cased; all other
+      sections are treated uniformly.
 
 Issue format (shared with PluginsManager.add_issue):
   {severity: 'error'|'warning'|'info', code, path, message, plugin}
@@ -250,11 +252,32 @@ def dump_app(app: Any) -> Dict[str, Any]:
     contested = {k: sorted(set(v)) for k, v in pm.history.items()
                  if len(set(v)) > 1}
 
+    # Raw pre-merge YAML per plugin/file. Lossless where the merged snapshot is
+    # not: comments, ordering, $after/$remove directives before they are consumed,
+    # types before mixin flattening. Provenance is free — each file is attributed
+    # by its plugin + path. The inspector searches/diffs these instead of walking
+    # the filesystem, and never has to re-run the merge (it stays a viewer).
+    # `content` = parsed (in-memory, structured search); `text` = raw (comments,
+    # textual search), best-effort.
+    source_files: Dict[str, Any] = {}
+    for name in pm.sorted:
+        p = pm.plugins[name]
+        files: Dict[str, Any] = {}
+        entries = [(p.plugin_dir / 'config.yaml', p.config)]
+        entries += list(zip(p.data_files, p.data))
+        for path, parsed in entries:
+            try:
+                text = path.read_text(encoding='utf-8')
+            except OSError:
+                text = None
+            files[path.name] = {'content': parsed, 'text': text}
+        source_files[name] = {'dir': str(p.plugin_dir), 'files': files}
+
     return {
         # Contract version for external consumers (inspector, tooling).
         # Bump on any structural change to the sections below.
         # v2: descriptor sections are generic (pages/views + menus/menu_items/…)
-        #     instead of a hardcoded pages/views pair.
+        #     and + source_files (raw pre-merge YAML per plugin/file).
         'dump_version': 2,
         'generated': datetime.now().isoformat(timespec='seconds'),
         'app': {k: pm.config.get(k) for k in ('name', 'version', 'description')},
@@ -282,4 +305,5 @@ def dump_app(app: Any) -> Dict[str, Any]:
         },
         'contested_keys': contested,
         'merge_history': dict(sorted(pm.history.items())),
+        'source_files': source_files,
     }
