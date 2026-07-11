@@ -304,6 +304,20 @@ class CommandProcessor:
                 sys.modules[spec.name] = module  # Important for relative imports
                 spec.loader.exec_module(module)
 
+                # Bind the module onto its parent package so a later
+                # `import package.module` resolves the attribute correctly.
+                # Without this the submodule sits in sys.modules orphaned, and
+                # `package.module` attribute access (e.g. common.model.Archivable
+                # in the generated model) raises AttributeError.
+                if '.' in spec.name:
+                    parent_name, child_name = spec.name.rsplit('.', 1)
+                    if parent_name:
+                        try:
+                            parent_mod = importlib.import_module(parent_name)
+                            setattr(parent_mod, child_name, module)
+                        except ImportError:
+                            pass
+
                 # Add all endpoints found to the endpoints dictionary
                 self.endpoints.update(_ENDPOINTS.copy())
 

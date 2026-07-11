@@ -72,7 +72,7 @@ def setup_schema():
     app = coframe.utils.get_app()
     app.calc_db(plugins)
 
-    from plugins.common.model import Archivable
+    from common.model import Archivable
     app.add_query_behavior(Archivable)
 
     return app
@@ -98,7 +98,7 @@ def main():
     app = coframe.utils.get_app()
     app.calc_db(plugins)
 
-    from plugins.common.model import Archivable
+    from common.model import Archivable
     app.add_query_behavior(Archivable)
 
     model_file = "model.py"
@@ -109,8 +109,8 @@ def main():
     else:
         print("No regeneration required.")
 
-    import plugins.libapp.library as library  # type: ignore
-    library.test.ok()
+    import library.test as library_test  # type: ignore
+    library_test.ok()
 
     # open db engine and populate empty db
     import model  # type: ignore

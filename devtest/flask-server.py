@@ -35,7 +35,7 @@ plugins.load_plugins()
 coframe_app = get_app()
 coframe_app.calc_db(plugins)
 
-from plugins.common.model import Archivable
+from common.model import Archivable
 coframe_app.add_query_behavior(Archivable)
 
 db_url = 'sqlite:///devtest.sqlite'

@@ -1,0 +1,199 @@
+# Demo DataForm sofisticato — layout engine completo, descriptor-driven.
+#
+# Caricato dal plugin system (deep_merge a startup) e servito via get_page:
+#   product_demo_form — DataForm con layout column-first, tabs, width%/px, filler.
+#
+# I dati di default vivono in source.data: il frontend li legge dal descriptor
+# e li passa a DataForm come binding locale (Mode 4), nessun model/DB.
+
+pages:
+
+  product_demo_form:
+    title: Scheda prodotto
+    content:
+      $ref: "views.product_demo_form"
+
+views:
+
+  product_demo_form:
+    type: form
+    source:
+      autofocus: name
+      data:
+        # Generale
+        name: Tavolo Scandinavo
+        sku: TAV-SCAND-001
+        category_id: 2
+        status: active
+        price: 349.90
+        cost: 180.00
+        vat: 22
+        active: true
+        launch_date: "2026-03-01"
+        # Dimensioni
+        width: 120
+        depth: 80
+        height: 75
+        weight: 18.5
+        # Fornitore
+        supplier_id: 1
+        supplier_code: SC-9921
+        lead_time: 14
+        min_order: 5
+        # Note
+        short_desc: Tavolo in rovere massello, design nordico minimale.
+        notes: Disponibile anche in finitura noce. Montaggio richiesto.
+        internal_notes: Margine sotto target — rivedere prezzo Q3.
+    policy:
+      editable: true
+    actions:
+      toolbar: [save, cancel]
+    layout:
+
+      - type: label
+        text: Anagrafica prodotto
+        style: heading
+
+      # section column-first: 2 colonne, campi affiancati con width %/px + filler
+      - type: section
+        columns:
+          - fields:
+              - name: name
+                label: Nome
+                required: true
+              - name: sku
+                label: Codice (SKU)
+              - name: category_id
+                label: Categoria
+                widget: combobox
+                width: "55%"
+                choices:
+                  - { value: 1, label: Sedie }
+                  - { value: 2, label: Tavoli }
+                  - { value: 3, label: Armadi }
+                  - { value: 4, label: Illuminazione }
+              - name: status
+                label: Stato
+                widget: combobox
+                width: "45%"
+                choices:
+                  - { value: draft,        label: Bozza }
+                  - { value: active,       label: Attivo }
+                  - { value: discontinued, label: Fuori produzione }
+          - fields:
+              - name: price
+                label: Prezzo
+                type: Float
+                widget: number
+                width: "50%"
+                widget_props: { prefix: "€" }
+              - name: cost
+                label: Costo
+                type: Float
+                widget: number
+                width: "50%"
+                widget_props: { prefix: "€" }
+              - name: vat
+                label: IVA %
+                type: Int
+                width: "80px"
+              - filler:
+              - name: launch_date
+                label: Data lancio
+                type: Date
+              - name: active
+                label: In catalogo
+                type: Boolean
+
+      - type: hr
+
+      # tabs multi-pagina
+      - type: tabs
+        pages:
+
+          - label: Dimensioni
+            layout:
+              - type: section
+                label: Misure (cm) e peso
+                border: true
+                columns:
+                  - fields:
+                      - name: width
+                        label: Larghezza
+                        type: Int
+                        width: "33%"
+                      - name: depth
+                        label: Profondità
+                        type: Int
+                        width: "33%"
+                      - name: height
+                        label: Altezza
+                        type: Int
+                        width: "33%"
+                      - filler:
+                      - name: weight
+                        label: Peso (kg)
+                        type: Float
+                        width: "120px"
+
+          - label: Fornitore
+            # row + col eterogeneo: due sezioni affiancate
+            layout:
+              - type: row
+                children:
+                  - type: col
+                    weight: 1
+                    layout:
+                      - type: section
+                        label: Anagrafica
+                        columns:
+                          - fields:
+                              - name: supplier_id
+                                label: Fornitore
+                                widget: combobox
+                                choices:
+                                  - { value: 1, label: Nordic Wood S.r.l. }
+                                  - { value: 2, label: Faggio & Co. }
+                                  - { value: 3, label: Industrie Legno SPA }
+                              - name: supplier_code
+                                label: Codice fornitore
+                  - type: col
+                    weight: 1
+                    layout:
+                      - type: section
+                        label: Approvvigionamento
+                        columns:
+                          - fields:
+                              - name: lead_time
+                                label: Lead time (gg)
+                                type: Int
+                              - name: min_order
+                                label: Ordine minimo
+                                type: Int
+
+          - label: Note
+            # nested: section a 2 colonne dentro il tab (short_desc | notes)
+            layout:
+              - type: label
+                text: Pubbliche
+                style: subheading
+              - type: section
+                columns:
+                  - fields:
+                      - name: short_desc
+                        label: Descrizione breve
+                        widget: textarea
+                  - fields:
+                      - name: notes
+                        label: Note
+                        widget: textarea
+              - type: hr
+              - type: label
+                text: Interne
+                style: subheading
+              - type: section
+                columns:
+                  - fields:
+                      - name: internal_notes
+                        label: Note interne
+                        widget: textarea

@@ -115,8 +115,11 @@ class PluginsManager:
             if not plugins_dir.exists():
                 raise ValueError(f"The plugins folder: {plugins_dir} does not exist")
 
-            # Add plugin directory to Python path for imports
-            sys.path.append(str(Path.cwd() / str(plugins_dir)))
+            # Add plugin directory to Python path for imports.
+            # resolve() normalises out-of-tree roots (e.g. '../plugins') so sys.path
+            # holds a single canonical absolute path — avoids '..' and duplicate
+            # entries that would import the same module twice under different names.
+            sys.path.append(str((Path.cwd() / str(plugins_dir)).resolve()))
 
             # Scan for plugin directories
             for plugin_dir in plugins_dir.iterdir():
@@ -447,12 +450,14 @@ class PluginsManager:
         """
         env = ""
         for plugins_dir in self.config['plugins']:
-            plugins_dir = Path(plugins_dir)
+            # resolve() normalises out-of-tree roots ('../plugins') to a canonical
+            # absolute path, matching what load_plugins() puts on sys.path.
+            abs_dir = str((Path.cwd() / str(plugins_dir)).resolve())
             if windows:
-                s = f'set PYTHONPATH="{str(Path.cwd() / str(plugins_dir))}";%PYTHONPATH%\n'
+                s = f'set PYTHONPATH="{abs_dir}";%PYTHONPATH%\n'
                 env += s.replace("/", "\\")
             else:
-                s = f'export PYTHONPATH="{str(Path.cwd() / str(plugins_dir))}:$PYTHONPATH"\n'
+                s = f'export PYTHONPATH="{abs_dir}:$PYTHONPATH"\n'
                 env += s.replace("\\", "/")
         return env
 

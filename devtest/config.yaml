@@ -6,8 +6,10 @@ license: MIT
 author: "Claudio Driussi"
 log_file: "devtest.log"
 
-# folders which contain plugins
-plugins: [plugins, plugins/libapp]
+# folders which contain plugins (each entry is a *root* holding plugin dirs).
+# `commons` is a separate root (shared/reusable plugins) kept distinct from the
+# app-specific `plugins` root — this exercises the multi-root composition.
+plugins: [commons, plugins, plugins/libapp]
 
 # db engine for sqlalchemy
 db_engine: "sqlite:///:memory:"

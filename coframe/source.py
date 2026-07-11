@@ -125,12 +125,13 @@ class PluginClassFinder:
             plugin: Plugin object that owns the source file
         """
 
-        # Construct the module path
-        module_parts = list(source_file.parts)
-
-        # Convert path to module notation (directory.file)
-        module_parts[-1] = module_parts[-1].replace('.py', '')
-        module_path = '.'.join(module_parts)
+        # Construct the module path relative to the plugin's root.
+        # load_plugins() puts each plugin *root* on sys.path, so every plugin is
+        # importable by its own folder name — regardless of where that root lives
+        # on disk (this is what makes out-of-tree roots like ../commons work).
+        # Deriving the module from the full filesystem path instead would produce
+        # invalid names for out-of-tree roots (e.g. '..commons.common.model').
+        module_path = f"{source_file.parent.name}.{source_file.stem}"
 
         try:
             # Import the module
@@ -573,26 +574,30 @@ class Generator:
 
     def _generate_source(self) -> None:
         """Generate the complete source code."""
+        # Build body parts FIRST: mixin generation registers the imports of its
+        # base classes (e.g. `import common.model` for Archivable), so it must run
+        # before import statements are rendered — otherwise those imports are lost.
+        helper_code = self._generate_helper_functions()
+        mixin_code = self._generate_mixin_classes()
+
         source_parts = []
 
         # Add file header warning
         source_parts.append(self._generate_file_header())
         source_parts.append("")
 
-        # Add imports
+        # Add imports (now complete — all body generators have run)
         source_parts.append(self.imports.generate_import_statements())
         source_parts.append("")
         source_parts.append("")
 
         # Add helper functions if any (currently empty - resolve_table_name moved to utils)
-        helper_code = self._generate_helper_functions()
         if helper_code:
             source_parts.append(helper_code)
             source_parts.append("")
             source_parts.append("")
 
         # Add mixins
-        mixin_code = self._generate_mixin_classes()
         if mixin_code:
             source_parts.append(mixin_code)
             source_parts.append("")
