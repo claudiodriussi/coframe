@@ -37,6 +37,11 @@ dataview:
 # Application locale (default 'en' = no translation)
 locale: it
 
+# Menu — default placement (cascade: item → plugin config → app config).
+# Items without an explicit `root` surface in this root. See docs/pending/menu.md §4.
+menu:
+  default_root: main
+
 # table and fields used for authentication
 authentication:
   user_table: User

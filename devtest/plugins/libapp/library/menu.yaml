@@ -1,0 +1,5 @@
+# Content plugin — items under the 'library' group. See docs/pending/menu.md §2.
+
+menu_items:
+  loans:   { label: Loans,   icon: repeat, parent: library, order: 10, action: stack_push, panel: loan_manager }
+  reviews: { label: Reviews, icon: star,   parent: library, order: 20, action: stack_push, panel: review_list }

@@ -1,0 +1,28 @@
+# App-layout plugin — devtest.
+# Owns the menu STRUCTURE (docs/pending/menu.md §1): the root, the top-level
+# groups (hook points), and the placement of the COMMONS plugins' pages
+# (User/Config) — commons are menu-silent because they are reused across apps.
+# App-specific plugins (books, library, panels, wizards) append their own leaf
+# items to these groups by parent-id.
+#
+# Action shape = the canonical row-action vocabulary (UI_DESCRIPTORS §3):
+# `action: stack_push` (scalar) + `panel: <page_id>`. Same vocabulary as views,
+# so diagnostics validates the targets with the same generic checks.
+
+menus:
+  main:
+    label: DevTest
+    home_page: hello_demo
+
+menu_items:
+
+  # ── Top-level groups (hook points) — no action, root via default_root ──
+  masters:    { label: Masters,    icon: database,      order: 10 }
+  catalog:    { label: Catalog,    icon: book,          order: 20 }
+  library:    { label: Library,    icon: library,       order: 30 }
+  playground: { label: Playground, icon: flask-conical, order: 90 }
+
+  # ── Commons pages (User/Config): the APP decides whether/where they surface ──
+  users:    { label: Users,         icon: users,     parent: masters, order: 10, action: stack_push, panel: user_list }
+  userlogs: { label: User logs,     icon: file-text, parent: masters, order: 20, action: stack_push, panel: userlog_list }
+  config:   { label: Configuration, icon: settings,  parent: masters, order: 90, action: stack_push, panel: config_list }

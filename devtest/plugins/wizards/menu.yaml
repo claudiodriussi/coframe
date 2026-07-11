@@ -1,0 +1,6 @@
+# Content plugin — appends to the 'playground' group defined by the layout plugin
+# (converges with the panels plugin items on the same group). See docs/pending/menu.md §2.
+
+menu_items:
+  wizard_payment: { label: "Payment wizard", icon: wand,    parent: playground, order: 40, action: stack_push, panel: payment_wizard_params }
+  wizard_product: { label: "Product demo",   icon: package, parent: playground, order: 50, action: stack_push, panel: product_demo_form }

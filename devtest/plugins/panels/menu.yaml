@@ -1,0 +1,6 @@
+# Content plugin — demo pages under the 'playground' group.
+
+menu_items:
+  demo_hello:   { label: "Hello demo",     icon: sparkles,   parent: playground, order: 10, action: stack_push, panel: hello_demo }
+  demo_panels:  { label: "Book panels",    icon: layout,     parent: playground, order: 20, action: stack_push, panel: book_demo_nested }
+  demo_reviews: { label: "Book + reviews", icon: git-branch, parent: playground, order: 30, action: stack_push, panel: book_with_reviews }

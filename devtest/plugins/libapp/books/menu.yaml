@@ -1,0 +1,7 @@
+# Content plugin (app-specific) — appends its own items to the 'catalog' group
+# (hook point defined by the layout plugin). See docs/pending/menu.md §2.
+
+menu_items:
+  authors:    { label: Authors,    icon: user,     parent: catalog, order: 10, action: stack_push, panel: author_list }
+  publishers: { label: Publishers, icon: building, parent: catalog, order: 20, action: stack_push, panel: publisher_list }
+  books:      { label: Books,      icon: book,     parent: catalog, order: 30, action: stack_push, panel: book_list }
