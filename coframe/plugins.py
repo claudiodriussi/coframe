@@ -29,6 +29,7 @@ class PluginsManager:
             logger_name: Name for the logger instance
         """
         self.history: Dict[str, List[str]] = {}
+        self.issues: List[Dict[str, Any]] = []
         self.data: Dict[str, Any] = {}
         self.config: Dict[str, Any] = {}
         self.plugins: Dict[str, 'Plugin'] = {}
@@ -39,6 +40,26 @@ class PluginsManager:
         # Initialize logging
         self.logger = get_logger(logger_name)
         set_formatter(self.logger, '%(name)s|%(levelname)s|%(message)s')
+
+    def add_issue(self, severity: str, code: str, path: str, message: str,
+                  plugin: Optional[str] = None) -> None:
+        """
+        Record a load-time issue (same format as coframe.diagnostics).
+
+        Issues are collected here during merge and picked up later by
+        diagnostics.run_checks(). Exact duplicates are skipped.
+
+        Args:
+            severity: 'error', 'warning' or 'info'
+            code:     Short machine-readable code (e.g. 'merge-overlap')
+            path:     Dot-notation path of the affected key
+            message:  Human-readable description
+            plugin:   Name of the plugin that triggered the issue
+        """
+        issue = {'severity': severity, 'code': code, 'path': path,
+                 'message': message, 'plugin': plugin}
+        if issue not in self.issues:
+            self.issues.append(issue)
 
     def register_merge_handler(self, pattern: str, handler: Any) -> None:
         """
@@ -262,6 +283,8 @@ class PluginsManager:
                         result[key] = self._merge_lists(v1, v2, plugin, key_path)
                 else:
                     self.logger.warning(f"[{plugin}] Overlapping value for key '{key_path}': {v1} -> {v2}")
+                    self.add_issue('info', 'merge-overlap', key_path,
+                                   f"value overridden: {v1!r} -> {v2!r}", plugin)
                     result[key] = v2
             else:
                 self.logger.info(f"[{plugin}] Adding new key '{key_path}'")
@@ -391,6 +414,8 @@ class PluginsManager:
                 self.logger.warning(
                     f"[{plugin}] Positional anchor '{anchor}' not found in '{key_path}', appending '{identity}'"
                 )
+                self.add_issue('warning', 'merge-anchor-missing', key_path,
+                               f"positional anchor '{anchor}' not found, '{identity}' appended", plugin)
                 order.append(identity)
 
         # Rebuild the ordered list
@@ -428,14 +453,6 @@ class PluginsManager:
         if current_path:
             return f"{'.'.join(current_path)}.{key}"
         return key
-
-    def print_history(self) -> None:
-        """Display the complete history of key definitions across all plugins."""
-        format_str = set_formatter(self.logger, '%(name)s|%(message)s')
-        self.logger.info("Definition History:")
-        for key_path, plugins in sorted(self.history.items()):
-            self.logger.info(f"{key_path}: defined in {sorted(plugins)}")
-        set_formatter(self.logger, format_str)
 
     def export_pythonpath(self, windows: bool = os.name == 'nt') -> str:
         """

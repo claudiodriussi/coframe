@@ -352,6 +352,8 @@ examples:
   dump-table                            all tables
   dump-types                            type inheritance tree + compound types
   dump-types --include-builtin          also show SQLAlchemy built-in roots
+  check                                 validate merged descriptors (refs, models, fields)
+  check --dump                          also write full JSON dump to <output_dir>/appdump.json
         """,
     )
 
@@ -390,10 +392,45 @@ examples:
     p.add_argument('-o', '--output', metavar='PATH',
                    help='Output file path (- = stdout; default: <output_dir>/types.yaml)')
 
+    # ── check ──────────────────────────────────────────────────────────────────
+    p = sub.add_parser(
+        'check',
+        help='Validate merged descriptors; report unresolved refs, unknown models/fields, orphans',
+    )
+    p.add_argument('--dump', nargs='?', const='', metavar='PATH',
+                   help='Also write the full effective-state JSON dump '
+                        '(default path: <output_dir>/appdump.json)')
+
     return parser
 
 
 # ── CLI dispatcher ─────────────────────────────────────────────────────────────
+
+def print_issues(issues: List[Dict[str, Any]]) -> int:
+    """
+    Print issues grouped by severity (errors first). Returns the error count.
+    """
+    by_sev: Dict[str, List[Dict[str, Any]]] = {'error': [], 'warning': [], 'info': []}
+    for issue in issues:
+        by_sev.setdefault(issue['severity'], []).append(issue)
+
+    for sev in ('error', 'warning', 'info'):
+        group = by_sev[sev]
+        if not group:
+            continue
+        print(f'\n{sev.upper()} ({len(group)}):')
+        for i in sorted(group, key=lambda x: (x['code'], x['path'])):
+            plugin = f"  [{i['plugin']}]" if i.get('plugin') else ''
+            print(f"  {i['code']:<20} {i['path']} — {i['message']}{plugin}")
+
+    total = sum(len(g) for g in by_sev.values())
+    if total == 0:
+        print('No issues found.')
+    else:
+        print(f"\n{len(by_sev['error'])} errors, {len(by_sev['warning'])} warnings, "
+              f"{len(by_sev['info'])} info.")
+    return len(by_sev['error'])
+
 
 def _write(yaml_text: str, label: str, out_arg: str, default_path: Path) -> None:
     """Write yaml_text to stdout or a file, printing a status line."""
@@ -444,6 +481,25 @@ def run_cli(app: Any, args: argparse.Namespace, output_dir: Path = Path('.')) ->
     elif args.command == 'dump-types':
         yaml_text, label = dump_types(app, include_builtin=args.include_builtin)
         _write(yaml_text, label, out_arg, output_dir / 'types.yaml')
+
+    elif args.command == 'check':
+        import json
+        from coframe.diagnostics import run_checks, dump_app
+
+        issues = run_checks(app)
+        n_errors = print_issues(issues)
+
+        if args.dump is not None:
+            dump = dump_app(app)
+            out_path = Path(args.dump) if args.dump else output_dir / 'appdump.json'
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(
+                json.dumps(dump, indent=2, ensure_ascii=False, default=str),
+                encoding='utf-8')
+            print(f'Full dump written: {out_path}')
+
+        if n_errors:
+            sys.exit(1)
 
     else:
         make_parser().print_help()
