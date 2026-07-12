@@ -564,7 +564,12 @@ class Generator:
         """
         code = []
 
-        for mixin in self.mixins:
+        # sorted(): self.mixins is a set — iterating it raw makes the *textual*
+        # order of these (independent) class blocks depend on PYTHONHASHSEED.
+        # No functional impact (column order follows the MRO / bases list, not the
+        # print order), but stable output is nicer to read/diff. Matches how
+        # imports are already emitted (sorted()).
+        for mixin in sorted(self.mixins):
             if mixin in self.db.types:
                 type_def = self.db.types[mixin]
 
