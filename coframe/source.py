@@ -180,7 +180,8 @@ class RelationshipManager:
         self.back_relations: Dict[str, List[str]] = {}  # Table name -> list of backref statements
 
     def add_foreign_key_relation(self, table: str, fk_table_name: str,
-                                 column_name: str, fk_table: DbTable, py_type: str) -> None:
+                                 column_name: str, fk_table: DbTable, py_type: str,
+                                 fk_id: str = 'id', soft: bool = False) -> None:
         """
         Add foreign key relationship between tables.
 
@@ -190,21 +191,33 @@ class RelationshipManager:
             column_name: Current column name
             fk_table: Foreign table object
             py_type: Python type for the relationship
+            fk_id: Referenced column on the foreign table (default 'id')
+            soft: If True the column has no ForeignKey constraint — the join must
+                  be stated explicitly (primaryjoin + foreign_keys) since
+                  SQLAlchemy can no longer infer it.
         """
         indent = " " * 4
+
+        # Soft FKs need an explicit join spec; hard FKs let SQLAlchemy infer it
+        # from the ForeignKey constraint.
+        extra = ""
+        if soft:
+            join = f"{table.name}.{column_name} == {fk_table.name}.{fk_id}"
+            local = f"{table.name}.{column_name}"
+            extra = f", primaryjoin='{join}', foreign_keys='{local}'"
 
         # Add forward relation
         relation = self.add_relation_key(table.name, self.direct_relations)
         relation.append(
             f"{indent}{fk_table.name.lower()}: Mapped[{py_type}] = "
-            f"relationship('{fk_table.name}', back_populates='{table.table_name.lower()}')\n"
+            f"relationship('{fk_table.name}', back_populates='{table.table_name.lower()}'{extra})\n"
         )
 
         # Add back relation
         relation = self.add_relation_key(fk_table.name, self.back_relations)
         relation.append(
             f"{indent}{table.table_name.lower()}: Mapped[List['{table.name}']] = "
-            f"relationship('{table.name}', back_populates='{fk_table.name.lower()}')\n"
+            f"relationship('{table.name}', back_populates='{fk_table.name.lower()}'{extra})\n"
         )
 
     def add_relation_key(self, name: str, relation: Dict[str, List[str]] = {}) -> List[str]:
@@ -299,22 +312,31 @@ class ColumnGenerator:
         fk_table = fk['table']
         fk_id = fk['id']
 
-        # Process additional foreign key arguments
+        # `constraint: false` → soft FK: keep the navigable relationship but emit
+        # NO DB-level FK constraint, so the column may hold values with no matching
+        # parent (unknown / late-bound codes, dirty imports). See PLUGIN_MODEL § 4.5.
+        soft = fk.get('constraint') is False
+
+        # Additional ForeignKey() arguments (ondelete, onupdate, …). `constraint`
+        # is a Coframe hint, not a ForeignKey kwarg — never forward it.
         fk_args = []
         for a in fk:
-            if a not in ['target', 'table', 'id']:
+            if a not in ['target', 'table', 'id', 'constraint']:
                 fk_args.append(f"{a}={fk[a]}")
 
         fk_args_str = f", {', '.join(fk_args)}" if fk_args else ""
-        foreign = f", ForeignKey('{fk_table.table_name}.{fk_id}'{fk_args_str})"
 
-        # Add relationship definitions
+        if soft:
+            foreign = ""   # no ForeignKey → no DB constraint, orphan values allowed
+        else:
+            foreign = f", ForeignKey('{fk_table.table_name}.{fk_id}'{fk_args_str})"
+            self.imports.column_imports.add('ForeignKey')
+
+        # Add relationship definitions (soft ones carry an explicit join: without a
+        # ForeignKey, SQLAlchemy cannot infer the join condition on its own)
         self.relationships.add_foreign_key_relation(
-            table, fk_table.name, column.name, fk_table, py_type
+            table, fk_table.name, column.name, fk_table, py_type, fk_id, soft
         )
-
-        # Add needed imports
-        self.imports.column_imports.add('ForeignKey')
         self.imports.add_relationship_imports()
 
         return foreign
