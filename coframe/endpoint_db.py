@@ -98,7 +98,9 @@ def handle_get(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[
             # Apply filters
             if query_filters:
                 filter_conditions = build_filters(model_class, query_filters)
-                if filter_conditions:
+                # `is not None`: a SQLAlchemy clause has no defined truth value
+                # (bool() raises), so a plain `if filter_conditions:` would crash.
+                if filter_conditions is not None:
                     query = query.filter(filter_conditions)
 
             # Apply ordering
@@ -261,7 +263,14 @@ def build_filters(model_class, query_filters: Dict[str, Any]) -> Optional[Any]:
       - ilike: Case-insensitive LIKE
       - in: IN a list of values
       - between: Between two values (provide [min, max] list)
-    - Logical OR: {"$or": [{condition1}, {condition2}, ...]}
+    - Logical OR:  {"$or":  [{condition1}, {condition2}, ...]}
+    - Logical AND: {"$and": [{group1}, {group2}, ...]}
+
+    AND is the *implicit* default: sibling keys in a filter dict are AND-ed
+    together. The explicit "$and" is only needed to AND whole sub-groups —
+    e.g. (A OR B) AND (C OR D), which the flat form can't express because a
+    dict has at most one "$or" key. Its list of sub-filters is built
+    recursively and folded into the surrounding AND.
     """
     if not query_filters:
         return None
@@ -281,6 +290,17 @@ def build_filters(model_class, query_filters: Dict[str, Any]) -> Optional[Any]:
 
         # Remove $or from further processing
         query_filters = {k: v for k, v in query_filters.items() if k != "$or"}
+
+    # Handle special $and operator — each sub-group is built recursively and
+    # added to `conditions`, which are AND-ed together below (symmetric to $or).
+    if "$and" in query_filters:
+        for and_filter in query_filters["$and"]:
+            and_condition = build_filters(model_class, and_filter)
+            if and_condition is not None:
+                conditions.append(and_condition)
+
+        # Remove $and from further processing
+        query_filters = {k: v for k, v in query_filters.items() if k != "$and"}
 
     # Process standard filters
     for key, value in query_filters.items():
