@@ -17,8 +17,12 @@ sys.path.insert(0, str(devtest_dir))
 sys.path.insert(0, str(root_dir))
 
 import coframe
-import model
 from coframe.utils import get_app
+
+# model.py imports plugin submodules (e.g. `books.model`) that only become
+# importable once PluginsManager.load_plugins() has added the plugin roots to
+# sys.path — so `import model` must happen after load_plugins(), inside main().
+model = None
 
 
 LIBRARY_USERS = [
@@ -41,11 +45,14 @@ COMMENTS = [
 
 
 def main():
+    global model
     print("Initializing Coframe...")
     plugins = coframe.plugins.PluginsManager()
     plugins.load_config("config.yaml")
     coframe.utils.register_standard_handlers(plugins)
     plugins.load_plugins()
+
+    import model  # noqa: E402 — after load_plugins() so plugin submodules resolve
 
     app = get_app()
     app.calc_db(plugins)

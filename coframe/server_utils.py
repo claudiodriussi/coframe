@@ -491,6 +491,42 @@ class AuthMiddleware:
 
 
 # ============================================
+# Flask JSON date/time serialization fix
+# ============================================
+
+def configure_flask_json_dates(app) -> None:
+    """
+    Make Flask serialize date/datetime/time as ISO 8601 (Flask only).
+
+    Flask's DefaultJSONProvider serializes date/datetime via http_date()
+    (RFC 1123, e.g. "Thu, 16 Jul 2026 13:21:19 GMT") instead of ISO — but the
+    `db`/`query` endpoints only accept ISO 8601 back on write
+    (datetime.fromisoformat in endpoint_db.py/utils.py). Round-tripping an
+    unmodified date field through a form (GET -> display -> save unmodified)
+    then crashes SQLAlchemy. Use ISO on the way out too, matching
+    querybuilder.JSONEncoder's convention already used elsewhere.
+
+    FastAPI's default encoder (jsonable_encoder) already emits ISO 8601, so
+    it needs no equivalent call.
+
+    Usage:
+        >>> app = Flask(__name__)
+        >>> configure_flask_json_dates(app)
+    """
+    from datetime import date, datetime, time
+    from flask.json.provider import DefaultJSONProvider
+
+    class ISOJSONProvider(DefaultJSONProvider):
+        @staticmethod
+        def default(o):
+            if isinstance(o, (datetime, date, time)):
+                return o.isoformat()
+            return DefaultJSONProvider.default(o)
+
+    app.json = ISOJSONProvider(app)
+
+
+# ============================================
 # App Info Handler
 # ============================================
 
