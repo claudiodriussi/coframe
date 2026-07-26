@@ -289,12 +289,38 @@ class ColumnGenerator:
         if 'foreign_key' in column.attributes:
             foreign = self._process_foreign_key(column, table, py_type)
 
-        # Process column arguments
-        field_args = [f"{a}={column.attr_field[a]}" for a in column.attr_field]
+        # Process column arguments (translate $-token system defaults)
+        field_args = [
+            f"{a}={self._render_field_value(a, column.attr_field[a])}"
+            for a in column.attr_field
+        ]
         args_str = ', '.join([""] + field_args) if field_args else ""
 
         # Construct final column definition
         return f"{indent}{column.name}: Mapped[{py_type}] = mapped_column({sa_type}{foreign}{args_str})\n"
+
+    def _render_field_value(self, attr: str, value: Any) -> str:
+        """
+        Render a mapped_column() field-argument value.
+
+        Values are emitted verbatim (e.g. `default=datetime.now`), except a
+        `$`-token `default` — a system default like `$op_date` — which is
+        translated into a reference to the registered core callable
+        (coframe.defaults) and the needed import is added. This is the seam that
+        makes op_date (and any app-registered system default) usable declaratively
+        from model YAML.
+        """
+        if attr == 'default' and isinstance(value, str) and value.startswith('$'):
+            from coframe import defaults as cf_defaults
+            name = value[1:]
+            if cf_defaults.get_default(name) is None:
+                raise ValueError(
+                    f"Unknown system default '{value}' on a column: not registered "
+                    f"in coframe.defaults (known: {sorted(cf_defaults.default_names())})"
+                )
+            self.imports.standard_imports.add('import coframe.defaults')
+            return f'coframe.defaults.{name}'
+        return f'{value}'
 
     def _process_foreign_key(self, column: DbColumn, table: DbTable, py_type: str) -> str:
         """

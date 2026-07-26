@@ -86,6 +86,11 @@ tables:
       - name: comment
         type: Text
 
+      - name: review_date
+        type: Date
+        default: $op_date
+        nullable: false
+
       - name: library_user_id
         foreign_key:
           target: LibraryUser.id

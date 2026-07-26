@@ -1,0 +1,59 @@
+"""
+System (framework) column defaults.
+
+These are values Coframe itself provides — resolved at INSERT time from the
+request context — that a model can opt into from YAML via a `$`-token, e.g.:
+
+    - name: review_date
+      type: Date
+      default: $op_date
+
+The source generator (coframe.source) translates the token into a reference to
+the registered callable and emits the needed import into the generated model.
+SQLAlchemy then calls it per insert, so it reflects the operator's current
+op_date each time.
+
+`op_date` is built in — the core also injects it into the auth context at login
+(see server_utils.handle_auth), so producer and consumer live in the same place;
+it is a framework value, not app policy, so it belongs here rather than in a
+commons plugin. Apps may register their own system defaults via
+register_default() (same spirit as add_query_behavior).
+"""
+from datetime import date
+from typing import Callable, Optional, Set
+
+from coframe.db import BaseApp
+
+
+def op_date() -> date:
+    """Operational ("working") date from the request context; today if unset."""
+    ctx = BaseApp.get_context() or {}
+    raw = ctx.get('op_date')
+    if raw:
+        try:
+            return date.fromisoformat(raw)
+        except (ValueError, TypeError):
+            pass
+    return date.today()
+
+
+# Registry: token name (without the leading '$') -> callable used as a
+# SQLAlchemy column default.
+_DEFAULTS: dict = {
+    'op_date': op_date,
+}
+
+
+def register_default(name: str, func: Callable) -> None:
+    """Register a system default callable, referenced in YAML as `$<name>`."""
+    _DEFAULTS[name] = func
+
+
+def get_default(name: str) -> Optional[Callable]:
+    """Return the callable for a token name, or None if unknown."""
+    return _DEFAULTS.get(name)
+
+
+def default_names() -> Set[str]:
+    """All registered token names."""
+    return set(_DEFAULTS)

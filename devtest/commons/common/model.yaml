@@ -103,11 +103,13 @@ types:
         type: DateTime
         granularity: second
         default: datetime.now()
+        deferred: true          # audit: filled at save, not prefilled in the form
         nullable: False
       - name: updated_at
         type: DateTime
         granularity: second
         default: datetime.now()
+        deferred: true          # audit: filled at save, not prefilled in the form
         nullable: False
 
   Address:
