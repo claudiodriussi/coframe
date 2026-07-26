@@ -168,12 +168,7 @@ def login():
 def update_context():
     """Update user context and get new token"""
     data = request.json
-    result = srv.handle_update_context(
-        g.user_context,
-        data,
-        SECRET_KEY,
-        auth.jwt_expiration_hours
-    )
+    result = auth.update_context(g.user_context, data)
     return jsonify(result), result.get('status_code', 200)
 
 

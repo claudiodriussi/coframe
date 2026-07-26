@@ -10,7 +10,7 @@ All handlers return plain dict with:
 This allows the same logic to be used with Flask, FastAPI, Django, or any other framework.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 import traceback as _traceback
 import jwt
 from typing import Dict, Any, Optional, Tuple
@@ -199,7 +199,14 @@ def handle_auth(
             payload = {
                 'username': user_data.get('username'),
                 'exp': now + timedelta(hours=jwt_expiration_hours),
-                'last_refresh': now.timestamp()  # Track last refresh for auto-refresh
+                'last_refresh': now.timestamp(),  # Track last refresh for auto-refresh
+                # Operational ("working") date — a framework context field, always
+                # present, so every endpoint can read it via the context (default
+                # date for new records, accounting period selection, ...). The user
+                # can override it via update_context; the merged value survives
+                # auto-refresh. Default = server system date.
+                # Seam: default source/timezone configurable later via env.config.
+                'op_date': date.today().isoformat(),
             }
 
             # Add context fields to payload
@@ -230,28 +237,64 @@ def handle_auth(
         return _error_from_exc(e)
 
 
+# Context fields the client may always set via update_context, regardless of
+# app config. These are framework-owned, non-identity fields.
+FRAMEWORK_UPDATABLE_FIELDS = frozenset({'op_date'})
+
+
+def custom_context_fields(config: Dict[str, Any]) -> list:
+    """
+    App-defined context fields a client is allowed to set via update_context:
+    configured `context_fields` that are NOT columns of the user table.
+
+    Identity columns (id, email, is_active, is_admin, ...) come from the user
+    record and must stay server-authoritative — a client must never be able to
+    set them in its own token. Requires the coframe app to be loaded.
+    """
+    import coframe.utils
+    app = coframe.utils.get_app()
+    auth = config.get('authentication', {})
+    user_model = app.models.get(auth.get('user_table', 'User'))
+    if user_model is None:
+        return []
+    user_cols = {c.key for c in user_model.__table__.columns}
+    return [f for f in auth.get('context_fields', []) if f not in user_cols]
+
+
 def handle_update_context(
     current_context: Dict[str, Any],
     updates: Dict[str, Any],
     secret_key: str,
-    jwt_expiration_hours: int = 24
+    jwt_expiration_hours: int = 24,
+    allowed_fields: Optional[list] = None
 ) -> Dict[str, Any]:
     """
     Framework-agnostic context update handler.
 
     Args:
         current_context: Current user context from JWT
-        updates: Fields to update in context
+        updates: Fields to update in context (filtered against the allowlist)
         secret_key: JWT secret key
         jwt_expiration_hours: Token expiration in hours
+        allowed_fields: App-defined fields the client may set. Framework fields
+            (FRAMEWORK_UPDATABLE_FIELDS) are always allowed. Any other key in
+            `updates` is dropped — this is the guard against a client escalating
+            its own token (e.g. sending is_admin=True).
 
     Returns:
         Dict with new token and updated context
     """
     try:
-        # Merge updates into current context
+        # Allowlist: only framework fields + app-declared custom fields may be
+        # set by the client. Everything else (identity, JWT machinery) is dropped.
+        allowed = set(FRAMEWORK_UPDATABLE_FIELDS)
+        if allowed_fields:
+            allowed |= set(allowed_fields)
+        filtered = {k: v for k, v in (updates or {}).items() if k in allowed}
+
+        # Merge the filtered updates into current context
         new_context = {**current_context}
-        new_context.update(updates)
+        new_context.update(filtered)
 
         # Remove 'exp' and 'iat' if present
         new_context.pop('exp', None)
@@ -487,6 +530,22 @@ class AuthMiddleware:
             self.secret_key,
             self.jwt_expiration_hours,
             self.context_fields
+        )
+
+    def update_context(self, current_context: Dict[str, Any],
+                       updates: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle a context update: reissue a JWT with the (allowlisted) updates.
+
+        The allowlist is framework fields + this app's custom context fields, so
+        a client can set op_date / declared custom fields but never identity.
+        """
+        return handle_update_context(
+            current_context,
+            updates,
+            self.secret_key,
+            self.jwt_expiration_hours,
+            allowed_fields=custom_context_fields(self.config)
         )
 
 

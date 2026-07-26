@@ -1,4 +1,5 @@
 import coframe
+import coframe.server_utils as server_utils
 from coframe.endpoints import endpoint
 from coframe.querybuilder import DynamicQueryBuilder
 from coframe.i18n import _, _f
@@ -519,21 +520,14 @@ def update_context(data):
                 "code": 401
             }
 
-        # Get authentication configuration
+        # Only allow the client to set framework fields (op_date, ...) + this
+        # app's custom context fields. Identity columns stay server-authoritative.
+        # Same allowlist as the /auth/update_context route.
         app = coframe.utils.get_app()
-        config = app.pm.config.get('authentication', {})
-        user_table = config.get('user_table', 'User')
-        context_fields = config.get('context_fields', ['id'])
-
-        # Get all attributes available on the user model
-        user_model = app.models.get(user_table)
-        user_attributes = [column.key for column in user_model.__table__.columns]
-
-        # Determine which fields are custom (not in User table)
-        custom_fields = [field for field in context_fields if field not in user_attributes]
-
-        # Only allow updates to custom fields
-        for field in custom_fields:
+        allowed = set(server_utils.FRAMEWORK_UPDATABLE_FIELDS) | set(
+            server_utils.custom_context_fields(app.pm.config)
+        )
+        for field in allowed:
             if field in data:
                 current_context[field] = data[field]
 

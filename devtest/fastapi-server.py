@@ -177,12 +177,7 @@ async def update_context(
     current_user: dict = Depends(get_current_user)
 ):
     """Update user context and get new token"""
-    result = srv.handle_update_context(
-        current_user,
-        data,
-        SECRET_KEY,
-        auth.jwt_expiration_hours
-    )
+    result = auth.update_context(current_user, data)
     return result
 
 
