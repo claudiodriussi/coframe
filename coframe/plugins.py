@@ -4,7 +4,7 @@ import importlib
 import importlib.util
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Tuple, Union, Any
 import yaml
 from coframe.utils import get_logger, set_formatter, logging_to_file, deep_merge
 
@@ -129,10 +129,13 @@ class PluginsManager:
         if not self.config:
             self.load_config()
 
-        # Discover plugins
-        self.plugins = {}
-        for plugins_dir in self.config['plugins']:
-            plugins_dir = Path(plugins_dir)
+        # Discover plugins — every plugin in every root, as before. Selection
+        # happens afterwards, over the complete picture: a root's `include` can
+        # then pull a dependency that lives in a different root, and there is
+        # one notion of "what depends on what" rather than one per root.
+        found: Dict[str, List[Plugin]] = {}
+        chosen: Dict[str, Plugin] = {}
+        for plugins_dir, include in self._plugin_roots():
             if not plugins_dir.exists():
                 raise ValueError(f"The plugins folder: {plugins_dir} does not exist")
 
@@ -143,6 +146,7 @@ class PluginsManager:
             sys.path.append(str((Path.cwd() / str(plugins_dir)).resolve()))
 
             # Scan for plugin directories
+            in_root: Dict[str, Plugin] = {}
             for plugin_dir in plugins_dir.iterdir():
                 if plugin_dir.is_dir():
                     config_file = plugin_dir / "config.yaml"
@@ -150,9 +154,43 @@ class PluginsManager:
                         continue  # Not a plugin directory
 
                     plugin = Plugin(plugin_dir)
-                    if plugin.name in self.plugins:
-                        raise ValueError(f"Duplicate plugin name: {plugin.name}")
-                    self.plugins[plugin.name] = plugin
+                    if plugin.name in in_root:
+                        raise ValueError(
+                            f"Duplicate plugin name: {plugin.name} "
+                            f"({in_root[plugin.name].plugin_dir}, {plugin_dir})")
+                    in_root[plugin.name] = plugin
+                    found.setdefault(plugin.name, []).append(plugin)
+
+            if include is None:
+                take = list(in_root)        # whole root
+            else:
+                unknown = [n for n in include if n not in in_root]
+                if unknown:
+                    raise ValueError(
+                        f"Plugins not found in root {plugins_dir}: "
+                        f"{', '.join(sorted(unknown))} "
+                        f"(available: {', '.join(sorted(in_root)) or 'none'})")
+                take = include
+
+            # An explicit request carries its root with it, so two roots asked
+            # for the same name is a conflict — but only then. Two roots may
+            # well hold alternative plugins under one name: naming the one you
+            # want in `include` is how you choose, and the other stays inert.
+            for name in take:
+                if name in chosen:
+                    raise ValueError(
+                        f"Duplicate plugin name: {name} "
+                        f"({chosen[name].plugin_dir}, {in_root[name].plugin_dir}) "
+                        f"— use 'include' to name which root it comes from")
+                chosen[name] = in_root[name]
+
+        # Keep what was asked for plus what it references, drop the rest.
+        # Restored to discovery order (root order, then directory order): the
+        # topological sort is only a partial order, so the order plugins are
+        # registered in decides deep_merge precedence between independent ones.
+        # Selection must narrow that sequence, never reshuffle it.
+        keep = self._select(found, chosen)
+        self.plugins = {name: keep[name] for name in found if name in keep}
 
         # Process plugins in dependency order
         self._sort_dependencies()
@@ -162,6 +200,106 @@ class PluginsManager:
             plugin = self.plugins[name]
             for data in plugin.data:
                 self.merge_dicts(data, name)
+
+    def _plugin_roots(self) -> List[Tuple[Path, Optional[List[str]]]]:
+        """
+        Normalise the `plugins:` config entries into (path, include) pairs.
+
+        A root is either a bare path — take every plugin it holds — or a
+        mapping that also names the plugins wanted from it:
+
+            plugins:
+              - path: ../../commons/plugins
+                include: [common, users, partners]
+              - plugins                              # short form = whole root
+
+        Returns:
+            List of (Path, include) pairs; include is None for a whole root
+
+        Raises:
+            ValueError: If an entry is malformed
+        """
+        roots: List[Tuple[Path, Optional[List[str]]]] = []
+        for entry in self.config['plugins']:
+            if isinstance(entry, dict):
+                path = entry.get('path')
+                if not path:
+                    raise ValueError(f"Plugin root entry has no 'path': {entry}")
+                include = entry.get('include')
+                if include is not None and not isinstance(include, list):
+                    raise ValueError(
+                        f"'include' for plugin root {path} must be a list, "
+                        f"got {type(include).__name__}")
+                unknown_keys = set(entry) - {'path', 'include'}
+                if unknown_keys:
+                    raise ValueError(
+                        f"Unknown keys in plugin root {path}: "
+                        f"{', '.join(sorted(unknown_keys))}")
+            else:
+                path, include = entry, None
+            roots.append((Path(path), include))
+        return roots
+
+    @staticmethod
+    def _depends_on(plugin: 'Plugin') -> List[str]:
+        """Names a plugin depends on, normalised to a list."""
+        deps = plugin.config.get('depends_on', []) or []
+        return [deps] if isinstance(deps, str) else list(deps)
+
+    @classmethod
+    def _select(cls, found: Dict[str, List['Plugin']],
+                chosen: Dict[str, 'Plugin']) -> Dict[str, 'Plugin']:
+        """
+        Keep the plugins asked for and everything they reference; drop the rest.
+
+        Inclusion is positive on purpose: what a shared root gains over time
+        stays inert until an application asks for it by name. An exclusion list
+        would do the opposite — pulling an updated shared repository would hand
+        every consumer the new plugin, and its tables, unasked.
+
+        Dependencies are followed here rather than declared, so
+        `include: [partners]` also brings `common`, and the list survives a
+        plugin growing a new dependency. Following them over every root, rather
+        than root by root, is what lets a shared plugin depend on one provided
+        elsewhere. A referenced name nobody provides is left for
+        _sort_dependencies(), which stays the single place that reports a
+        missing dependency.
+
+        Args:
+            found: Every discovered plugin, by name — a list per name, since a
+                   name may exist in more than one root
+            chosen: Plugins asked for explicitly, already resolved to the root
+                    that was asked
+
+        Returns:
+            The selected plugins, by name
+
+        Raises:
+            ValueError: If a dependency name is provided by more than one root
+        """
+        keep: Dict[str, Plugin] = {}
+        pending = list(chosen)
+        while pending:
+            name = pending.pop()
+            if name in keep:
+                continue
+            plugin = chosen.get(name)
+            if plugin is None:
+                # Reached as a dependency: nobody named a root for it, so it
+                # must be unambiguous.
+                matches = found.get(name)
+                if not matches:
+                    continue  # unprovided — _sort_dependencies() reports it
+                if len(matches) > 1:
+                    paths = ', '.join(str(p.plugin_dir) for p in matches)
+                    raise ValueError(
+                        f"Dependency '{name}' is provided by more than one "
+                        f"root ({paths}) — include it explicitly from the one "
+                        f"you mean")
+                plugin = matches[0]
+            keep[name] = plugin
+            pending.extend(cls._depends_on(plugin))
+        return keep
 
     def _sort_dependencies(self) -> None:
         """
@@ -173,10 +311,7 @@ class PluginsManager:
         # Create dependency graph
         dependencies: Dict[str, set] = {}
         for name, value in self.plugins.items():
-            deps = value.config.get('depends_on', [])
-            if isinstance(deps, str):
-                deps = [deps]
-            dependencies[name] = set(deps)
+            dependencies[name] = set(self._depends_on(value))
 
         # Validate dependencies
         all_items = set(dependencies.keys())
@@ -466,7 +601,7 @@ class PluginsManager:
             The string for environment script
         """
         env = ""
-        for plugins_dir in self.config['plugins']:
+        for plugins_dir, _include in self._plugin_roots():
             # resolve() normalises out-of-tree roots ('../plugins') to a canonical
             # absolute path, matching what load_plugins() puts on sys.path.
             abs_dir = str((Path.cwd() / str(plugins_dir)).resolve())
