@@ -128,8 +128,27 @@ class DynamicQueryBuilder:
         ],
 
         "limit": number,               # LIMIT clause (optional)
-        "offset": number               # OFFSET clause (optional)
+        "offset": number,              # OFFSET clause (optional)
+
+        "resolve": true                # Absolute lookup (optional) — see below
     }
+
+    The "resolve" flag
+    ------------------
+    `resolve: true` means "I am resolving a value that is already stored
+    somewhere, tell me what it is" — as opposed to "propose the values that are
+    acceptable now". It is an *absolute* lookup: registered query behaviors are
+    not applied at all.
+
+    It exists because the two questions have different answers. A document
+    saved last year points at a partner who has since been archived, or who
+    lost the role the picklist filters on: the picklist must not offer that
+    partner any more, but the document must still display their name. Without
+    the flag the implicit filter also hits the lookup by primary key and the
+    field renders blank.
+
+    Filtering the picklist is the job of the behaviors and of the view's
+    `domain`; neither must ever reach the resolution of a stored value.
 
     Examples:
     ---------
@@ -236,17 +255,29 @@ class DynamicQueryBuilder:
         if 'joins' in query_def:
             query = join_builder.apply_joins(query, query_def['joins'])
 
-        # Apply registered query behaviors (e.g. Archivable auto-filter)
-        # Lazy import: keeps querybuilder usable standalone without coframe stack
+        # Apply registered query behaviors (e.g. Archivable auto-filter).
+        #
+        # `resolve: true` skips them all: the caller is resolving an already
+        # stored value, not proposing selectable ones (see the "resolve" flag
+        # in the class docstring).
+        #
+        # INVARIANT — query behaviors are *visibility* filters, not
+        # *authorization*. `resolve` comes from the client and bypasses every
+        # behavior, so a behavior must never be the thing that keeps a user
+        # away from records they may not see. Enforce authorization elsewhere;
+        # if it ever has to live here, this loop is where the two kinds of
+        # behavior must start being told apart.
         main_model = self.models[main_table]
-        try:
-            import coframe.utils
-            behaviors = coframe.utils.get_app().query_behaviors
-        except Exception:
-            behaviors = []
-        for behavior in behaviors:
-            if behavior.applies_to(main_model):
-                query = behavior.apply(main_model, query_def, query)
+        if not query_def.get('resolve'):
+            # Lazy import: keeps querybuilder usable standalone without coframe stack
+            try:
+                import coframe.utils
+                behaviors = coframe.utils.get_app().query_behaviors
+            except Exception:
+                behaviors = []
+            for behavior in behaviors:
+                if behavior.applies_to(main_model):
+                    query = behavior.apply(main_model, query_def, query)
 
         # Apply filters (WHERE)
         if 'filters' in query_def:
