@@ -1,10 +1,7 @@
 import importlib.util
-import threading
 import time
 import uuid
-import asyncio
 import traceback as _traceback
-from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from typing import Dict, List, Any, Optional, Union, Callable
 from pathlib import Path
@@ -158,9 +155,7 @@ class Command:
                  parameters: Optional[Dict[str, Any]] = None,
                  request_id: Optional[str] = None,
                  context: Optional[Dict[str, Any]] = None,
-                 version: str = "1.0",
-                 depends_on: Optional[Union[str, List[str]]] = None,
-                 timeout: int = 30) -> None:
+                 version: str = "1.0") -> None:
         """
         Initialize a command.
 
@@ -170,19 +165,14 @@ class Command:
             request_id: Unique identifier for the command (auto-generated if None)
             context: Execution context (tenant, user, permissions, etc.)
             version: API version string
-            depends_on: Request ID(s) that must complete before this command can execute
-            timeout: Maximum execution time in seconds
         """
         self.operation = operation
         self.parameters = parameters or {}
         self.request_id = request_id or str(uuid.uuid4())
+        # Empty rather than None: the dispatcher sets it on every command, and an
+        # empty context is what clears the one left by the previous request.
         self.context = context or {}
         self.version = version
-        self.depends_on = depends_on if isinstance(depends_on, list) or depends_on is None else [depends_on]
-        self.timeout = timeout
-        self.result: Optional[CommandResult] = None
-        self.completed: threading.Event = threading.Event()
-        self.started: bool = False
 
     @classmethod
     def from_json(cls, json_str: str) -> 'Command':
@@ -218,9 +208,7 @@ class Command:
                    parameters=data.get("parameters", {}),
                    request_id=data.get("request_id"),
                    context=data.get("context"),
-                   version=data.get("version", "1.0"),
-                   depends_on=data.get("depends_on"),
-                   timeout=data.get("timeout", 30))
+                   version=data.get("version", "1.0"))
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -232,8 +220,6 @@ class Command:
             "request_id": self.request_id,
             "context": self.context,
             "version": self.version,
-            "depends_on": self.depends_on,
-            "timeout": self.timeout
         }
 
 
@@ -241,8 +227,13 @@ class CommandProcessor:
     """
     Processes commands by routing them to registered endpoints.
 
-    This class manages command execution, dependencies, and results,
-    allowing for asynchronous execution with proper sequencing.
+    One command in, one result out, on the calling thread. It used to run each
+    command in a thread of its own and hand back a `request_id` to collect the
+    result with — but every caller passed `wait=True` and blocked on it, so the
+    thread bought no concurrency; it only kept a dictionary of results alive.
+    Concurrency belongs to the web server (a thread per request), and operations
+    that genuinely outlive a request belong in a subprocess, where they can also
+    be killed — see `docs/pending/jobs.md`.
     """
 
     def __init__(self) -> None:
@@ -250,9 +241,6 @@ class CommandProcessor:
         Initialize the command processor.
         """
         self.endpoints: Dict[str, Callable] = {}
-        self.results: Dict[str, CommandResult] = {}
-        self.pending_commands: Dict[str, Command] = {}
-        self.command_lock: threading.Lock = threading.Lock()
 
     def resolve_endpoints(self, file_paths: List[Union[str, Path]]) -> None:
         """
@@ -333,350 +321,64 @@ class CommandProcessor:
                 if sys_path_modified:
                     sys.path.remove(parent_str)
 
-    def _execute_command(self, command: Command) -> None:
+    def _execute_command(self, command: Command) -> CommandResult:
         """
-        Execute a command in a separate thread.
+        Route a command to its endpoint and wrap whatever comes back.
 
         Args:
             command: The command to execute
+
+        Returns:
+            The result, always as a CommandResult — an endpoint that raises
+            produces a 500 rather than an exception escaping to the server.
         """
         if command.operation not in self.endpoints:
-            result = CommandResult(status="error",
-                                   message=f"Operation '{command.operation}' not found",
-                                   request_id=command.request_id,
-                                   code=404)
-        else:
-            try:
-                # set the context before executing the function
-                coframe.db.BaseApp.set_context(command.context)
+            return CommandResult(status="error",
+                                 message=f"Operation '{command.operation}' not found",
+                                 request_id=command.request_id,
+                                 code=404)
 
-                # Execute the endpoint function
-                func = self.endpoints[command.operation]
-                start_time = time.time()
+        try:
+            # Set the context before executing the function. Unconditional, and it
+            # replaces the whole value: request threads are reused by the server's
+            # pool, so anything left behind would be read by the next user.
+            coframe.db.BaseApp.set_context(command.context)
 
-                # Set a timer for timeout
-                timer = None
-                timeout_event = threading.Event()
+            result_data = self.endpoints[command.operation](command.parameters)
 
-                if command.timeout > 0:
-                    def timeout_handler() -> None:
-                        if not timeout_event.is_set():
-                            timeout_event.set()
-                            # Interrupt the thread? In Python this is complicated,
-                            # so here we just signal that a timeout has occurred
-
-                    timer = threading.Timer(command.timeout, timeout_handler)
-                    timer.daemon = True
-                    timer.start()
-
-                # Execute the function
-                try:
-                    result_data = func(command.parameters)
-                    elapsed = time.time() - start_time
-
-                    # Stop the timeout timer
-                    if timer:
-                        timer.cancel()
-                        timeout_event.set()
-
-                    # Check if execution time exceeded timeout
-                    if command.timeout > 0 and elapsed > command.timeout:
-                        result = CommandResult(
-                            status="error",
-                            message=f"Execution timeout exceeded ({elapsed:.2f}s > {command.timeout}s)",
-                            request_id=command.request_id,
-                            code=408
-                        )
-                    else:
-                        # Create a standardized result
-                        if isinstance(result_data, dict) and "status" in result_data:
-                            result = CommandResult(
-                                status=result_data.get("status"),
-                                data=result_data.get("data"),
-                                message=result_data.get("message"),
-                                request_id=command.request_id,
-                                code=result_data.get("code", 200)
-                            )
-                        else:
-                            result = CommandResult(
-                                status="success",
-                                data=result_data,
-                                request_id=command.request_id
-                            )
-                except Exception as e:
-                    # Stop the timeout timer if still active
-                    if timer:
-                        timer.cancel()
-
-                    result = CommandResult(
-                        status="error",
-                        message=str(e),
-                        request_id=command.request_id,
-                        code=500,
-                        error_type=type(e).__name__,
-                        traceback=_traceback.format_exc()
-                    )
-
-            except Exception as e:
-                result = CommandResult(
-                    status="error",
-                    message=str(e),
+            # An endpoint may either return its own envelope or a plain payload
+            if isinstance(result_data, dict) and "status" in result_data:
+                return CommandResult(
+                    status=result_data.get("status"),
+                    data=result_data.get("data"),
+                    message=result_data.get("message"),
                     request_id=command.request_id,
-                    code=500,
-                    error_type=type(e).__name__,
-                    traceback=_traceback.format_exc()
+                    code=result_data.get("code", 200)
                 )
+            return CommandResult(
+                status="success",
+                data=result_data,
+                request_id=command.request_id
+            )
 
-        # Save the result
-        with self.command_lock:
-            self.results[command.request_id] = result
-            command.result = result
-            command.completed.set()
+        except Exception as e:
+            return CommandResult(
+                status="error",
+                message=str(e),
+                request_id=command.request_id,
+                code=500,
+                error_type=type(e).__name__,
+                traceback=_traceback.format_exc()
+            )
 
-            # Remove the command from the pending list
-            if command.request_id in self.pending_commands:
-                del self.pending_commands[command.request_id]
-
-            # Check if there are pending commands that depend on this one
-            self._check_dependent_commands(command.request_id)
-
-    def _check_dependent_commands(self, completed_request_id: str) -> None:
+    def send(self, command_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Check if there are pending commands that can now be executed.
-
-        Args:
-            completed_request_id: ID of the command that just completed
-        """
-        commands_to_execute = []
-
-        for cmd_id, cmd in list(self.pending_commands.items()):
-            if not cmd.depends_on:
-                continue
-
-            # Check if all dependencies have been completed
-            all_deps_completed = True
-            for dep_id in cmd.depends_on:
-                if dep_id not in self.results:
-                    all_deps_completed = False
-                    break
-
-            if all_deps_completed:
-                commands_to_execute.append(cmd)
-                del self.pending_commands[cmd_id]
-
-        # Execute ready commands
-        for cmd in commands_to_execute:
-            self._start_command_thread(cmd)
-
-    def _start_command_thread(self, command: Command) -> None:
-        """
-        Start a thread to execute the command.
-
-        Args:
-            command: The command to execute
-        """
-        command.started = True
-        thread = threading.Thread(target=self._execute_command, args=(command,))
-        thread.daemon = True
-        thread.start()
-
-    def send(self, command_dict: Dict[str, Any], wait: bool = True) -> Optional[Dict[str, Any]]:
-        """
-        Send a command for execution.
-        If wait=True, waits for completion and returns the result.
-        If wait=False, only starts the thread and returns None.
+        Execute a command and return its result.
 
         Args:
             command_dict: Dictionary representation of the command
-            wait: Whether to wait for the command to complete
 
         Returns:
-            Dictionary with result if wait=True, or dictionary with request_id if wait=False
+            Dictionary with the command result
         """
-        command = Command.from_dict(command_dict)
-
-        with self.command_lock:
-            # Check if all dependencies have been completed
-            can_execute = True
-            if command.depends_on:
-                for dep_id in command.depends_on:
-                    if dep_id not in self.results:
-                        can_execute = False
-                        break
-
-            self.pending_commands[command.request_id] = command
-            if can_execute:
-                self._start_command_thread(command)
-
-        if wait:
-            return self.wait_for_result(command.request_id)
-        return {"request_id": command.request_id}
-
-    def wait_for_result(self, request_id: Optional[str] = None, timeout: Optional[int] = None) -> Dict[str, Any]:
-        """
-        Wait for a result.
-        If request_id is specified, waits for the specific result of that command.
-
-        Args:
-            request_id: ID of the specific command to wait for, or None for any result
-            timeout: Maximum time to wait in seconds
-
-        Returns:
-            Dictionary with command result
-        """
-        if request_id is None:
-            # Wait for any result
-            while not self.results:
-                time.sleep(0.1)
-            latest_result = list(self.results.values())[-1].to_dict()
-
-            # Remove the result from cache if explicitly requested without ID
-            with self.command_lock:
-                latest_request_id = latest_result.get("request_id")
-                if latest_request_id and latest_request_id in self.results:
-                    del self.results[latest_request_id]
-
-            return latest_result
-
-        with self.command_lock:
-            # If the result is already available, return it immediately
-            if request_id in self.results:
-                result = self.results[request_id].to_dict()
-                # Remove the result from cache after returning it
-                del self.results[request_id]
-                return result
-
-            # Check if the command exists
-            if request_id not in self.pending_commands:
-                return CommandResult(status="error",
-                                     message=f"Command with request_id '{request_id}' not found",
-                                     code=404).to_dict()
-
-            # Get the command
-            command = self.pending_commands[request_id]
-
-        # Use the command's timeout if not specified
-        if timeout is None:
-            timeout = command.timeout
-
-        # Wait for the command to complete
-        success = command.completed.wait(timeout)
-
-        if not success:
-            # Timeout expired
-            return CommandResult(status="error",
-                                 message=f"Timeout expired after {timeout} seconds",
-                                 request_id=request_id,
-                                 code=408).to_dict()
-
-        # Get the result and remove it from cache
-        with self.command_lock:
-            if request_id in self.results:
-                result = self.results[request_id].to_dict()
-                del self.results[request_id]
-                return result
-            else:
-                # This should never happen, but just in case...
-                return command.result.to_dict() if command.result else CommandResult(
-                    status="error",
-                    message="Result not found after completion",
-                    request_id=request_id,
-                    code=500
-                ).to_dict()
-
-
-class AsyncCommandProcessor:
-    """
-    Async wrapper for CommandProcessor to support asyncio-based frameworks.
-
-    This class wraps the synchronous CommandProcessor and executes commands
-    in a ThreadPoolExecutor, allowing integration with async frameworks like
-    FastAPI while maintaining backward compatibility with the existing
-    threading-based command execution.
-
-    Context is automatically propagated from asyncio context variables to
-    thread-local storage via BaseApp.set_context().
-
-    Usage:
-        # In FastAPI server
-        async_processor = AsyncCommandProcessor(sync_processor, max_workers=10)
-        result = await async_processor.send_async(command_dict)
-
-        # In async CLI
-        result = asyncio.run(async_processor.send_async(command_dict))
-
-    Args:
-        sync_processor: Existing synchronous CommandProcessor instance
-        max_workers: Maximum number of threads in the pool (default: 10)
-    """
-
-    def __init__(self, sync_processor: 'CommandProcessor', max_workers: int = 10) -> None:
-        """
-        Initialize async wrapper with thread pool.
-
-        Args:
-            sync_processor: The synchronous CommandProcessor to wrap
-            max_workers: Size of the ThreadPoolExecutor (default: 10)
-        """
-        self.sync_processor = sync_processor
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
-
-    async def send_async(self, command_dict: Dict[str, Any], wait: bool = True) -> Dict[str, Any]:
-        """
-        Execute command asynchronously without blocking the event loop.
-
-        The command is executed in a thread pool. Context from command_dict
-        is automatically set in the thread via BaseApp.set_context() during
-        execution.
-
-        Args:
-            command_dict: Command dictionary with:
-                - operation: Operation name
-                - parameters: Operation parameters
-                - context: User/tenant context (optional)
-                - timeout: Command timeout (optional)
-            wait: If True, wait for completion; if False, return immediately
-
-        Returns:
-            Result dictionary with status, data/message, code, etc.
-        """
-        # Execute synchronous processor in thread pool
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            self.executor,
-            self.sync_processor.send,
-            command_dict,
-            wait
-        )
-
-        return result
-
-    async def wait_for_result_async(self, request_id: str, timeout: Optional[int] = None) -> Dict[str, Any]:
-        """
-        Wait for a specific command result asynchronously.
-
-        Args:
-            request_id: ID of the command to wait for
-            timeout: Maximum wait time in seconds (None = use command's timeout)
-
-        Returns:
-            Result dictionary
-        """
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            self.executor,
-            self.sync_processor.wait_for_result,
-            request_id,
-            timeout
-        )
-
-        return result
-
-    def shutdown(self) -> None:
-        """
-        Shutdown the thread pool executor.
-
-        Call this when shutting down the application to ensure
-        all threads are properly terminated.
-        """
-        self.executor.shutdown(wait=True)
+        return self._execute_command(Command.from_dict(command_dict)).to_dict()

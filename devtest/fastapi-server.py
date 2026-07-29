@@ -136,7 +136,7 @@ async def get_current_user(request: Request) -> Dict[str, Any]:
 # Routes
 # ============================================================================
 @app.get('/')
-async def home():
+def home():
     """Root endpoint — serves Svelte client if built, otherwise API info."""
     if os.path.isfile('static_client/index.html'):
         from fastapi.responses import FileResponse
@@ -151,7 +151,7 @@ async def home():
 
 
 @app.get('/info')
-async def app_info():
+def app_info():
     """Application information"""
     result = srv.get_app_info(plugins.config, api_prefix)
     return result
@@ -161,7 +161,7 @@ async def app_info():
 # Authentication Endpoints
 # ============================================================================
 @app.post(f'{api_prefix}/auth/login')
-async def login(data: dict):
+def login(data: dict):
     """Login endpoint (using AuthMiddleware)"""
     try:
         # Use AuthMiddleware.login() for consistent behavior
@@ -172,7 +172,7 @@ async def login(data: dict):
 
 
 @app.post(f'{api_prefix}/auth/update_context')
-async def update_context(
+def update_context(
     data: dict,
     current_user: dict = Depends(get_current_user)
 ):
@@ -185,7 +185,7 @@ async def update_context(
 # Database CRUD Endpoints
 # ============================================================================
 @app.get(f'{api_prefix}/db/{{table}}')
-async def db_list(
+def db_list(
     table: str,
     current_user: dict = Depends(get_current_user)
 ):
@@ -200,7 +200,7 @@ async def db_list(
 
 
 @app.get(f'{api_prefix}/db/{{table}}/{{id}}')
-async def db_get(
+def db_get(
     table: str,
     id: str,
     current_user: dict = Depends(get_current_user)
@@ -217,7 +217,7 @@ async def db_get(
 
 
 @app.post(f'{api_prefix}/db/{{table}}')
-async def db_create(
+def db_create(
     table: str,
     data: dict,
     current_user: dict = Depends(get_current_user)
@@ -234,7 +234,7 @@ async def db_create(
 
 
 @app.put(f'{api_prefix}/db/{{table}}/{{id}}')
-async def db_update(
+def db_update(
     table: str,
     id: str,
     data: dict,
@@ -253,7 +253,7 @@ async def db_update(
 
 
 @app.delete(f'{api_prefix}/db/{{table}}/{{id}}')
-async def db_delete(
+def db_delete(
     table: str,
     id: str,
     current_user: dict = Depends(get_current_user)
@@ -273,7 +273,7 @@ async def db_delete(
 # Query Endpoint
 # ============================================================================
 @app.post(f'{api_prefix}/query')
-async def query(
+def query(
     data: dict,
     current_user: dict = Depends(get_current_user)
 ):
@@ -290,7 +290,7 @@ async def query(
 # File Reading Endpoint
 # ============================================================================
 @app.post(f'{api_prefix}/read_file')
-async def read_file(
+def read_file(
     data: dict,
     current_user: dict = Depends(get_current_user)
 ):
@@ -308,7 +308,7 @@ async def read_file(
 # Generic Endpoint Dispatcher
 # ============================================================================
 @app.post(f'{api_prefix}/{endpoint_prefix}/{{operation}}')
-async def generic_endpoint(
+def generic_endpoint(
     operation: str,
     data: dict,
     current_user: dict = Depends(get_current_user)
@@ -327,7 +327,7 @@ async def generic_endpoint(
 # User Profile Endpoints
 # ============================================================================
 @app.get(f'{api_prefix}/profile')
-async def get_profile(current_user: dict = Depends(get_current_user)):
+def get_profile(current_user: dict = Depends(get_current_user)):
     """Get current user profile"""
     # Remove sensitive fields
     user_data = {k: v for k, v in current_user.items() if k not in ['exp', 'iat', 'last_refresh']}
@@ -339,9 +339,9 @@ async def get_profile(current_user: dict = Depends(get_current_user)):
 
 
 @app.get(f'{api_prefix}/users/me')
-async def get_current_user_alias(current_user: dict = Depends(get_current_user)):
+def get_current_user_alias(current_user: dict = Depends(get_current_user)):
     """Alias for get_profile"""
-    return await get_profile(current_user)
+    return get_profile(current_user)
 
 # ============================================================================
 # Main Entry Point
