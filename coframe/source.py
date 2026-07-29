@@ -1,7 +1,8 @@
 import inspect
 import importlib.util
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Set, Any, Tuple
+from typing import Dict, List, Optional, Set, Any, Tuple
 from coframe.db import DB, DbColumn, DbTable
 
 
@@ -169,55 +170,204 @@ class PluginClassFinder:
         return result
 
 
+@dataclass
+class ForeignKeyRelation:
+    """
+    One foreign key, collected while columns are generated and turned into a pair
+    of relationship() attributes only once every table has been seen.
+
+    The deferral is what makes disambiguation possible: how a relationship must be
+    named — and whether the join needs spelling out — depends on the *other* foreign
+    keys in the model, which are not known while a single column is being written.
+    """
+    table: DbTable            # table that owns the FK column
+    column: str               # the FK column
+    fk_table: DbTable         # referenced table
+    fk_id: str                # referenced column
+    soft: bool                # no DB-level constraint (see § 4.5)
+    relation: Optional[str]   # explicit forward name from YAML, if given
+    backref: Optional[str]    # explicit back name from YAML, if given
+
+    @property
+    def self_referential(self) -> bool:
+        return self.table.name == self.fk_table.name
+
+
 class RelationshipManager:
     """
     Manages relationships between tables for model generation.
+
+    Every foreign key produces two Python attributes: the *forward* one on the table
+    that holds the column (`Loan.book`, many-to-one) and the *back* one on the table
+    referenced (`Book.loans`, one-to-many). Neither exists in SQL — only the column
+    and its constraint do — so their names are free, and are chosen here.
     """
 
     def __init__(self) -> None:
         """Initialize relationship manager."""
         self.direct_relations: Dict[str, List[str]] = {}  # Table name -> list of relation statements
         self.back_relations: Dict[str, List[str]] = {}  # Table name -> list of backref statements
+        self.foreign_keys: List[ForeignKeyRelation] = []
+        self._resolved = False
 
-    def add_foreign_key_relation(self, table: str, fk_table_name: str,
-                                 column_name: str, fk_table: DbTable, py_type: str,
-                                 fk_id: str = 'id', soft: bool = False) -> None:
+    def add_foreign_key_relation(self, table: DbTable, column_name: str, fk_table: DbTable,
+                                 fk_id: str = 'id', soft: bool = False,
+                                 relation: Optional[str] = None,
+                                 backref: Optional[str] = None) -> None:
         """
-        Add foreign key relationship between tables.
+        Record a foreign key. The code is emitted later, by resolve().
 
         Args:
-            table: Current table
-            fk_table_name: Foreign table name
+            table: Table owning the foreign key column
             column_name: Current column name
             fk_table: Foreign table object
-            py_type: Python type for the relationship
             fk_id: Referenced column on the foreign table (default 'id')
             soft: If True the column has no ForeignKey constraint — the join must
-                  be stated explicitly (primaryjoin + foreign_keys) since
-                  SQLAlchemy can no longer infer it.
+                  be stated explicitly (primaryjoin) since SQLAlchemy can no longer
+                  infer it from a constraint.
+            relation: Explicit name for the forward attribute (YAML `relation:`)
+            backref: Explicit name for the back attribute (YAML `backref:`)
         """
+        if self._resolved:
+            # Only reachable if a FK column is generated outside the table pass —
+            # a mixin type, today. Silently dropping it would leave a model with a
+            # column and no way to navigate it.
+            raise ValueError(
+                f"Foreign key '{table.name}.{column_name}' was declared after relationships "
+                f"were resolved: foreign keys are not supported on mixins."
+            )
+        self.foreign_keys.append(ForeignKeyRelation(
+            table=table, column=column_name, fk_table=fk_table, fk_id=fk_id,
+            soft=soft, relation=relation, backref=backref,
+        ))
+
+    def resolve(self) -> None:
+        """
+        Turn the collected foreign keys into relationship() statements.
+
+        Runs once, after every table has been processed, because both the naming and
+        the join spec depend on the model as a whole.
+        """
+        if self._resolved:
+            return
+        self._resolved = True
+
+        # More than one FK from the same table to the same target means the back
+        # side cannot keep the plain table name: both would land on the same
+        # attribute of the target class.
+        pair_count: Dict[Tuple[str, str], int] = {}
+        for fk in self.foreign_keys:
+            key = (fk.table.name, fk.fk_table.name)
+            pair_count[key] = pair_count.get(key, 0) + 1
+
+        named = []
+        for fk in self.foreign_keys:
+            forward = fk.relation or self._relation_name(fk)
+            ambiguous = pair_count[(fk.table.name, fk.fk_table.name)] > 1
+            back = fk.backref or self._back_name(fk, forward, ambiguous)
+            named.append((fk, forward, back))
+
+        self._check_names(named)
+
+        for fk, forward, back in named:
+            self._emit(fk, forward, back)
+
+    def _relation_name(self, fk: ForeignKeyRelation) -> str:
+        """
+        Name of the forward attribute: the column without its key suffix.
+
+        `book_id` -> `book`, `merged_into_id` -> `merged_into`, and any other suffix
+        works the same way (`codice_esterno_fk` -> `codice_esterno`) because the cut
+        is at the last underscore, not at a known list of suffixes.
+
+        A column with nothing to cut — a legacy `codcli` — falls back to the name of
+        the referenced table, which cannot clash with the column precisely because
+        the column does not follow the convention. `relation:` overrides both.
+        """
+        name, separator, _ = fk.column.rpartition('_')
+        return name if separator and name else fk.fk_table.name.lower()
+
+    def _back_name(self, fk: ForeignKeyRelation, forward: str, ambiguous: bool) -> str:
+        """
+        Name of the back attribute: the source table, suffixed with the forward name
+        when the same pair of tables is linked more than once (`partners_parent`,
+        `partners_merged_into`). `backref:` overrides it — and should, since a good
+        name is rarely mechanical (`children`, `duplicates`).
+        """
+        name = fk.table.table_name.lower()
+        return f"{name}_{forward}" if ambiguous else name
+
+    def _check_names(self, named: List[Tuple[ForeignKeyRelation, str, str]]) -> None:
+        """
+        Refuse a model in which two attributes of the same class would share a name.
+
+        Without this the second definition simply overwrites the first in the class
+        body — a relationship silently replacing a column, or one of two foreign keys
+        disappearing — which is the failure mode this whole pass exists to remove.
+        """
+        # class name -> attribute name -> what claims it
+        claims: Dict[str, Dict[str, str]] = {}
+
+        def claim(owner: DbTable, attr: str, source: str) -> None:
+            owned = claims.setdefault(owner.name, {})
+            if attr in owned:
+                raise ValueError(
+                    f"Relationship name clash on '{owner.name}': '{attr}' is claimed by "
+                    f"{owned[attr]} and by {source}. Name one of them explicitly with "
+                    f"`relation:` (forward) or `backref:` (reverse) in the foreign key."
+                )
+            owned[attr] = source
+
+        for fk, forward, back in named:
+            claim(fk.table, forward, f"the foreign key '{fk.table.name}.{fk.column}'")
+            claim(fk.fk_table, back, f"the reverse of '{fk.table.name}.{fk.column}'")
+
+        # A relationship may also collide with a real column of the same class.
+        involved: Dict[str, DbTable] = {}
+        for fk, _, _ in named:
+            involved[fk.table.name] = fk.table
+            involved[fk.fk_table.name] = fk.fk_table
+
+        for table_name, table in involved.items():
+            owned = claims.get(table_name, {})
+            for column in table.effective_columns:
+                if column.name in owned:
+                    raise ValueError(
+                        f"Relationship name clash on '{table_name}': '{column.name}' is both a "
+                        f"column and {owned[column.name]}. Name the relationship explicitly with "
+                        f"`relation:` or `backref:` in the foreign key."
+                    )
+
+    def _emit(self, fk: ForeignKeyRelation, forward: str, back: str) -> None:
+        """Write the two relationship() statements for one foreign key."""
         indent = " " * 4
+        local = f"{fk.table.name}.{fk.column}"
 
-        # Soft FKs need an explicit join spec; hard FKs let SQLAlchemy infer it
-        # from the ForeignKey constraint.
-        extra = ""
-        if soft:
-            join = f"{table.name}.{column_name} == {fk_table.name}.{fk_id}"
-            local = f"{table.name}.{column_name}"
-            extra = f", primaryjoin='{join}', foreign_keys='{local}'"
+        # `foreign_keys` is emitted unconditionally. SQLAlchemy can infer it whenever
+        # a single FK path links the two tables, but a *second* path — added later,
+        # possibly by another plugin merging a column into either table, in either
+        # direction — makes the inference ambiguous and breaks relationships that no
+        # one touched. Stating it keeps each table's code independent of the rest.
+        common = f", foreign_keys='{local}'"
 
-        # Add forward relation
-        relation = self.add_relation_key(table.name, self.direct_relations)
+        # Without a constraint SQLAlchemy has no join condition to infer; spell it out.
+        if fk.soft:
+            common += f", primaryjoin='{local} == {fk.fk_table.name}.{fk.fk_id}'"
+
+        # Self-reference: both sides are the same class, so nothing tells SQLAlchemy
+        # which one is the "one" side. remote_side does.
+        remote = f", remote_side='{fk.fk_table.name}.{fk.fk_id}'" if fk.self_referential else ""
+
+        relation = self.add_relation_key(fk.table.name, self.direct_relations)
         relation.append(
-            f"{indent}{fk_table.name.lower()}: Mapped[{py_type}] = "
-            f"relationship('{fk_table.name}', back_populates='{table.table_name.lower()}'{extra})\n"
+            f"{indent}{forward}: Mapped['{fk.fk_table.name}'] = "
+            f"relationship('{fk.fk_table.name}'{common}{remote}, back_populates='{back}')\n"
         )
 
-        # Add back relation
-        relation = self.add_relation_key(fk_table.name, self.back_relations)
+        relation = self.add_relation_key(fk.fk_table.name, self.back_relations)
         relation.append(
-            f"{indent}{table.table_name.lower()}: Mapped[List['{table.name}']] = "
-            f"relationship('{table.name}', back_populates='{fk_table.name.lower()}'{extra})\n"
+            f"{indent}{back}: Mapped[List['{fk.table.name}']] = "
+            f"relationship('{fk.table.name}'{common}, back_populates='{forward}')\n"
         )
 
     def add_relation_key(self, name: str, relation: Dict[str, List[str]] = {}) -> List[str]:
@@ -287,7 +437,7 @@ class ColumnGenerator:
         # Process foreign key
         foreign = ""
         if 'foreign_key' in column.attributes:
-            foreign = self._process_foreign_key(column, table, py_type)
+            foreign = self._process_foreign_key(column, table)
 
         # Process column arguments (translate $-token system defaults)
         field_args = [
@@ -322,14 +472,13 @@ class ColumnGenerator:
             return f'coframe.defaults.{name}'
         return f'{value}'
 
-    def _process_foreign_key(self, column: DbColumn, table: DbTable, py_type: str) -> str:
+    def _process_foreign_key(self, column: DbColumn, table: DbTable) -> str:
         """
         Process foreign key definition.
 
         Args:
             column: Column with foreign key
             table: Parent table
-            py_type: Python type for the relationship
 
         Returns:
             Foreign key argument string
@@ -337,6 +486,11 @@ class ColumnGenerator:
         fk = column.attributes['foreign_key']
         fk_table = fk['table']
         fk_id = fk['id']
+
+        # Explicit relationship names, when the generated ones would be poor or
+        # ambiguous. Coframe hints, like `constraint` — never ForeignKey kwargs.
+        relation = fk.get('relation')
+        backref = fk.get('backref')
 
         # `constraint: false` → soft FK: keep the navigable relationship but emit
         # NO DB-level FK constraint, so the column may hold values with no matching
@@ -347,7 +501,7 @@ class ColumnGenerator:
         # is a Coframe hint, not a ForeignKey kwarg — never forward it.
         fk_args = []
         for a in fk:
-            if a not in ['target', 'table', 'id', 'constraint']:
+            if a not in ['target', 'table', 'id', 'constraint', 'relation', 'backref']:
                 fk_args.append(f"{a}={fk[a]}")
 
         fk_args_str = f", {', '.join(fk_args)}" if fk_args else ""
@@ -358,10 +512,10 @@ class ColumnGenerator:
             foreign = f", ForeignKey('{fk_table.table_name}.{fk_id}'{fk_args_str})"
             self.imports.column_imports.add('ForeignKey')
 
-        # Add relationship definitions (soft ones carry an explicit join: without a
-        # ForeignKey, SQLAlchemy cannot infer the join condition on its own)
+        # Record the relationship; names and join spec are decided in resolve(),
+        # once the whole model is known.
         self.relationships.add_foreign_key_relation(
-            table, fk_table.name, column.name, fk_table, py_type, fk_id, soft
+            table, column.name, fk_table, fk_id, soft, relation, backref
         )
         self.imports.add_relationship_imports()
 
@@ -417,6 +571,9 @@ class Generator:
         # Process each table definition
         for name in self.db.tables_list:
             self._process_table(name)
+
+        # Names and join specs can only be decided now that every FK is known
+        self.relationships.resolve()
 
         # Add relationships to table definitions
         self._add_relationships_to_tables()

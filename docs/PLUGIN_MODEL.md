@@ -640,7 +640,7 @@ tables:
 | `help` | string | UI tooltip |
 | `widget` | string | UI widget override |
 | `prefix` | string | Column name prefix when expanding a composite type |
-| `foreign_key` | dict | FK definition: `target`, `ondelete`, `onupdate`, `constraint` (hard/soft — see § 4.5) |
+| `foreign_key` | dict | FK definition: `target`, `relation`, `backref`, `ondelete`, `onupdate`, `constraint` (hard/soft — see § 4.5) |
 | `length` | int | String length (for String-based types) |
 | `precision` / `scale` | int | Numeric precision |
 
@@ -656,8 +656,59 @@ tables:
     onupdate: "SET NULL"       # SQL ON UPDATE action
 ```
 
-Any key other than `target`/`constraint` is forwarded verbatim to SQLAlchemy's
-`ForeignKey()` (so `ondelete`, `onupdate`, … work as-is).
+Any key other than `target`/`constraint`/`relation`/`backref` is forwarded
+verbatim to SQLAlchemy's `ForeignKey()` (so `ondelete`, `onupdate`, … work
+as-is).
+
+#### The two navigable attributes (`relation`, `backref`)
+
+Every foreign key also generates a **pair of Python attributes** — neither of
+which exists in SQL, where only the column and its constraint live:
+
+```python
+book:  Mapped['Book']         = relationship(...)   # on Loan  — the "many-to-one"
+loans: Mapped[List['Loan']]   = relationship(...)   # on Book  — the "one-to-many"
+```
+
+Their names are generated as follows:
+
+| Side | Default name | Example |
+|------|--------------|---------|
+| forward (on the table holding the column) | the column, **cut at the last underscore** | `book_id` → `book`, `merged_into_id` → `merged_into`, `codice_esterno_fk` → `codice_esterno` |
+| forward, column with no underscore | the referenced table | `codcli` → `cliente` |
+| back (on the referenced table) | the source table name | `Book.loans` |
+| back, when the same pair is linked more than once | source table + forward name | `partners_parent`, `partners_merged_into` |
+
+`relation:` and `backref:` override each side. Use them whenever the generated
+name would be poor — a mechanical `partners_parent` says less than `children` —
+or when the model is refused (below):
+
+```yaml
+- name: parent_id
+  nullable: true
+  foreign_key:
+    target: Partner.id
+    relation: parent           # Partner.parent  → the parent row
+    backref: children          # Partner.children → the child rows
+```
+
+**Convention:** name foreign key columns `<something>_id`. Any suffix works, and
+legacy names without one fall back to the target table, but `_id` is what the
+rest of the codebase reads like.
+
+**Refusals.** Generation stops with an error rather than let two attributes of
+one class share a name — the second would silently overwrite the first, losing a
+column or a relationship. This happens when two foreign keys cut down to the
+same name (`payment_primary` and `payment_secondary` both give `payment`), or
+when a relationship lands on the name of an existing column. The fix is always
+`relation:`/`backref:`, and the error message says so.
+
+**Self-references** (`parent_id → Partner.id`) need nothing special in YAML: the
+generator emits `remote_side` on the forward side, which is what tells SQLAlchemy
+which end of a same-class relationship is the "one" end. Several foreign keys to
+the same target likewise need nothing — `foreign_keys` is always emitted, so a
+second path between two tables (in either direction, added by any plugin) can
+never make an existing relationship ambiguous.
 
 #### Hard vs soft foreign keys (`constraint`)
 
