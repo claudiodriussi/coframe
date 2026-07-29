@@ -193,6 +193,21 @@ class ForeignKeyRelation:
         return self.table.name == self.fk_table.name
 
 
+@dataclass
+class ManyToManyRelation:
+    """
+    One junction table, with its two targets.
+
+    A junction declared explicitly (rather than conjured from a column) is what
+    lets the relation carry data of its own — `BookAuthor.notes`. It costs six
+    attributes instead of two: each target gets the rows of the junction and a
+    shortcut to the other target, and the junction gets a scalar to each target.
+    """
+    junction: DbTable
+    target1: Dict[str, Any]   # {table, id, column, relation?, backref?, collection?}
+    target2: Dict[str, Any]
+
+
 class RelationshipManager:
     """
     Manages relationships between tables for model generation.
@@ -208,7 +223,11 @@ class RelationshipManager:
         self.direct_relations: Dict[str, List[str]] = {}  # Table name -> list of relation statements
         self.back_relations: Dict[str, List[str]] = {}  # Table name -> list of backref statements
         self.foreign_keys: List[ForeignKeyRelation] = []
+        self.many_to_many: List[ManyToManyRelation] = []
         self._resolved = False
+        # class name -> attribute name -> what claims it. Filled while resolving,
+        # then checked: two claims on one name would mean a silent overwrite.
+        self._claims: Dict[str, Dict[str, str]] = {}
 
     def add_foreign_key_relation(self, table: DbTable, column_name: str, fk_table: DbTable,
                                  fk_id: str = 'id', soft: bool = False,
@@ -241,40 +260,47 @@ class RelationshipManager:
             soft=soft, relation=relation, backref=backref,
         ))
 
-    def resolve(self) -> None:
-        """
-        Turn the collected foreign keys into relationship() statements.
+    def add_many_to_many(self, junction: DbTable, target1: Dict[str, Any],
+                         target2: Dict[str, Any]) -> None:
+        """Record a junction table. The code is emitted later, by resolve()."""
+        if self._resolved:
+            raise ValueError(
+                f"Junction table '{junction.name}' was declared after relationships were resolved."
+            )
+        self.many_to_many.append(ManyToManyRelation(junction, target1, target2))
 
-        Runs once, after every table has been processed, because both the naming and
-        the join spec depend on the model as a whole.
+    def resolve(self, inherited: Optional[Dict[str, Set[str]]] = None) -> None:
+        """
+        Turn the collected relations into relationship() statements.
+
+        Runs once, after every table has been processed: a name is refused when
+        another one already claims it, and that can only be known at the end.
+
+        Args:
+            inherited: Public attribute names each generated class inherits from the
+                       plugin Python classes it is built on. A relationship with one
+                       of those names would shadow a method without a word.
         """
         if self._resolved:
             return
         self._resolved = True
 
-        # More than one FK from the same table to the same target means the back
-        # side cannot keep the plain table name: both would land on the same
-        # attribute of the target class.
-        pair_count: Dict[Tuple[str, str], int] = {}
         for fk in self.foreign_keys:
-            key = (fk.table.name, fk.fk_table.name)
-            pair_count[key] = pair_count.get(key, 0) + 1
+            forward = fk.relation or self._cut(fk.column, fk.fk_table)
+            back = fk.backref or fk.table.table_name.lower()
+            self._claim(fk.table, forward, f"the foreign key '{fk.table.name}.{fk.column}'")
+            self._claim(fk.fk_table, back, f"the reverse of '{fk.table.name}.{fk.column}'")
+            self._emit_foreign_key(fk, forward, back)
 
-        named = []
-        for fk in self.foreign_keys:
-            forward = fk.relation or self._relation_name(fk)
-            ambiguous = pair_count[(fk.table.name, fk.fk_table.name)] > 1
-            back = fk.backref or self._back_name(fk, forward, ambiguous)
-            named.append((fk, forward, back))
+        for m2m in self.many_to_many:
+            self._resolve_many_to_many(m2m)
 
-        self._check_names(named)
+        self._check_columns()
+        self._check_inherited(inherited or {})
 
-        for fk, forward, back in named:
-            self._emit(fk, forward, back)
-
-    def _relation_name(self, fk: ForeignKeyRelation) -> str:
+    def _cut(self, column: str, fk_table: DbTable) -> str:
         """
-        Name of the forward attribute: the column without its key suffix.
+        Name a relationship after its column: the column without its key suffix.
 
         `book_id` -> `book`, `merged_into_id` -> `merged_into`, and any other suffix
         works the same way (`codice_esterno_fk` -> `codice_esterno`) because the cut
@@ -282,63 +308,106 @@ class RelationshipManager:
 
         A column with nothing to cut — a legacy `codcli` — falls back to the name of
         the referenced table, which cannot clash with the column precisely because
-        the column does not follow the convention. `relation:` overrides both.
+        the column does not follow the convention.
         """
-        name, separator, _ = fk.column.rpartition('_')
-        return name if separator and name else fk.fk_table.name.lower()
+        name, separator, _ = column.rpartition('_')
+        return name if separator and name else fk_table.name.lower()
 
-    def _back_name(self, fk: ForeignKeyRelation, forward: str, ambiguous: bool) -> str:
+    def _claim(self, owner: DbTable, attr: str, source: str) -> None:
         """
-        Name of the back attribute: the source table, suffixed with the forward name
-        when the same pair of tables is linked more than once (`partners_parent`,
-        `partners_merged_into`). `backref:` overrides it — and should, since a good
-        name is rarely mechanical (`children`, `duplicates`).
+        Reserve an attribute name on a class, or refuse the model.
+
+        Two claims on one name mean the second definition would overwrite the first
+        in the class body — a relationship silently replacing a column, or one of two
+        foreign keys disappearing. Note what is *not* done here: nothing is renamed to
+        make room. A generated name never changes because of something declared
+        elsewhere, so a plugin can never move another plugin's attribute from under
+        the code that uses it; whoever arrives second names its own relation instead.
         """
-        name = fk.table.table_name.lower()
-        return f"{name}_{forward}" if ambiguous else name
+        owned = self._claims.setdefault(owner.name, {})
+        if attr in owned:
+            raise ValueError(
+                f"Relationship name clash on '{owner.name}': '{attr}' is claimed by "
+                f"{owned[attr]} and by {source}. Name one of them explicitly — "
+                f"`relation:`/`backref:` on a foreign key, "
+                f"`relation:`/`backref:`/`collection:` on a many-to-many target."
+            )
+        owned[attr] = source
 
-    def _check_names(self, named: List[Tuple[ForeignKeyRelation, str, str]]) -> None:
-        """
-        Refuse a model in which two attributes of the same class would share a name.
-
-        Without this the second definition simply overwrites the first in the class
-        body — a relationship silently replacing a column, or one of two foreign keys
-        disappearing — which is the failure mode this whole pass exists to remove.
-        """
-        # class name -> attribute name -> what claims it
-        claims: Dict[str, Dict[str, str]] = {}
-
-        def claim(owner: DbTable, attr: str, source: str) -> None:
-            owned = claims.setdefault(owner.name, {})
-            if attr in owned:
-                raise ValueError(
-                    f"Relationship name clash on '{owner.name}': '{attr}' is claimed by "
-                    f"{owned[attr]} and by {source}. Name one of them explicitly with "
-                    f"`relation:` (forward) or `backref:` (reverse) in the foreign key."
-                )
-            owned[attr] = source
-
-        for fk, forward, back in named:
-            claim(fk.table, forward, f"the foreign key '{fk.table.name}.{fk.column}'")
-            claim(fk.fk_table, back, f"the reverse of '{fk.table.name}.{fk.column}'")
-
-        # A relationship may also collide with a real column of the same class.
-        involved: Dict[str, DbTable] = {}
-        for fk, _, _ in named:
-            involved[fk.table.name] = fk.table
-            involved[fk.fk_table.name] = fk.fk_table
-
-        for table_name, table in involved.items():
-            owned = claims.get(table_name, {})
+    def _check_columns(self) -> None:
+        """A relationship may also collide with a real column of the same class."""
+        for table_name, table in self._involved_tables().items():
+            owned = self._claims.get(table_name, {})
             for column in table.effective_columns:
                 if column.name in owned:
                     raise ValueError(
                         f"Relationship name clash on '{table_name}': '{column.name}' is both a "
-                        f"column and {owned[column.name]}. Name the relationship explicitly with "
-                        f"`relation:` or `backref:` in the foreign key."
+                        f"column and {owned[column.name]}. Name the relationship explicitly "
+                        f"with `relation:`, `backref:` or `collection:`."
                     )
 
-    def _emit(self, fk: ForeignKeyRelation, forward: str, back: str) -> None:
+    def _check_inherited(self, inherited: Dict[str, Set[str]]) -> None:
+        """
+        …and with a method inherited from the plugin classes the model is built on.
+
+        The generated attribute lives in the subclass body, so it wins: an
+        `is_available()` on a plugin's `Book` would simply stop existing the day a
+        relationship took its name.
+        """
+        for table_name, owned in self._claims.items():
+            for attr in sorted(set(owned) & inherited.get(table_name, set())):
+                raise ValueError(
+                    f"Relationship name clash on '{table_name}': '{attr}' is {owned[attr]} and "
+                    f"would shadow an attribute inherited from the plugin class of the same "
+                    f"name. Name the relationship explicitly with `relation:`, `backref:` or "
+                    f"`collection:`."
+                )
+
+    def _involved_tables(self) -> Dict[str, DbTable]:
+        """Every table that owns or receives a generated relationship."""
+        tables: Dict[str, DbTable] = {}
+        for fk in self.foreign_keys:
+            tables[fk.table.name] = fk.table
+            tables[fk.fk_table.name] = fk.fk_table
+        for m2m in self.many_to_many:
+            tables[m2m.junction.name] = m2m.junction
+            for target in (m2m.target1, m2m.target2):
+                tables[target['table'].name] = target['table']
+        return tables
+
+    def _resolve_many_to_many(self, m2m: ManyToManyRelation) -> None:
+        """Name and emit the six attributes of one junction table."""
+        first = self._m2m_names(m2m.junction, m2m.target1, m2m.target2)
+        second = self._m2m_names(m2m.junction, m2m.target2, m2m.target1)
+
+        self._emit_many_to_many(m2m.junction, m2m.target1, m2m.target2, first, second)
+        self._emit_many_to_many(m2m.junction, m2m.target2, m2m.target1, second, first)
+
+    def _m2m_names(self, junction: DbTable, this: Dict[str, Any],
+                   other: Dict[str, Any]) -> Tuple[str, str, str]:
+        """
+        The three names one side of a junction produces, and their claims.
+
+        `relation` sits on the junction and `backref` on the target, exactly as they
+        do for a foreign key — a junction row *is* two foreign keys. `collection` is
+        the third thing, with no equivalent among foreign keys: the shortcut that
+        skips the junction and lists the other target directly.
+        """
+        # Named from the column, as a foreign key is — which is also what keeps a
+        # self-referential junction unambiguous, since two columns of one table
+        # cannot share a name.
+        relation = this.get('relation') or self._cut(this['column'], this['table'])
+        rows = this.get('backref') or f"{other['table'].name.lower()}_m2m"
+        collection = this.get('collection') or other['table'].table_name
+
+        source = f"the many-to-many target '{junction.name}.{this['column']}'"
+        self._claim(junction, relation, source)
+        self._claim(this['table'], rows, source)
+        self._claim(this['table'], collection, source)
+
+        return relation, rows, collection
+
+    def _emit_foreign_key(self, fk: ForeignKeyRelation, forward: str, back: str) -> None:
         """Write the two relationship() statements for one foreign key."""
         indent = " " * 4
         local = f"{fk.table.name}.{fk.column}"
@@ -368,6 +437,45 @@ class RelationshipManager:
         relation.append(
             f"{indent}{back}: Mapped[List['{fk.table.name}']] = "
             f"relationship('{fk.table.name}'{common}, back_populates='{forward}')\n"
+        )
+
+    def _emit_many_to_many(self, junction: DbTable, this: Dict[str, Any], other: Dict[str, Any],
+                           names: Tuple[str, str, str], other_names: Tuple[str, str, str]) -> None:
+        """Write the three statements one side of a junction produces."""
+        indent = " " * 4
+        relation, rows, collection = names
+        other_collection = other_names[2]  # the only name of the other side we need
+
+        table = this['table']
+        column = f"{junction.name}.{this['column']}"
+
+        # On the junction: the scalar to this target.
+        code = self.add_relation_key(junction.name, self.direct_relations)
+        code.append(
+            f"{indent}{relation}: Mapped['{table.name}'] = "
+            f"relationship('{table.name}', foreign_keys='{column}', back_populates='{rows}')\n"
+        )
+
+        # On this target: the junction rows, which carry whatever the relation itself
+        # has to say (a rating, a role, a date).
+        code = self.add_relation_key(table.name, self.back_relations)
+        code.append(
+            f"{indent}{rows}: Mapped[List['{junction.name}']] = "
+            f"relationship('{junction.name}', foreign_keys='{column}', "
+            f"back_populates='{relation}')\n"
+        )
+
+        # On this target: the shortcut that skips the junction. Both joins are stated
+        # rather than inferred, for the reason foreign_keys is (a later plugin can add
+        # a path), and because a self-referential junction has no inferable join at all
+        # — both of its columns point at the same table.
+        code.append(
+            f"{indent}{collection}: Mapped[List['{other['table'].name}']] = "
+            f"relationship('{other['table'].name}', secondary='{junction.table_name}', "
+            f"primaryjoin='{table.name}.{this['id']} == {column}', "
+            f"secondaryjoin='{other['table'].name}.{other['id']} == "
+            f"{junction.name}.{other['column']}', "
+            f"back_populates='{other_collection}', viewonly=True)\n"
         )
 
     def add_relation_key(self, name: str, relation: Dict[str, List[str]] = {}) -> List[str]:
@@ -407,12 +515,6 @@ class ColumnGenerator:
             String with the column definition
         """
         indent = " " * 4
-
-        # Handle many-to-many relationships
-        if 'm2m_class' in column.attributes:
-            m2m_class = column.attributes['m2m_class']
-            self.relationships.add_many2many_relation(m2m_class, table, column)
-            return ""
 
         # Get column type information
         t = column.db_type
@@ -572,11 +674,36 @@ class Generator:
         for name in self.db.tables_list:
             self._process_table(name)
 
-        # Names and join specs can only be decided now that every FK is known
-        self.relationships.resolve()
+        # Names and join specs can only be decided now that every relation is known
+        self.relationships.resolve(self._inherited_attributes())
 
         # Add relationships to table definitions
         self._add_relationships_to_tables()
+
+    def _inherited_attributes(self) -> Dict[str, Set[str]]:
+        """
+        Public attribute names each generated class inherits from Python.
+
+        A generated class is built on the plugin classes of the same name and on its
+        mixins, and its own attributes are written in the subclass body — so they
+        shadow whatever those classes define. Collecting the names is what lets a
+        relationship called `archive` be refused instead of quietly removing
+        `Archivable.archive()`.
+        """
+        inherited: Dict[str, Set[str]] = {}
+        for name in self.db.tables_list:
+            table = self.db.tables[name]
+            attributes: Set[str] = set()
+            for source in [name, *table.attributes.get('mixins', [])]:
+                for path in self.class_finder.get_class_inheritance(source):
+                    module_path, class_name = path.rsplit('.', 1)
+                    module = self.class_finder.imported_modules.get(module_path)
+                    base = getattr(module, class_name, None) if module else None
+                    if base is not None:
+                        attributes.update(a for a in dir(base) if not a.startswith('_'))
+            if attributes:
+                inherited[name] = attributes
+        return inherited
 
     def _process_table(self, name: str) -> None:
         """
@@ -625,13 +752,21 @@ class Generator:
                 sa_type = t.name
                 if t.inheritance:
                     sa_type = t.inheritance[-1]
+                self.imports.column_imports.add(sa_type)
+                self.imports.add_python_type_import(py_type)
                 code.append(
                     f"    {target['column']}: Mapped[{py_type}] = mapped_column({sa_type}, "
                     f"ForeignKey('{target['table'].table_name}.{target['id']}'), primary_key=True)\n"
                 )
             try:
+                # A junction needs these whether or not the model has plain foreign
+                # keys elsewhere; they used to arrive only as a side effect of one.
+                self.imports.column_imports.add('ForeignKey')
+                self.imports.add_relationship_imports()
+
                 _m2m_column(m2m['target1'])
                 _m2m_column(m2m['target2'])
+                self.relationships.add_many_to_many(table, m2m['target1'], m2m['target2'])
 
             except (ValueError, KeyError) as e:
                 print(f"Error processing many-to-many relationship in {name}: {e}")
@@ -647,35 +782,6 @@ class Generator:
         if indexes_code:
             code.append("\n")
             code.append(indexes_code)
-
-        # Generate many to many relationships
-        if m2m:
-            def _m2m_retations(target1: Dict[str, Any], target2: Dict[str, Any]):
-                code.append(
-                    f"    {target1['table'].name.lower()}: Mapped['{target1['table'].name}'] = "
-                    f"relationship(back_populates='{target2['table'].name.lower()}_m2m')\n"
-                )
-
-            def _m2m_back_relations(target1: Dict[str, Any], target2: Dict[str, Any]):
-                relation = self.relationships.add_relation_key(target1['table'].name, self.relationships.back_relations)
-                relation.append(
-                    f"    {target2['table'].name.lower()}_m2m: Mapped[List['{name}']]"
-                    f" = relationship(back_populates='{target1['table'].name.lower()}')\n"
-                )
-                relation.append(
-                    f"    {target2['table'].table_name}: Mapped[List['{target2['table'].name}']] = "
-                    f"relationship(secondary='{table.table_name}', "
-                    f"back_populates='{target1['table'].table_name}', viewonly=True)\n"
-                )
-            try:
-                code.append("\n")
-                _m2m_retations(m2m['target1'], m2m['target2'])
-                _m2m_retations(m2m['target2'], m2m['target1'])
-                _m2m_back_relations(m2m['target1'], m2m['target2'])
-                _m2m_back_relations(m2m['target2'], m2m['target1'])
-
-            except (ValueError, KeyError) as e:
-                print(f"Error processing many-to-many relationship in {name}: {e}")
 
         self.tables[name] = ''.join(code)
 

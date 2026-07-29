@@ -677,11 +677,28 @@ Their names are generated as follows:
 | forward (on the table holding the column) | the column, **cut at the last underscore** | `book_id` → `book`, `merged_into_id` → `merged_into`, `codice_esterno_fk` → `codice_esterno` |
 | forward, column with no underscore | the referenced table | `codcli` → `cliente` |
 | back (on the referenced table) | the source table name | `Book.loans` |
-| back, when the same pair is linked more than once | source table + forward name | `partners_parent`, `partners_merged_into` |
+
+Both defaults depend on **one** foreign key and on nothing else, which is what
+makes them safe to build on: no relationship is ever renamed because of
+something declared elsewhere. Two foreign keys from one table to one target
+therefore keep distinct forward names for free — the columns differ — while
+their reverse collections both want the source table name, and the second one
+has to be named:
+
+```yaml
+- name: ship_to_id
+  foreign_key:
+    target: Partner.id           # → Order.ship_to, Partner.orders
+
+- name: bill_to_id
+  foreign_key:
+    target: Partner.id           # → Order.bill_to
+    backref: billed_orders       # → Partner.billed_orders (without it: refused)
+```
 
 `relation:` and `backref:` override each side. Use them whenever the generated
-name would be poor — a mechanical `partners_parent` says less than `children` —
-or when the model is refused (below):
+name would be poor — `children` says more than `partners` — or when the model is
+refused (below):
 
 ```yaml
 - name: parent_id
@@ -698,10 +715,17 @@ rest of the codebase reads like.
 
 **Refusals.** Generation stops with an error rather than let two attributes of
 one class share a name — the second would silently overwrite the first, losing a
-column or a relationship. This happens when two foreign keys cut down to the
-same name (`payment_primary` and `payment_secondary` both give `payment`), or
-when a relationship lands on the name of an existing column. The fix is always
-`relation:`/`backref:`, and the error message says so.
+column, a relationship, or an inherited method. It happens when two foreign keys
+cut down to the same name (`payment_primary` and `payment_secondary` both give
+`payment`), when two reverse collections land on the same table, when a
+relationship takes the name of an existing column, or the name of a method
+inherited from the plugin class the model is built on. The fix is always
+`relation:`/`backref:`, and the error names both claimants.
+
+Note what generation does **not** do: rename a relationship to make room for a
+new one. A plugin adding a second foreign key to a table it did not write can
+never move an attribute from under the code that uses it — it declares a name
+for its own relation instead, in its own YAML.
 
 **Self-references** (`parent_id → Partner.id`) need nothing special in YAML: the
 generator emits `remote_side` on the forward side, which is what tells SQLAlchemy
@@ -762,6 +786,70 @@ addition to) regular columns:
         table: Author.id
         column: author_id
 ```
+
+The junction is always a **table of its own**, never conjured behind the scenes.
+It costs a declaration, and it buys the case that matters: a relation with data
+of its own (`notes` above). Frameworks that create the junction implicitly make
+you convert to an explicit one the day a column is needed — with rows already in
+it.
+
+#### What a junction generates
+
+Six attributes, three per side. For the junction above:
+
+| Attribute | On | Is | Default name |
+|-----------|----|----|--------------|
+| `book`, `author` | `BookAuthor` | the row's two ends | the **column**, cut at the last underscore |
+| `author_m2m` | `Book` | the junction rows, with their own columns | other target's class + `_m2m` |
+| `authors` | `Book` | the shortcut past the junction (`viewonly`) | other target's table name |
+| `book_m2m`, `books` | `Author` | the same two, mirrored | as above |
+
+Each is renameable, on the target it belongs to:
+
+```yaml
+      target1:
+        table: Book.id
+        column: book_id
+        relation: book             # BookAuthor.book   — on the junction
+        backref: author_rows       # Book.author_rows  — the rows
+        collection: authors        # Book.authors      — the shortcut
+```
+
+`relation:` and `backref:` mean exactly what they mean on a foreign key: a
+junction row *is* two foreign keys. `collection:` is the third name, the one
+foreign keys have no equivalent for.
+
+#### Two junctions on the same pair, and self-referential junctions
+
+Authors and reviewers over the same two tables is a second junction between
+`Book` and `Author`. Its six default names are the same six, so it is refused
+until it names them — in its own YAML, leaving the first junction untouched:
+
+```yaml
+  BookReviewer:
+    name: books_reviewers
+    columns:
+      - name: rating
+        type: Integer
+    many_to_many:
+      target1:
+        table: Book.id
+        column: book_id
+        collection: reviewers      # Book.reviewers
+        backref: review_rows       # Book.review_rows
+      target2:
+        table: Author.id
+        column: author_id
+        collection: reviewed_books # Author.reviewed_books
+        backref: review_rows       # Author.review_rows
+```
+
+A junction whose two targets are the **same** table (partners linked to
+partners) works the same way. Its two junction-side attributes are free, since
+they come from the two columns, which cannot share a name; the four on the
+target must be declared. The joins are generated in full (`primaryjoin` +
+`secondaryjoin`), because with both columns pointing at one table there is
+nothing for SQLAlchemy to infer.
 
 ### 4.7 Indexes
 

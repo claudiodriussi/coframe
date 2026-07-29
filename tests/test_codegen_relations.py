@@ -32,12 +32,18 @@ def fresh_registry():
     Base.metadata.clear()
 
 
-def generate(tmp_path, monkeypatch, tables):
-    """Write a one-plugin app declaring `tables`, and return the generated source."""
+def generate(tmp_path, monkeypatch, tables, source=None):
+    """Write a one-plugin app declaring `tables`, and return the generated source.
+
+    `source` is the plugin's model.py, when the test needs generated classes to
+    inherit from a Python class of the same name.
+    """
     plugin = tmp_path / 'plugins' / 'app'
-    plugin.mkdir(parents=True)
+    plugin.mkdir(parents=True, exist_ok=True)   # a test may generate twice
     (plugin / 'config.yaml').write_text(yaml.safe_dump({'name': 'app', 'version': '0.0.1'}))
     (plugin / 'model.yaml').write_text(yaml.safe_dump({'tables': tables}))
+    if source:
+        (plugin / 'model.py').write_text(source)
 
     cfg = tmp_path / 'config.yaml'
     cfg.write_text(yaml.safe_dump({'name': 'test', 'plugins': ['plugins']}))
@@ -78,12 +84,22 @@ def table(*columns, name=None):
     return t
 
 
-def line(source, attribute):
-    """The generated line defining `attribute`, for asserting on one statement."""
+def line(source, attribute, cls=None):
+    """The generated line defining `attribute`, for asserting on one statement.
+
+    `cls` restricts the search to one class body — needed when two classes carry an
+    attribute of the same name, as the two sides of a self-referential junction do.
+    """
+    current = None
     for text in source.splitlines():
+        if text.startswith('class '):
+            current = text[len('class '):].split('(')[0].strip(': ')
+        if cls and current != cls:
+            continue
         if text.strip().startswith(f"{attribute}:"):
             return text.strip()
-    raise AssertionError(f"no attribute '{attribute}' in generated source:\n{source}")
+    where = f" on class '{cls}'" if cls else ""
+    raise AssertionError(f"no attribute '{attribute}'{where} in generated source:\n{source}")
 
 
 # ── naming ────────────────────────────────────────────────────────────────────
@@ -154,21 +170,33 @@ def test_self_reference_emits_remote_side(tmp_path, monkeypatch):
     load(tmp_path, source)
 
 
-def test_two_self_references_stay_distinct(tmp_path, monkeypatch):
-    """The case that could not be generated at all: parent_id + merged_into_id."""
-    source = generate(tmp_path, monkeypatch, {
+def partner_tables(first_backref=None, second_backref=None):
+    """Partner with parent_id and merged_into_id, backrefs named or not."""
+    parent = {'target': 'Partner.id'}
+    merged = {'target': 'Partner.id'}
+    if first_backref:
+        parent['backref'] = first_backref
+    if second_backref:
+        merged['backref'] = second_backref
+    return {
         'Partner': table(
             {'name': 'name', 'type': 'String', 'length': 80},
-            {'name': 'parent_id', 'nullable': True, 'foreign_key': {'target': 'Partner.id'}},
-            {'name': 'merged_into_id', 'nullable': True, 'foreign_key': {'target': 'Partner.id'}},
+            {'name': 'parent_id', 'nullable': True, 'foreign_key': parent},
+            {'name': 'merged_into_id', 'nullable': True, 'foreign_key': merged},
             name='partners'),
-    })
+    }
 
-    # Two forward attributes, and two back attributes suffixed to stay apart
+
+def test_two_self_references_stay_distinct(tmp_path, monkeypatch):
+    """The case that could not be generated at all: parent_id + merged_into_id."""
+    source = generate(tmp_path, monkeypatch,
+                      partner_tables('children', 'duplicates'))
+
+    # Two forward attributes named from their columns, two named reverse collections
     assert "foreign_keys='Partner.parent_id'" in line(source, 'parent')
     assert "foreign_keys='Partner.merged_into_id'" in line(source, 'merged_into')
-    assert "back_populates='parent'" in line(source, 'partners_parent')
-    assert "back_populates='merged_into'" in line(source, 'partners_merged_into')
+    assert "back_populates='parent'" in line(source, 'children')
+    assert "back_populates='merged_into'" in line(source, 'duplicates')
 
     module = load(tmp_path, source)
     engine = create_engine('sqlite://')
@@ -181,8 +209,25 @@ def test_two_self_references_stay_distinct(tmp_path, monkeypatch):
         session.flush()
 
         assert branch.parent.name == 'Rossi SRL'
-        assert [p.name for p in head.partners_parent] == ['Rossi SRL - sede']
-        assert [p.name for p in head.partners_merged_into] == ['Rossi Srl']
+        assert [p.name for p in head.children] == ['Rossi SRL - sede']
+        assert [p.name for p in head.duplicates] == ['Rossi Srl']
+
+
+def test_the_second_reverse_collection_must_be_named(tmp_path, monkeypatch):
+    """Both reverse sides default to `partners`; nothing is renamed to make room.
+
+    Suffixing them automatically would be the tempting fix, and it is the one thing
+    that must not happen: the first foreign key may belong to another plugin, whose
+    code would lose the attribute it declared without touching anything.
+    """
+    with pytest.raises(ValueError, match="is claimed by"):
+        generate(tmp_path, monkeypatch, partner_tables())
+
+    # Naming one of the two is enough — the other keeps the default
+    source = generate(tmp_path, monkeypatch, partner_tables(second_backref='duplicates'))
+    line(source, 'partners')
+    line(source, 'duplicates')
+    load(tmp_path, source)
 
 
 def test_soft_self_reference_spells_out_the_join(tmp_path, monkeypatch):
@@ -202,19 +247,24 @@ def test_soft_self_reference_spells_out_the_join(tmp_path, monkeypatch):
 # ── several paths between the same two tables ─────────────────────────────────
 
 def test_two_foreign_keys_to_the_same_target(tmp_path, monkeypatch):
-    """`ship_to_id`/`bill_to_id`: distinct forward names, suffixed back names."""
+    """`ship_to_id`/`bill_to_id`: the forward names cost nothing, the reverse ones do.
+
+    The columns differ, so the two attributes an application actually uses are
+    generated with no declaration at all. Only the collections on Partner collide.
+    """
     source = generate(tmp_path, monkeypatch, {
         'Partner': table(name='partners'),
         'Order': table(
             {'name': 'ship_to_id', 'foreign_key': {'target': 'Partner.id'}},
-            {'name': 'bill_to_id', 'foreign_key': {'target': 'Partner.id'}},
+            {'name': 'bill_to_id', 'foreign_key': {
+                'target': 'Partner.id', 'backref': 'billed_orders'}},
             name='orders'),
     })
 
     assert "foreign_keys='Order.ship_to_id'" in line(source, 'ship_to')
     assert "foreign_keys='Order.bill_to_id'" in line(source, 'bill_to')
-    assert "back_populates='ship_to'" in line(source, 'orders_ship_to')
-    assert "back_populates='bill_to'" in line(source, 'orders_bill_to')
+    assert "back_populates='ship_to'" in line(source, 'orders')
+    assert "back_populates='bill_to'" in line(source, 'billed_orders')
     load(tmp_path, source)
 
 
@@ -269,10 +319,177 @@ def test_the_refusal_can_be_answered_with_explicit_names(tmp_path, monkeypatch):
             {'name': 'payment_primary', 'foreign_key': {
                 'target': 'Payment.id', 'relation': 'primary_payment'}},
             {'name': 'payment_secondary', 'foreign_key': {
-                'target': 'Payment.id', 'relation': 'secondary_payment'}},
+                'target': 'Payment.id', 'relation': 'secondary_payment',
+                'backref': 'orders_secondary'}},
             name='orders'),
     })
 
     line(source, 'primary_payment')
     line(source, 'secondary_payment')
     load(tmp_path, source)
+
+
+def test_a_relationship_may_not_shadow_an_inherited_method(tmp_path, monkeypatch):
+    """Generated attributes sit in the subclass body, so they win over the base class.
+
+    A relationship taking the name of a plugin method would remove the method with
+    no diagnostic at all — the model still maps, the behaviour is simply gone.
+    """
+    with pytest.raises(ValueError, match="would shadow"):
+        generate(tmp_path, monkeypatch, {
+            'Author': table(name='authors'),
+            'Book': table({'name': 'author_id', 'foreign_key': {'target': 'Author.id'}},
+                          name='books'),
+        }, source='class Book:\n    def author(self):\n        return "shadowed"\n')
+
+
+# ── many-to-many ──────────────────────────────────────────────────────────────
+
+def junction(name, other='Author', column='author_id', **targets):
+    """A junction between Book and `other`, with optional explicit names."""
+    return {
+        'name': name,
+        'columns': [{'name': 'notes', 'type': 'String', 'length': 40, 'nullable': True}],
+        'many_to_many': {
+            'target1': {'table': 'Book.id', 'column': 'book_id', **targets.get('target1', {})},
+            'target2': {'table': f'{other}.id', 'column': column, **targets.get('target2', {})},
+        },
+    }
+
+
+def test_many_to_many_keeps_the_names_it_had(tmp_path, monkeypatch):
+    """A single junction must generate exactly what it generated before."""
+    source = generate(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors'),
+    })
+
+    assert "back_populates='author_m2m'" in line(source, 'book')       # on the junction
+    assert "back_populates='book_m2m'" in line(source, 'author')       # on the junction
+    assert "relationship('BookAuthor'" in line(source, 'author_m2m')   # on Book
+    assert "secondary='books_authors'" in line(source, 'authors')      # on Book
+    assert "back_populates='books'" in line(source, 'authors')
+    load(tmp_path, source)
+
+
+def test_a_junction_alone_generates_an_importable_model(tmp_path, monkeypatch):
+    """The m2m branch used to get `relationship`/`List`/`ForeignKey` only as a side
+    effect of some plain foreign key elsewhere in the model."""
+    source = generate(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors'),
+    })
+
+    assert 'relationship' in source.split('class ')[0]   # imported, not just used
+    assert 'ForeignKey' in source.split('class ')[0]
+    assert 'from typing import List' in source
+    load(tmp_path, source)
+
+
+def test_two_junctions_on_one_pair_are_refused(tmp_path, monkeypatch):
+    """Authors and reviewers over the same two tables: six names claimed twice."""
+    with pytest.raises(ValueError, match="is claimed by"):
+        generate(tmp_path, monkeypatch, {
+            'Author': table(name='authors'),
+            'Book': table(name='books'),
+            'BookAuthor': junction('books_authors'),
+            'BookReviewer': junction('books_reviewers'),
+        })
+
+
+def test_a_second_junction_names_itself(tmp_path, monkeypatch):
+    """…and the first one is left alone: only the newcomer declares."""
+    source = generate(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors'),
+        'BookReviewer': junction(
+            'books_reviewers',
+            target1={'collection': 'reviewers', 'backref': 'review_rows'},
+            target2={'collection': 'reviewed_books', 'backref': 'review_rows'}),
+    })
+
+    line(source, 'authors')      # untouched
+    line(source, 'author_m2m')   # untouched
+    line(source, 'reviewers')
+    line(source, 'reviewed_books')
+    load(tmp_path, source)
+
+
+def test_a_junction_colliding_with_a_foreign_key_is_refused(tmp_path, monkeypatch):
+    """The silent one: `Author.books` claimed by the m2m and by a plain FK.
+
+    Both were generated, the second overwrote the first, and the model mapped —
+    `Author.books` answered with the books of which the author was the main one.
+    """
+    with pytest.raises(ValueError, match="is claimed by"):
+        generate(tmp_path, monkeypatch, {
+            'Author': table(name='authors'),
+            'Book': table({'name': 'main_author_id', 'nullable': True,
+                           'foreign_key': {'target': 'Author.id'}}, name='books'),
+            'BookAuthor': junction('books_authors'),
+        })
+
+
+def test_self_referential_junction(tmp_path, monkeypatch):
+    """Partners linked to partners: not expressible at all before.
+
+    The two attributes on the junction come from its columns, so they are distinct
+    without being declared; the four on Partner have to be named, and the joins are
+    stated because there is nothing to infer them from.
+    """
+    source = generate(tmp_path, monkeypatch, {
+        'Partner': table({'name': 'name', 'type': 'String', 'length': 80}, name='partners'),
+        'PartnerLink': {
+            'name': 'partner_links',
+            'columns': [{'name': 'kind', 'type': 'String', 'length': 20, 'nullable': True}],
+            'many_to_many': {
+                'target1': {'table': 'Partner.id', 'column': 'partner_id',
+                            'collection': 'related', 'backref': 'related_rows'},
+                'target2': {'table': 'Partner.id', 'column': 'related_id',
+                            'collection': 'related_by', 'backref': 'related_by_rows'},
+            },
+        },
+    })
+
+    # On the junction, the two scalars come from the two columns and stay distinct
+    assert "foreign_keys='PartnerLink.partner_id'" in line(source, 'partner', 'PartnerLink')
+    assert "foreign_keys='PartnerLink.related_id'" in line(source, 'related', 'PartnerLink')
+    # On Partner, the rows collections and the two joins of the shortcut
+    assert "foreign_keys='PartnerLink.partner_id'" in line(source, 'related_rows', 'Partner')
+    assert "foreign_keys='PartnerLink.related_id'" in line(source, 'related_by_rows', 'Partner')
+    assert "primaryjoin='Partner.id == PartnerLink.partner_id'" in line(source, 'related', 'Partner')
+    assert "secondaryjoin='Partner.id == PartnerLink.related_id'" in line(source, 'related', 'Partner')
+
+    module = load(tmp_path, source)
+    engine = create_engine('sqlite://')
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        alfa, beta = module.Partner(name='Alfa'), module.Partner(name='Beta')
+        session.add_all([alfa, beta])
+        session.flush()
+        session.add(module.PartnerLink(partner=alfa, related=beta, kind='fornitore'))
+        session.flush()
+        session.expire_all()
+
+        assert [p.name for p in alfa.related] == ['Beta']
+        assert [p.name for p in beta.related_by] == ['Alfa']
+        assert [(link.related.name, link.kind) for link in alfa.related_rows] == [('Beta', 'fornitore')]
+
+
+def test_self_referential_junction_must_name_its_sides(tmp_path, monkeypatch):
+    """Without names, all four attributes on Partner would be two pairs of twins."""
+    with pytest.raises(ValueError, match="is claimed by"):
+        generate(tmp_path, monkeypatch, {
+            'Partner': table(name='partners'),
+            'PartnerLink': {
+                'name': 'partner_links',
+                'columns': [],
+                'many_to_many': {
+                    'target1': {'table': 'Partner.id', 'column': 'partner_id'},
+                    'target2': {'table': 'Partner.id', 'column': 'related_id'},
+                },
+            },
+        })
