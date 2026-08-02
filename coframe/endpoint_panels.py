@@ -4,8 +4,8 @@ from coframe.endpoints import endpoint
 # Note: context is set globally via BaseApp.set_context() before each call —
 # endpoint functions receive only (data).
 
-
 _JSON_SCALARS = (str, int, float, bool, type(None))
+
 
 def _strip_meta(obj: Any) -> Any:
     """Remove $plugin metadata keys and non-JSON-serializable objects."""
