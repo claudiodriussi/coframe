@@ -92,10 +92,12 @@ tables:
         nullable: false
 
       - name: library_user_id
+        nullable: false
         foreign_key:
           target: LibraryUser.id
 
       - name: book_id
+        nullable: false
         foreign_key:
           target: Book.id
 
@@ -121,9 +123,11 @@ tables:
         nullable: true
 
       - name: library_user_id
+        nullable: false
         foreign_key:
           target: LibraryUser.id
 
       - name: book_id
+        nullable: false
         foreign_key:
           target: Book.id

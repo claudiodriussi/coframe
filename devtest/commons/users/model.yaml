@@ -23,6 +23,9 @@ tables:
         label: "Administrator"
         type: Boolean
         default: False
+        # A boolean the authentication context reads: three states would mean
+        # a user who is neither administrator nor not.
+        nullable: false
 
   UserLog:
     name: user_logs
