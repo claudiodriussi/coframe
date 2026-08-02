@@ -780,6 +780,7 @@ class DbColumn:
                     self.attr_type[key] = value
                 else:
                     self.attr_other[key] = value
+            self._default_nullable()
             return
 
         cur_type = self.attributes['type']
@@ -802,6 +803,29 @@ class DbColumn:
                 self.attr_type[key] = value
             else:
                 self.attr_other[key] = value
+
+        self._default_nullable()
+
+    def _default_nullable(self) -> None:
+        """
+        A column that says nothing about nullability is nullable.
+
+        Written out instead of being left implicit. With the SQLAlchemy 2.0
+        annotations a generated `Mapped[str]` means NOT NULL, which is the
+        opposite of what the rest of the stack reads from an undeclared column:
+        the schema sent to the client and the auto-form both take it as optional.
+
+        It is also what lets plugins compose a table. A plugin adding a column to
+        a shared table cannot know what the rows created by the others should put
+        in it, so a column that arrives mandatory stops them from being created
+        at all. Requiredness is declared — on the column, or by a type that
+        carries the reason (`Description`, `Name`).
+
+        Primary keys are left alone: they are never nullable.
+        """
+        if self.attr_field.get('primary_key'):
+            return
+        self.attr_field.setdefault('nullable', True)
 
     def resolve_foreign(self, caller: str) -> None:
         """
