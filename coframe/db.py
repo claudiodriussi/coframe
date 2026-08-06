@@ -1,3 +1,4 @@
+import copy
 import inspect
 import threading
 import contextvars
@@ -10,6 +11,28 @@ from sqlalchemy.orm import sessionmaker, scoped_session, Session
 from coframe.plugins import PluginsManager, Plugin
 from coframe.endpoints import CommandProcessor
 from coframe.utils import deep_merge
+
+
+def merge_columns_by_name(base: List[Dict[str, Any]],
+                          override: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Merge two column lists by name, keeping the order of `base` first.
+
+    A name present in both is merged, `override` winning on the keys it states;
+    a name only in `override` is appended.
+    """
+    # Deep copies: the merge below writes into these, and the parent type keeps
+    # its own columns for the tables that use it directly.
+    result = [copy.deepcopy(c) for c in base]
+    by_name = {c.get('name'): c for c in result}
+    for column in override:
+        existing = by_name.get(column.get('name'))
+        if existing is None:
+            new = dict(column)
+            result.append(new)
+            by_name[new.get('name')] = new
+        else:
+            deep_merge(existing, column)
+    return result
 
 
 class CaseString(sqlalchemy.types.TypeDecorator):
@@ -573,7 +596,14 @@ class DbType:
             # deep_merge is intentionally NOT used here — its "last wins" semantics
             # is correct for plugin merging but wrong for type inheritance.
             for key, value in type_obj.attributes.items():
-                if key not in self.attributes:
+                if key == 'columns':
+                    # A composite type inherits the columns of the one it derives
+                    # from, and its own refine them by name — otherwise "child
+                    # wins" would drop the parent's columns altogether, and a
+                    # derived Address would have only what was added to it.
+                    self.attributes['columns'] = merge_columns_by_name(
+                        value, self.attributes.get('columns', []))
+                elif key not in self.attributes:
                     self.attributes[key] = value
 
         self.python_type = type_obj.python_type
