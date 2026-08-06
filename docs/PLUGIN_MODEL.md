@@ -21,7 +21,7 @@ framework merges them into a coherent whole at startup.
 
 1. [How the Plugin System Works](#1-how-the-plugin-system-works)
 2. [The Merge Algorithm](#2-the-merge-algorithm) — identity keys, smart merge, the `$` metadata convention
-3. [Types](#3-types) — primitive, inheritance, composite/mixin, virtual columns, query behaviors
+3. [Types](#3-types) — primitive, inheritance, case, composite/mixin, virtual columns, query behaviors
 4. [Tables](#4-tables)
 5. [Pages and Panels](#5-pages-and-panels)
 6. [Data Source](#6-data-source)
@@ -361,6 +361,45 @@ types:
 Inheritance is resolved at model-generation time by recursively merging
 parent properties before applying the child's own properties.
 
+A child states only what it changes: the parent fills the keys the child left
+out, so `{type: UpperStr, length: 2}` on a column keeps the case of the type and
+narrows the width.
+
+A type cannot be redeclared by a second plugin — the collision raises
+`Type already defined`, which is what catches two plugins reaching for the same
+name. Deriving is the way to extend one.
+
+### 3.3.1 Case Normalisation
+
+`case: upper` (or `lower`) generates a column that normalises the value on its
+way to the database:
+
+```yaml
+types:
+
+  UpperStr:
+    base: ShortStr
+    case: upper
+
+  UpperCode:
+    base: UpperStr
+    index: true
+```
+
+Declared on a type, every column of that type inherits it; declared on a column,
+it applies to that one. Absent — or `case: neutral` — the generated column is a
+plain `String`.
+
+Normalisation happens in the column type rather than in a setter, so it covers
+every write path (ORM, Core, bulk) *and* the parameters of a query: a lower-case
+search matches an upper-case value without either side converting. The object in
+memory keeps what was assigned to it until it is refreshed; the endpoints commit
+and re-read, so an API call returns the normalised value.
+
+Use it for identifiers whose alphabet is upper case anyway — tax codes, VAT
+numbers, ISO codes — and knowing the case is fixed is what lets the code around
+them stop converting.
+
 ### 3.4 Composite Types (Mixins)
 
 A type that declares a `columns` list is a **composite type** (mixin).
@@ -409,6 +448,41 @@ tables:
         type: Address
         prefix: work_     # → work_address, work_city, work_country
 ```
+
+#### Deriving a composite
+
+A composite is extended by deriving it. The derived type carries the columns of
+its base, in the order the base declares them; its own list refines one of them
+by name, or adds to the end:
+
+```yaml
+types:
+
+  AddressIT:
+    base: Address
+    columns:
+      - name: country          # refines the inherited column
+        type: UpperStr
+        length: 2
+      - name: cadastral_code   # added after the inherited ones
+        type: ShortStr
+```
+
+Refining in the derived type leaves the base untouched for the tables that use
+it directly. A table then names the derived type where it wants it — including a
+table declared by another plugin, since columns merge by name:
+
+```yaml
+tables:
+  Partner:
+    columns:
+      - name: address
+        type: AddressIT   # was Address, declared by the partners plugin
+```
+
+This is what keeps a shared composite minimal: it holds the shape everyone
+agrees on, and an application that needs more derives it instead of widening the
+one everybody else uses.
 
 #### Mixin Python inheritance
 
