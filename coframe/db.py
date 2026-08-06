@@ -827,7 +827,7 @@ class DbColumn:
 
             # For FK columns, split attributes NOW (before return)
             # This ensures nullable, index, etc. are captured
-            field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default']
+            field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default', 'onupdate']
             type_keys = ['length', 'precision', 'scale', 'timezone']
             for key, value in self.attributes.items():
                 if key in field_keys:
@@ -850,7 +850,7 @@ class DbColumn:
             self.db_type = self.db.types[cur_type]
 
         # Split attributes by type (for non-FK columns, after type inheritance)
-        field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default']
+        field_keys = ['primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default', 'onupdate']
         type_keys = ['length', 'precision', 'scale', 'timezone']
         for key, value in self.attributes.items():
             if key in field_keys:

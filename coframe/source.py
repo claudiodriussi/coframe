@@ -579,7 +579,7 @@ class ColumnGenerator:
         makes op_date (and any app-registered system default) usable declaratively
         from model YAML.
         """
-        if attr == 'default' and isinstance(value, str) and value.startswith('$'):
+        if attr in ('default', 'onupdate') and isinstance(value, str) and value.startswith('$'):
             from coframe import defaults as cf_defaults
             name = value[1:]
             if cf_defaults.get_default(name) is None:
