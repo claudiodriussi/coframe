@@ -12,6 +12,32 @@ from coframe.endpoints import CommandProcessor
 from coframe.utils import deep_merge
 
 
+class CaseString(sqlalchemy.types.TypeDecorator):
+    """String normalised to one case on its way to the database.
+
+    Declared as `case: upper` (or `lower`) on a column or on a type; without it
+    a plain String is generated, which is the neutral default.
+
+    Normalising in the type means every write goes through it — ORM, Core, bulk
+    — and so do the parameters of a query, so a lower-case search matches an
+    upper-case value. The object in memory keeps what was assigned to it until
+    it is refreshed; the endpoints commit and re-read, so what an API call
+    returns is the normalised value.
+    """
+
+    impl = sqlalchemy.types.String
+    cache_ok = True
+
+    def __init__(self, *args: Any, case: str = 'upper', **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.case = case
+
+    def process_bind_param(self, value: Any, dialect: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        return value.upper() if self.case == 'upper' else value.lower()
+
+
 class DB:
     """
     Database schema manager that handles types, tables, and columns defined in plugins.

@@ -24,6 +24,14 @@ types:
     base: ShortStr
     nullable: False
 
+  UpperStr:
+    base: ShortStr
+    case: upper
+
+  UpperCode:
+    base: UpperStr
+    index: True
+
   Description:
     base: String
     nullable: False

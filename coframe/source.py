@@ -23,6 +23,7 @@ class ModelImportManager:
         self.standard_imports: Set[str] = set()  # Python standard imports
         self.column_imports: Set[str] = set()  # SQLAlchemy Column types
         self.orm_imports: Set[str] = {"Mapped", "mapped_column"}  # SQLAlchemy ORM features
+        self.coframe_imports: Set[str] = {"Base", "BaseApp"}  # names taken from coframe.db
 
         # Add configured imports from plugins
         self._add_configured_imports()
@@ -85,7 +86,7 @@ class ModelImportManager:
         import_statements.append('from sqlalchemy.ext.declarative import declared_attr')
 
         # Add Base import and coframe utilities
-        import_statements.append('from coframe.db import Base, BaseApp')
+        import_statements.append(f"from coframe.db import {', '.join(sorted(self.coframe_imports))}")
         import_statements.append('from coframe.utils import resolve_table_name')
         import_statements.append('import coframe')
 
@@ -525,14 +526,30 @@ class ColumnGenerator:
         if t.inheritance:
             sa_type = t.inheritance[-1]
 
-        # Add type to imports
-        self.imports.column_imports.add(sa_type)
-
         # Add Python type import if needed
         self.imports.add_python_type_import(py_type)
 
         # Process type arguments
         type_args = [f"{a}={column.attr_type[a]}" for a in column.attr_type]
+
+        # `case` swaps the plain string type for the normalising one. Absent, or
+        # `neutral`, nothing changes — which is what most columns want.
+        case = column.attributes.get('case', 'neutral')
+        if case != 'neutral':
+            if case not in ('upper', 'lower'):
+                raise ValueError(
+                    f"Column {table.name}.{column.name}: case must be upper, lower or neutral, "
+                    f"got '{case}'")
+            if py_type != 'str':
+                raise ValueError(
+                    f"Column {table.name}.{column.name}: case applies to strings, "
+                    f"not to {py_type}")
+            self.imports.coframe_imports.add('CaseString')
+            sa_type = 'CaseString'
+            type_args.append(f"case='{case}'")
+        else:
+            self.imports.column_imports.add(sa_type)
+
         if type_args:
             sa_type = f"{sa_type}({', '.join(type_args)})"
 
