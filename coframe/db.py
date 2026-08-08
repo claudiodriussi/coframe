@@ -4,7 +4,7 @@ import threading
 import contextvars
 from typing import Dict, List, Any, Optional, Union, Iterator
 from types import ModuleType
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import sqlalchemy.types
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, scoped_session, Session
@@ -517,31 +517,28 @@ class DB:
         If an exception occurs, the session is rolled back before being closed.
 
         Args:
-            context: Optional context manager to use for this session
+            context: Optional context to apply for the life of the session
 
         Yields:
             SQLAlchemy session object
         """
 
-        # save the current context and set a new one
-        old_context = None
-        if context is not None:
-            old_context = BaseApp.get_context()
-            BaseApp.set_context(context)
+        with ExitStack() as stack:
+            # Scoped: the previous context comes back on exit whatever it was,
+            # None included — see BaseApp.context().
+            if context is not None:
+                stack.enter_context(BaseApp.context(context))
 
-        session_factory = sessionmaker(bind=self.engine)
-        Session = scoped_session(session_factory)
-        session = Session()
-        try:
-            yield session
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
-            # restore previous context
-            if context is not None and old_context is not None:
-                BaseApp.set_context(old_context)
+            session_factory = sessionmaker(bind=self.engine)
+            Session = scoped_session(session_factory)
+            session = Session()
+            try:
+                yield session
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
 
 
 class DbType:
@@ -954,6 +951,32 @@ class BaseApp:
         # Write to both backends for maximum compatibility
         cls._context_local.value = context
         cls._context_var.set(context)
+
+    @classmethod
+    @contextmanager
+    def context(cls, context):
+        """
+        Set the context for the duration of the block, then restore it.
+
+        The scoped form of set_context(), for code that runs outside an HTTP
+        request — background threads, batch scripts, server-rendered pages of a
+        host application — where nothing else sets the context on the way in.
+        Restores unconditionally, including back to None: leaving a context
+        behind means the next user of that thread inherits an identity nobody
+        chose, and query behaviors filter by it.
+
+        Args:
+            context: Context dictionary with user/tenant info
+
+        Yields:
+            The context that was set
+        """
+        previous = cls.get_context()
+        cls.set_context(context)
+        try:
+            yield context
+        finally:
+            cls.set_context(previous)
 
     # ==========================================
     # Model ↔ DB Definition Bridge
