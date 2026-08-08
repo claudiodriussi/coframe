@@ -12,7 +12,7 @@ log_file: "devtest.log"
 plugins: [commons, plugins, plugins/libapp]
 
 # db engine for sqlalchemy
-db_engine: "sqlite:///:memory:"
+db_engine: "sqlite:///devtest.sqlite"
 
 # API configuration
 api:

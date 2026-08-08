@@ -78,48 +78,46 @@ def setup_schema():
     return app
 
 
+def setup(generate: bool = True):
+    """
+    Load plugins, compute the schema, (re)generate model.py.
+
+    The whole application up to the point where a database engine is needed.
+    The servers and this harness both start from here, so what they run is the
+    same application — and importing this module registers the endpoints
+    declared in it.
+    """
+    app = setup_schema()
+
+    if generate:
+        model_file = "model.py"
+        if app.pm.should_regenerate(model_file):
+            print("Generating model.py ...")
+            coframe.source.Generator(app).generate(filename=model_file)
+        else:
+            print("model.py up to date.")
+
+    return app, app.pm
 
 
 # ── Main (existing test suite) ─────────────────────────────────────────────────
 
 def main():
 
-    # load plugins
-    plugins = coframe.plugins.PluginsManager()
-    plugins.load_config("config.yaml")
-    coframe.utils.register_standard_handlers(plugins)
-    plugins.load_plugins()
+    app, plugins = setup()
 
     inspect_panels(plugins)
 
     print(plugins.export_pythonpath())
-
-    # recalc db and source code model generation
-    app = coframe.utils.get_app()
-    app.calc_db(plugins)
-
-    from common.model import Archivable
-    app.add_query_behavior(Archivable)
-
-    model_file = "model.py"
-    if plugins.should_regenerate(model_file):
-        print("Require regeneration.")
-        generator = coframe.source.Generator(app)
-        generator.generate(filename=model_file)
-    else:
-        print("No regeneration required.")
 
     import library.test as library_test  # type: ignore
     library_test.ok()
 
     # open db engine and populate empty db
     import model  # type: ignore
-    db_file = 'devtest.sqlite'
-    is_db = Path(db_file).exists()
-    app.initialize_db(f'sqlite:///{db_file}', model)
+    app.initialize_db(plugins.config["db_engine"], model)
     plugins.load_all_locales()
-    if not is_db:
-        populate_db(app)
+    seed(app, model)
 
     # a query
     with app.get_session() as session:
@@ -273,13 +271,27 @@ def main():
     print(result)
 
 
-def populate_db(app):
+def seed(app, model=None):
     """
-    populate the test db if it is empty
+    Fill an empty database with the data the tests and the UI work on.
+
+    Development data, not a mechanism: it runs only while the tables are empty,
+    so whatever is entered from the UI is left alone. Dev credentials are
+    admin/admin.
+
+    Passwords are seeded in plaintext on purpose. Writing straight through
+    SQLAlchemy skips the `on_write` transform of the endpoints, which leaves
+    devtest in the state a database predating hashing is in — the one case the
+    login path would otherwise never exercise here, and what the change-password
+    flow will be tested against once it exists.
     """
-    print("regenerate test data...")
-    model = app.model
+    model = model or app.model
+
     with app.get_session() as session:
+        if session.query(model.Book).first():
+            return
+
+        print("regenerate test data...")
         try:
             author1 = model.Author(
                 first_name="Italo",
