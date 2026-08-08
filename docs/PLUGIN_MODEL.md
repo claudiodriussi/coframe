@@ -21,7 +21,7 @@ framework merges them into a coherent whole at startup.
 
 1. [How the Plugin System Works](#1-how-the-plugin-system-works)
 2. [The Merge Algorithm](#2-the-merge-algorithm) — identity keys, smart merge, the `$` metadata convention
-3. [Types](#3-types) — primitive, inheritance, case, composite/mixin, virtual columns, query behaviors
+3. [Types](#3-types) — primitive, inheritance, case, composite/mixin, virtual columns, secret columns, query behaviors
 4. [Tables](#4-tables)
 5. [Pages and Panels](#5-pages-and-panels)
 6. [Data Source](#6-data-source)
@@ -573,7 +573,63 @@ Virtual columns:
 
 Virtual columns may also be declared on mixin types, following the same rules.
 
-### 3.6 Query Behaviors
+### 3.6 Secret Columns and Write Transforms
+
+A column declared `secret: true` **never travels to a client**, and one
+declaring `on_write:` is rewritten on its way into the database. Usually both
+are declared once on a type, so every table using it inherits the rule:
+
+```yaml
+# commons/common/model.yaml
+types:
+  Password:
+    base: String
+    widget: password
+    secret: true              # never read back
+    on_write: password_hash   # stored hashed
+```
+
+`secret` is enforced on every read path:
+
+- `serialize_model` drops it, so the `db` endpoint never returns it — the
+  definition is resolved from the model itself, so a caller that passes no
+  table definition cannot turn into a leak;
+- the query `select` drops it from `*` expansions and **refuses** a query that
+  names it (an omitted column would read downstream as an empty value, which is
+  the kind of answer that gets mistaken for data);
+- it is not addressable in `filters` or `order_by` either, from the `db`
+  endpoint or the querybuilder — an equality filter on a column that is never
+  returned is a way of guessing what it holds;
+- the auto-generated list and form descriptors skip it.
+
+Two consequences on writes follow from it, and are applied by the `db` endpoint:
+
+- an **empty value is dropped, not written**: a client cannot echo back what it
+  never received, so an empty secret means "unchanged" — without this, opening a
+  user and saving would wipe the password;
+- `on_write` names a transform from the registry in `coframe.transforms`,
+  applied before the value is stored. `password_hash` (bcrypt) is built in
+  because the core is its consumer — the `auth` endpoint has to know how
+  credentials were stored. Apps register their own with
+  `register_write_transform()`, in the same spirit as `add_query_behavior`.
+
+A password stored in a form predating hashing is accepted and **left as it is**:
+conversion happens when a password is written, never as a side effect of a
+login. An existing database — including one another system still authenticates
+against — therefore keeps working, and each account converts the day its owner
+changes their password, which is a wanted and visible event rather than a silent
+mass migration. A stored value that looks like a digest of some *other* scheme
+(`$argon2id$…`, a bare hex digest) is refused instead of taking the plaintext
+path: comparing it as if it were plaintext would let anyone who read the column
+log in by typing the digest itself.
+
+> `on_write` is one-way, per column, and applied at the HTTP boundary. A
+> conversion that also needs the way back — a value the client renders one way
+> and the database stores another — belongs one layer below, in a SQLAlchemy
+> `TypeDecorator` (see `CaseString`), which covers every consumer of the models
+> rather than just HTTP requests.
+
+### 3.7 Query Behaviors
 
 A **query behavior** is a class that the querybuilder applies automatically
 to every query on a matching model. Behaviors are registered at startup via
@@ -611,7 +667,7 @@ This pattern is generic: any mixin can define its own behavior and register it
 at startup. Examples: tenant isolation, soft-delete with `deleted_at`, row-level
 visibility rules.
 
-### 3.7 UI Hints on Types
+### 3.8 UI Hints on Types
 
 Types can carry UI hints that propagate automatically to form widgets:
 
@@ -630,7 +686,7 @@ types:
     label: "Email Address"
 ```
 
-### 3.8 Merge Behaviour for Types
+### 3.9 Merge Behaviour for Types
 
 `types` is a plain dict. The merge algorithm applies dict-merge semantics:
 
@@ -1703,7 +1759,7 @@ user's roles, and assembled into a whole-app manual that mirrors the menu tree.
 Role-based access control is planned as an **orthogonal filter**, not a new
 mechanism: menu entries and descriptors carry an `access:` hint filtered
 server-side; row-level record rules reuse the existing **query behavior** pattern
-(§ 3.6) — the same lever as `Archivable`, applied to visibility. Nothing in the
+(§ 3.7) — the same lever as `Archivable`, applied to visibility. Nothing in the
 core hardcodes a permission model; it is policy layered on top.
 
 ## 13. Workflows *(future)*

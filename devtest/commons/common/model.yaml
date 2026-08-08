@@ -47,6 +47,10 @@ types:
     label: "Password"
     help: |
       Please insert a robust password and keep it safe
+    # Never leaves the server, and is hashed on the way in. Empty on write means
+    # "unchanged" — the client has no way of echoing back what it cannot read.
+    secret: true
+    on_write: password_hash
 
   Email:
     base: String

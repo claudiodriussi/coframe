@@ -219,9 +219,49 @@ def resolve_table_name(model_name: str, base_table_name: str) -> str:
     return base_table_name
 
 
+def table_definition(model_class, db_table=None):
+    """
+    The DbTable definition for a model class, when one is reachable.
+
+    Args:
+        model_class: SQLAlchemy model class
+        db_table: Definition already at hand, returned as is
+
+    Returns:
+        DbTable instance, or None outside a loaded coframe app
+    """
+    if db_table is not None:
+        return db_table
+    getter = getattr(model_class, 'get_table_definition', None)
+    if getter is None:
+        return None
+    try:
+        return getter()
+    except Exception:
+        return None
+
+
+def secret_columns(db_table) -> frozenset:
+    """
+    Names of the columns a table never sends to a client (`secret: true`).
+
+    Declared in YAML, usually through a type (commons' `Password`), so the
+    column list stays the single place that says what a table holds. The table
+    definition computes the set once; this only spares every caller the check
+    for a table it could not resolve.
+    """
+    if db_table is None:
+        return frozenset()
+    return db_table.secret_columns
+
+
 def serialize_model(model, include_relationships=False, db_table=None):
     """
     Convert SQLAlchemy model instance to dictionary.
+
+    Columns marked `secret: true` are left out: they must never reach a client,
+    and the definition is resolved from the model itself when the caller has
+    none at hand, so forgetting to pass one cannot turn into a leak.
 
     Args:
         model: SQLAlchemy model instance
@@ -231,14 +271,21 @@ def serialize_model(model, include_relationships=False, db_table=None):
     Returns:
         Dictionary representation of the model
     """
+    db_table = table_definition(model.__class__, db_table)
+    secrets = secret_columns(db_table)
+
     result = {}
     # Add real + mixin columns (SQLAlchemy introspection covers both)
     for column in inspection.inspect(model.__class__).columns:
+        if column.name in secrets:
+            continue
         result[column.name] = getattr(model, column.name)
 
     # Add virtual columns (hybrid_property, not in __table__.columns)
     if db_table:
         for col in db_table.virtual_columns:
+            if col.name in secrets:
+                continue
             result[col.name] = getattr(model, col.name, None)
 
     # Optionally add relationships

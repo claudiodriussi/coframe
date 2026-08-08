@@ -21,6 +21,29 @@ from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import ClauseElement
 from sqlalchemy.ext.declarative import DeclarativeMeta
 
+from coframe.utils import secret_columns, table_definition
+
+
+def _secret_names(model_class) -> set:
+    """Names of the columns of a model that are never sent to a client."""
+    return secret_columns(table_definition(model_class))
+
+
+def _refuse_secret(model_class, col_name: str) -> None:
+    """
+    Stop a query that names a column the table never sends.
+
+    Refused rather than dropped: a select that silently loses a column would
+    read as an empty value downstream, which is the kind of answer that gets
+    mistaken for data.
+
+    Raises:
+        ValueError: if the column is marked `secret: true`
+    """
+    if col_name in _secret_names(model_class):
+        table_name = getattr(model_class, '__name__', '?')
+        raise ValueError(f"Column '{table_name}.{col_name}' is not readable")
+
 
 class DynamicQueryBuilder:
     """
@@ -697,6 +720,9 @@ class SelectBuilder:
         """
         Expand a model class into a list of all its columns.
 
+        Columns marked `secret: true` are left out: a wildcard is a request for
+        "what this table holds", not a way around what it never sends.
+
         Args:
             model_class: SQLAlchemy model class
 
@@ -705,7 +731,10 @@ class SelectBuilder:
         """
         # Get table metadata to access individual columns
         if hasattr(model_class, '__table__') and hasattr(model_class.__table__, 'columns'):
-            return [getattr(model_class, column.key) for column in model_class.__table__.columns]
+            secrets = _secret_names(model_class)
+            return [getattr(model_class, column.key)
+                    for column in model_class.__table__.columns
+                    if column.key not in secrets]
 
         # Fallback for models without __table__ attribute
         return [model_class]
@@ -843,6 +872,7 @@ class SelectBuilder:
         for model_name, col_name in column_refs:
             if model_name in self.models:
                 model_class = self.models[model_name]
+                _refuse_secret(model_class, col_name)
 
                 # Get the actual current tablename (works with dynamic tablenames)
                 actual_tablename = getattr(model_class, '__tablename__', None)
@@ -875,24 +905,29 @@ class SelectBuilder:
 
             # Direct lookup by model name
             if table_or_model_name in self.models:
-                return getattr(self.models[table_or_model_name], col_name)
+                return self._column_of(self.models[table_or_model_name], col_name)
 
             # Try case-insensitive model name lookup (e.g., "Customer" vs "customer")
             for model_name, model_class in self.models.items():
                 if model_name.lower() == table_or_model_name.lower():
-                    return getattr(model_class, col_name)
+                    return self._column_of(model_class, col_name)
 
             # Try to find by actual table name (for cases where the table name is used directly)
             for model_name, model_class in self.models.items():
                 tablename = getattr(model_class, '__tablename__', None)
                 if tablename == table_or_model_name:
-                    return getattr(model_class, col_name)
+                    return self._column_of(model_class, col_name)
 
             # If we get here, we couldn't find a matching model
             raise ValueError(f"Model or table not found: {table_or_model_name}")
         else:
             # Use the main table (no prefix specified)
-            return getattr(self.models[self.main_table], col_expr)
+            return self._column_of(self.models[self.main_table], col_expr)
+
+    def _column_of(self, model_class, col_name: str) -> Any:
+        """Resolve a column of a model, refusing the ones never sent to a client."""
+        _refuse_secret(model_class, col_name)
+        return getattr(model_class, col_name)
 
     def _build_function(self, func_expr: str) -> Any:
         """
@@ -1366,7 +1401,12 @@ class FilterBuilder:
         if table_name not in self.models:
             raise ValueError(f"Model for filter not found: {table_name}")
 
-        return getattr(self.models[table_name], column_name)
+        model_class = self.models[table_name]
+        # Filtering and ordering address a column just as a select does: a
+        # column the table never sends must not be reachable from either, or a
+        # filter on it turns into a way of guessing its value.
+        _refuse_secret(model_class, column_name)
+        return getattr(model_class, column_name)
 
     def _apply_operator(self, column: Any, op: str, value: Any) -> ClauseElement:
         """

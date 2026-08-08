@@ -683,6 +683,7 @@ class DbTable:
         self.columns: List[DbColumn] = []
         self.virtual_columns: List[DbColumn] = []
         self._effective_columns: Optional[List['DbColumn']] = None
+        self._secret_columns: Optional[frozenset] = None
 
         self.update(attributes, plugin)
 
@@ -712,6 +713,21 @@ class DbTable:
 
             self._effective_columns = cols
         return self._effective_columns
+
+    @property
+    def secret_columns(self) -> frozenset:
+        """
+        Names of the columns this table never sends to a client (`secret: true`).
+
+        Cached like effective_columns: the answer is fixed once the schema is
+        built, and it is asked on every record serialised and every column a
+        query names — almost always to be told the empty set.
+        """
+        if self._secret_columns is None:
+            self._secret_columns = frozenset(
+                col.name for col in self.effective_columns
+                if col.attributes.get('secret'))
+        return self._secret_columns
 
     def update(self, attributes: Dict[str, Any], plugin: Plugin) -> None:
         """

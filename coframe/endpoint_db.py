@@ -1,5 +1,6 @@
 import coframe
 import coframe.server_utils as server_utils
+import coframe.transforms
 from coframe.endpoints import endpoint
 from coframe.querybuilder import DynamicQueryBuilder
 from coframe.i18n import _, _f
@@ -69,6 +70,45 @@ def _pk_field(db_table) -> str:
         return 'id'
     pk_cols = [col.name for col in db_table.effective_columns if col.attributes.get('primary_key')]
     return pk_cols[0] if pk_cols else 'id'
+
+
+def _write_values(db_table, record_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Prepare incoming values for storage, following what the columns declare.
+
+    Two rules, both from `coframe.transforms`:
+    - a `secret` column arriving empty is dropped — it is never read back, so a
+      client cannot echo it, and an empty value means "leave it alone" rather
+      than "clear it";
+    - a column with `on_write` gets its value passed through that transform, so
+      what reaches the database is the stored form (a hash, a canonical code).
+
+    Raises:
+        ValueError: if a column names a transform nobody registered
+    """
+    if db_table is None:
+        return dict(record_data)
+
+    attributes = {col.name: col.attributes for col in db_table.effective_columns}
+    result = {}
+    for key, value in record_data.items():
+        attrs = attributes.get(key, {})
+        is_empty = value is None or value == ''
+
+        if attrs.get('secret') and is_empty:
+            continue
+
+        transform_name = attrs.get('on_write')
+        if transform_name and not is_empty:
+            transform = coframe.transforms.get_write_transform(transform_name)
+            if transform is None:
+                raise ValueError(
+                    f"Column '{key}' names an unknown write transform: '{transform_name}'")
+            value = transform(value)
+
+        result[key] = value
+
+    return result
 
 
 def handle_get(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
@@ -165,6 +205,7 @@ def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Di
 
     # Create new instance
     try:
+        record_data = _write_values(db_table, record_data)
         coerced = {k: _coerce_value(model_class, k, v) for k, v in record_data.items()}
         new_record = model_class(**coerced)
 
@@ -194,6 +235,8 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
     record_data = params.get('data')
     if not record_data:
         return {"status": "error", "message": _('No data provided for update'), "code": 400}
+
+    record_data = _write_values(db_table, record_data)
 
     with app.get_session() as session:
         # Find the record
@@ -276,6 +319,10 @@ def build_filters(model_class, query_filters: Dict[str, Any]) -> Optional[Any]:
     if not query_filters:
         return None
 
+    # A column the table never sends is not filterable either: an equality
+    # filter on one is a way of guessing the value it would not return.
+    secrets = coframe.utils.secret_columns(coframe.utils.table_definition(model_class))
+
     conditions = []
 
     # Handle special $or operator
@@ -312,6 +359,9 @@ def build_filters(model_class, query_filters: Dict[str, Any]) -> Optional[Any]:
 
         if not hasattr(model_class, field):
             continue
+
+        if field in secrets:
+            raise ValueError(f"Column '{field}' is not filterable")
 
         column = getattr(model_class, field)
 
@@ -439,18 +489,10 @@ def authenticate(data: Dict[str, Any]) -> Dict[str, Any]:
                 "code": 401
             }
 
-        # Verify password - production version
-        '''
-        hashed_password = getattr(user, pass_field)
-        if not bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8')):
-            return {
-                "status": "error",
-                "message": _('Invalid credentials'),
-                "code": 401
-            }
-        '''
-        # Verify password - For development/testing
-        if getattr(user, pass_field) != password:
+        # Verify the password against its stored form. A value still stored the
+        # old way is accepted and left alone: hashing happens when a password is
+        # written, never behind the back of a login (see coframe.transforms).
+        if not coframe.transforms.verify_password(password, getattr(user, pass_field, None)):
             return {
                 "status": "error",
                 "message": _('Invalid credentials'),
