@@ -355,48 +355,6 @@ class DB:
         from coframe.types import get_schema_registry
         return get_schema_registry(self.pm.data)
 
-    def _resolve_display_info(self, table: 'DbTable') -> tuple:
-        """
-        Compute display_field and search_fields for a table.
-
-        Priority:
-          1. Explicit display_field / search_fields in table YAML
-          2. Convention: first column name matching schema.display_field_names (ordered)
-          3. search_fields fallback: [display_field] if real column; first non-pk/virtual col if virtual
-
-        Returns: (display_field: str|None, search_fields: list[str])
-        """
-        convention = self.pm.config.get('schema', {}).get('display_field_names', ['name', 'title', 'description'])
-
-        explicit_display = table.attributes.get('display_field')
-        if explicit_display:
-            display_field = explicit_display
-        else:
-            col_names = {col.name for col in table.effective_columns}
-            display_field = next((n for n in convention if n in col_names), None)
-
-        if not display_field:
-            return None, []
-
-        display_col = next((c for c in table.effective_columns if c.name == display_field), None)
-        is_virtual = display_col is not None and display_col.attributes.get('virtual', False)
-
-        explicit_search = table.attributes.get('search_fields')
-        if explicit_search:
-            search_fields = explicit_search if isinstance(explicit_search, list) else [explicit_search]
-        elif not is_virtual:
-            search_fields = [display_field]
-        else:
-            # Virtual display field: fall back to first non-pk, non-virtual, string-type column
-            search_fields = [
-                col.name for col in table.effective_columns
-                if not col.attributes.get('virtual', False)
-                and not col.attributes.get('primary_key', False)
-                and getattr(col.db_type, 'python_type', None) is str
-            ][:1]
-
-        return display_field, search_fields
-
     def get_table_schema(self) -> Dict[str, Any]:
         """
         Return all tables with their effective_columns (real + mixin + virtual).
@@ -409,7 +367,8 @@ class DB:
                 pk_fields: ['a_id', 'b_id'], # composite PK (M2M tables)
                 columns: [ {name, type, virtual, editable, label, ...} ],
                 display_field: 'name',       # column to show in FK comboboxes
-                search_fields: ['name'],     # real columns for SQL LIKE filtering
+                search_fields: ['name'],     # columns a text search matches (ILIKE)
+                search_pk: 'id',             # primary key, matched exactly (optional)
                 mixins: [...],               # optional
               }
             }
@@ -453,11 +412,13 @@ class DB:
             if mixins:
                 table_dict['mixins'] = mixins
 
-            display_field, search_fields = self._resolve_display_info(table)
-            if display_field:
-                table_dict['display_field'] = display_field
-            if search_fields:
-                table_dict['search_fields'] = search_fields
+            search = table.search_info
+            if search['display_field']:
+                table_dict['display_field'] = search['display_field']
+            if search['search_fields']:
+                table_dict['search_fields'] = search['search_fields']
+            if search['search_pk']:
+                table_dict['search_pk'] = search['search_pk']
 
             result[name] = table_dict
         return result
@@ -684,6 +645,7 @@ class DbTable:
         self.virtual_columns: List[DbColumn] = []
         self._effective_columns: Optional[List['DbColumn']] = None
         self._secret_columns: Optional[frozenset] = None
+        self._search_info: Optional[Dict[str, Any]] = None
 
         self.update(attributes, plugin)
 
@@ -728,6 +690,97 @@ class DbTable:
                 col.name for col in self.effective_columns
                 if col.attributes.get('secret'))
         return self._secret_columns
+
+    @property
+    def search_info(self) -> Dict[str, Any]:
+        """
+        What a text search on this table looks at.
+
+        {
+          'display_field': 'name',        # label column, or None
+          'search_fields': ['name'],      # columns matched with ILIKE
+          'search_pk': 'id',              # column matched exactly, or None
+        }
+
+        The same answer serves the FK combobox, the quick search box and the
+        value widget of a rule on a foreign key: one text, in OR over a declared
+        set of columns. Cached like effective_columns — the schema is fixed once
+        built, and every keystroke of a search asks for it.
+
+        The cascade (DATA_MODEL.md §4.4):
+
+          [primary key, exact]  + [display fields, ILIKE] + [searchable: true, ILIKE]
+
+        An explicit `search_fields` on the table replaces the display fields;
+        the key and the `searchable` columns stay added. The key is dropped by
+        `include_pk: false` on the table, or globally by
+        `schema.include_pk_in_search: false`, and it only takes part when the
+        table has a single-column key — a composite one has no value a user can
+        type.
+
+        Secret columns never enter: a search matching them answers whether a
+        value is right, which is how a password is guessed one query at a time.
+        Virtual columns stay out of what convention derives, having no column to
+        compare in SQL; naming one explicitly is left to whoever knows their
+        hybrid carries an SQL expression.
+        """
+        if self._search_info is None:
+            self._search_info = self._resolve_search_info()
+        return self._search_info
+
+    def _resolve_search_info(self) -> Dict[str, Any]:
+        """Resolve the search cascade once. See search_info."""
+        schema_cfg = {}
+        if self.db is not None and self.db.pm is not None:
+            schema_cfg = self.db.pm.config.get('schema', {})
+        convention = schema_cfg.get('display_field_names', ['name', 'title', 'description'])
+
+        columns = self.effective_columns
+        by_name = {col.name: col for col in columns}
+        secrets = self.secret_columns
+
+        def is_real(name: str) -> bool:
+            col = by_name.get(name)
+            return col is not None and not col.attributes.get('virtual', False)
+
+        display_field = self.attributes.get('display_field')
+        if not display_field:
+            display_field = next((n for n in convention if n in by_name), None)
+
+        explicit = self.attributes.get('search_fields')
+        if explicit:
+            fields = list(explicit) if isinstance(explicit, list) else [explicit]
+        elif display_field and is_real(display_field):
+            fields = [display_field]
+        elif display_field:
+            # A virtual display field has nothing to compare: fall back to the
+            # first real string column, which is what the label is built from.
+            fields = [
+                col.name for col in columns
+                if not col.attributes.get('virtual', False)
+                and not col.attributes.get('primary_key', False)
+                and getattr(col.db_type, 'python_type', None) is str
+            ][:1]
+        else:
+            fields = []
+
+        fields += [
+            col.name for col in columns
+            if col.attributes.get('searchable') and col.name not in fields
+        ]
+        fields = [name for name in fields if name not in secrets]
+
+        pk_fields = [col.name for col in columns if col.attributes.get('primary_key')]
+        include_pk = self.attributes.get('include_pk', schema_cfg.get('include_pk_in_search', True))
+        search_pk = None
+        if include_pk and len(pk_fields) == 1 and pk_fields[0] not in secrets:
+            search_pk = pk_fields[0]
+
+        return {
+            'display_field': display_field,
+            'search_fields': fields,
+            'search_pk': search_pk,
+        }
 
     def update(self, attributes: Dict[str, Any], plugin: Plugin) -> None:
         """

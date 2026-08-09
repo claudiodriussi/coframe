@@ -255,6 +255,18 @@ def secret_columns(db_table) -> frozenset:
     return db_table.secret_columns
 
 
+def search_info(db_table) -> dict:
+    """
+    What a text search on a table looks at — see DbTable.search_info.
+
+    Returns the empty cascade outside a loaded coframe app, so a caller working
+    with plain models is told the table is not searchable rather than crashing.
+    """
+    if db_table is None:
+        return {'display_field': None, 'search_fields': [], 'search_pk': None}
+    return db_table.search_info
+
+
 def serialize_model(model, include_relationships=False, db_table=None):
     """
     Convert SQLAlchemy model instance to dictionary.

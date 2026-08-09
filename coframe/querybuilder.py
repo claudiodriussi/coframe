@@ -13,7 +13,7 @@ import decimal
 from uuid import UUID
 from typing import Any, Dict, List, Union, Optional, Type
 
-from sqlalchemy import and_, or_, desc, asc, select, func, text, TextClause, literal_column, inspect
+from sqlalchemy import and_, or_, desc, asc, false, select, func, text, TextClause, literal_column, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.row import Row
 from sqlalchemy.orm import Session
@@ -21,7 +21,17 @@ from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import ClauseElement
 from sqlalchemy.ext.declarative import DeclarativeMeta
 
-from coframe.utils import secret_columns, table_definition
+from coframe.utils import search_info, secret_columns, table_definition
+
+# The escape character LIKE patterns are built with. Postgres already reads a
+# backslash this way; stating it makes every backend agree, and makes the
+# escaping a caller does to a user's own '%' actually take effect.
+LIKE_ESCAPE = '\\'
+
+
+def _escape_like(text: str) -> str:
+    """Neutralise the wildcards in text a user typed, so '50%' means '50%'."""
+    return re.sub(r'([\\%_])', r'\\\1', text)
 
 
 def _secret_names(model_class) -> set:
@@ -124,6 +134,8 @@ class DynamicQueryBuilder:
             ]
         },
 
+        "search": "rossi",             # Text search (optional) — see below
+
         "group_by": [                  # GROUP BY clause (optional)
             "column_name",
             "Model.column_name",
@@ -172,6 +184,19 @@ class DynamicQueryBuilder:
 
     Filtering the picklist is the job of the behaviors and of the view's
     `domain`; neither must ever reach the resolution of a stored value.
+
+    The "search" key
+    ----------------
+    One text, in OR over the columns the table declares as searchable — the
+    cascade of DATA_MODEL.md §4.4, resolved from the table definition, so the
+    caller sends what the user typed and never a list of columns. The primary
+    key joins the OR as one branch matched exactly, when the text is a value its
+    type could hold.
+
+    It is a key of its own rather than one more condition group because it is
+    ANDed with the filters: it can only narrow them, and the two are cleared
+    independently. A table that declares nothing searchable refuses the search
+    instead of quietly returning every row.
 
     Examples:
     ---------
@@ -305,6 +330,15 @@ class DynamicQueryBuilder:
         # Apply filters (WHERE)
         if 'filters' in query_def:
             query = filter_builder.apply_filters(query, query_def['filters'])
+
+        # Apply the text search over the table's declared search fields.
+        # A key of its own rather than one more condition group: it is ANDed
+        # with whatever the filters say, so it can only narrow them, and the
+        # two are cleared independently — emptying the search box leaves the
+        # user's rules alone.
+        search_text = str(query_def.get('search') or '').strip()
+        if search_text:
+            query = query.where(filter_builder.build_search(main_model, search_text))
 
         # Apply grouping (GROUP BY)
         if 'group_by' in query_def:
@@ -1220,6 +1254,89 @@ class FilterBuilder:
 
         return query
 
+    def build_search(self, model_class: Type[DeclarativeMeta], text: str) -> ClauseElement:
+        """
+        One text, in OR over the columns the table declares as searchable.
+
+        The primitive behind the quick search box, the FK combobox and the value
+        widget of a rule on a foreign key: the caller sends what the user typed
+        and never has to know which columns that means, which is what keeps the
+        three of them the same mechanism (DATA_MODEL.md §4.4).
+
+        The key takes part as *one branch of the OR*, matched exactly, and only
+        when the text is a value its type could hold. Typing 42 may well mean the
+        record numbered 42 and may equally mean a title with 42 in it, and
+        hiding the second is an answer nobody asked for.
+
+        Wildcards the user typed are escaped, so searching for '50%' looks for
+        that and not for everything.
+
+        Args:
+            model_class: the main model of the query
+            text: what the user typed, already stripped
+
+        Returns:
+            A clause to AND with the rest of the query
+
+        Raises:
+            ValueError: if the table declares nothing to search
+        """
+        info = search_info(table_definition(model_class))
+        table_name = getattr(model_class, '__name__', self.main_table)
+
+        if not info['search_fields'] and not info['search_pk']:
+            raise ValueError(
+                f"Table '{table_name}' has no searchable columns: declare "
+                f"search_fields, or searchable: true on a column"
+            )
+
+        pattern = f"%{_escape_like(text)}%"
+        branches = [
+            self._build_filter_conditions({field: ['ilike', pattern]})
+            for field in info['search_fields']
+        ]
+        branches = [b for b in branches if b is not None]
+
+        pk_value = self._as_key_value(model_class, info['search_pk'], text)
+        if pk_value is not None:
+            branches.append(getattr(model_class, info['search_pk']) == pk_value)
+
+        # Searchable only by key, and the text is not one: no row can match, and
+        # saying so is not the same as dropping the search and returning all.
+        if not branches:
+            return false()
+
+        return or_(*branches)
+
+    @staticmethod
+    def _as_key_value(model_class: Type[DeclarativeMeta], pk: Optional[str], text: str) -> Any:
+        """
+        The text as a value of the key column, or None when it cannot be one.
+
+        A key the user cannot type — a date, a float — never takes part: the
+        branch would either raise or match by accident.
+        """
+        if not pk:
+            return None
+        try:
+            python_type = inspect(model_class).columns[pk].type.python_type
+        except (KeyError, NotImplementedError, AttributeError):
+            return None
+
+        if python_type is str:
+            return text
+        if python_type is int:
+            try:
+                return int(text)
+            except ValueError:
+                return None
+        if python_type is UUID:
+            try:
+                return UUID(text)
+            except ValueError:
+                return None
+        return None
+
     def _build_filter_conditions(self, conditions: Any) -> Optional[ClauseElement]:
         """
         Build filter conditions recursively, supporting both verbose and concise syntax.
@@ -1537,9 +1654,9 @@ class FilterBuilder:
         elif op == 'ge':
             return column >= value
         elif op == 'like':
-            return column.like(value)
+            return column.like(value, escape=LIKE_ESCAPE)
         elif op == 'ilike':
-            return column.ilike(value)
+            return column.ilike(value, escape=LIKE_ESCAPE)
         elif op == 'in':
             return column.in_(value)
         elif op == 'notin':

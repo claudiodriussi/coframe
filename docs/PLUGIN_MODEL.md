@@ -755,6 +755,38 @@ tables:
 | `help` | — | Description shown in admin views |
 | `tags` | `[]` | Arbitrary list of category tags |
 | `mixins` | `[]` | Composite types whose columns are injected |
+| `display_field` | by convention | Column shown as the record's label |
+| `search_fields` | `[display_field]` | Columns a text search matches — replaces the display field, see below |
+| `include_pk` | `true` | Whether the key takes part in a text search |
+
+#### What a text search looks at
+
+One text, in OR over the columns the table declares — the primitive behind the
+quick search box on a list, the lookup of an FK combobox, and the value widget
+of a filter on a foreign key. Callers send the text as the `search` key of a
+query and never a list of columns; the builder resolves the cascade:
+
+```
+[primary key, matched exactly] + [display field, ILIKE] + [searchable: true columns, ILIKE]
+```
+
+`search_fields` replaces the display field in that middle slot; the key and the
+`searchable` columns stay added. The display field itself comes from
+`display_field`, or from the first column named in `schema.display_field_names`
+(app `config.yaml`, default `[name, title, description]`).
+
+The key only takes part when the table has a single-column one and the text is a
+value its type could hold — typing `42` may mean the record numbered 42 and may
+equally mean a title containing 42, so it is one branch of the OR rather than a
+shortcut past the others. Drop it with `include_pk: false` on the table, or
+`schema.include_pk_in_search: false` for the whole app.
+
+**Secret columns never enter**, declared or not: a search that matched one would
+answer whether a value is right, which is how a password is guessed one query at
+a time. Virtual columns stay out of what convention derives, having no column to
+compare in SQL; naming one in `search_fields` is left to whoever knows their
+hybrid carries an SQL expression. A table that declares nothing searchable
+**refuses** a search instead of quietly returning every row.
 
 ### 4.4 Column Properties
 
@@ -769,6 +801,7 @@ tables:
 | `label` | string | UI label (overrides type-level label) |
 | `help` | string | UI tooltip |
 | `widget` | string | UI widget override |
+| `searchable` | bool | Adds the column to what a text search matches (§ 4.3) |
 | `prefix` | string | Column name prefix when expanding a composite type |
 | `foreign_key` | dict | FK definition: `target`, `relation`, `backref`, `ondelete`, `onupdate`, `constraint` (hard/soft — see § 4.5) |
 | `length` | int | String length (for String-based types) |

@@ -62,13 +62,21 @@ def test_equality_short_form(builder):
 
 
 def test_contains_and_startswith(builder):
-    assert where(builder, [{'title': ['ilike', '%ros%']}]) == "lower(book.title) LIKE lower('%ros%')"
-    assert where(builder, [{'title': ['ilike', 'ros%']}]) == "lower(book.title) LIKE lower('ros%')"
+    assert where(builder, [{'title': ['ilike', '%ros%']}]) == \
+        "lower(book.title) LIKE lower('%ros%') ESCAPE '\\'"
+    assert where(builder, [{'title': ['ilike', 'ros%']}]) == \
+        "lower(book.title) LIKE lower('ros%') ESCAPE '\\'"
 
 
 def test_escaped_wildcards_reach_the_pattern(builder):
-    """A percent typed by the user must be matched, not act as a wildcard."""
-    assert '%50\\%%' in where(builder, [{'title': ['ilike', '%50\\%%']}])
+    """
+    A percent typed by the user must be matched, not act as a wildcard. The
+    client escapes it with a backslash, which means nothing unless the pattern
+    says so: hence the ESCAPE clause on every LIKE the builder emits.
+    """
+    clause = where(builder, [{'title': ['ilike', '%50\\%%']}])
+    assert '%50\\%%' in clause
+    assert "ESCAPE '\\'" in clause
 
 
 def test_comparison(builder):
