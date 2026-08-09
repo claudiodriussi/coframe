@@ -34,6 +34,35 @@ def _escape_like(text: str) -> str:
     return re.sub(r'([\\%_])', r'\\\1', text)
 
 
+def _ordered_column_names(order_def: Optional[List[Any]]) -> List[str]:
+    """The column names an ordering definition mentions, in any of its formats."""
+    names: List[str] = []
+    for item in order_def or []:
+        if isinstance(item, dict):
+            column = item.get('column')
+        elif isinstance(item, list):
+            column = item[0] if item else None
+        else:
+            column = item
+        if isinstance(column, str):
+            names.append(column)
+    return names
+
+
+def _is_aggregated(query_def: Dict[str, Any]) -> bool:
+    """
+    Whether the query returns groups rather than rows.
+
+    A grouped or aggregated query has no primary key to end its ordering with —
+    naming one would be a column outside the grouping — and it is not paginated
+    row by row either, so it has nothing to gain from the tiebreaker.
+    """
+    if query_def.get('group_by') or query_def.get('having'):
+        return True
+    select_def = query_def.get('select') or []
+    return any(isinstance(expr, str) and '(' in expr for expr in select_def)
+
+
 def _secret_names(model_class) -> set:
     """Names of the columns of a model that are never sent to a client."""
     return secret_columns(table_definition(model_class))
@@ -371,6 +400,14 @@ class DynamicQueryBuilder:
         # Apply ordering
         if 'order_by' in query_def:
             query = order_builder.apply_ordering(query, query_def['order_by'])
+
+        # A paginated query needs a total order, or a page is not a well-defined
+        # slice of anything: rows tied on the ordering column can come back in a
+        # different order on the next execution, so one is read twice and another
+        # never. The key ends the ordering and settles every tie.
+        if ('limit' in query_def or 'offset' in query_def) and not _is_aggregated(query_def):
+            query = order_builder.append_key_tiebreaker(
+                query, main_model, query_def.get('order_by'))
 
         # Apply limit/offset
         if 'limit' in query_def:
@@ -1731,6 +1768,46 @@ class OrderBuilder:
             else:
                 raise ValueError(f"Invalid ordering format: {order_item}")
 
+        return query
+
+    def append_key_tiebreaker(self, query: Select, model_class: Type[DeclarativeMeta],
+                              order_def: Optional[List[Any]]) -> Select:
+        """
+        End the ordering with the primary key, so a page is a well-defined slice.
+
+        A column with repeated values does not decide an order between the rows
+        that share one, and the database is free to return them differently on
+        each execution — which is exactly what pagination does, one query per
+        page. With two books both titled "1984", the one that came last on page
+        one can come first on page two: the reader sees it twice and never sees
+        the other, with nothing to signal it.
+
+        Adding the key makes the order *total*: no two rows are tied, so every
+        page is a slice of one and the same sequence. It costs nothing to
+        evaluate — the key is indexed by definition — and it also settles what
+        was already undecided, since two rows that look identical now always
+        come back in the same order.
+
+        Args:
+            query: the query, with its declared ordering already applied
+            model_class: the main model, whose key is the tiebreaker
+            order_def: the ordering already applied, to avoid naming a column twice
+
+        Returns:
+            The query, ordered by the key after everything else
+        """
+        named = {name.split('.')[-1] for name in _ordered_column_names(order_def)}
+        try:
+            key_columns = [c.name for c in inspect(model_class).primary_key]
+        except Exception:
+            return query
+
+        for name in key_columns:
+            if name in named:
+                continue
+            column = getattr(model_class, name, None)
+            if column is not None:
+                query = query.order_by(asc(column))
         return query
 
     def _apply_dict_ordering(self, query: Select, order_item: Dict[str, Any]) -> Select:
