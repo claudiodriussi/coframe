@@ -13,7 +13,7 @@ import decimal
 from uuid import UUID
 from typing import Any, Dict, List, Union, Optional, Type
 
-from sqlalchemy import and_, or_, desc, asc, select, func, text, TextClause, literal_column
+from sqlalchemy import and_, or_, desc, asc, select, func, text, TextClause, literal_column, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.engine.row import Row
 from sqlalchemy.orm import Session
@@ -1280,6 +1280,12 @@ class FilterBuilder:
         op = condition['op'].lower()
         value = condition.get('value')
 
+        # A path is only a path when it is not already qualified by a table
+        if table_name is None:
+            relation = self._build_relation_filter(column_name, op, value)
+            if relation is not None:
+                return relation
+
         # Get the column
         column = self._get_column_from_names(table_name, column_name)
 
@@ -1321,6 +1327,11 @@ class FilterBuilder:
         # Normalize the operator
         if op in self.operator_map:
             op = self.operator_map[op]
+
+        # A relationship path is not a column: it is a predicate on another table
+        relation = self._build_relation_filter(column_expr, op, value)
+        if relation is not None:
+            return relation
 
         # Get the column
         column = self._get_column_from_expr(column_expr)
@@ -1399,7 +1410,15 @@ class FilterBuilder:
             table_name = self.main_table
 
         if table_name not in self.models:
-            raise ValueError(f"Model for filter not found: {table_name}")
+            # A dotted name has two readings, and a wrong guess about which one
+            # was meant sends the reader looking in the wrong place: say both.
+            main = self.models.get(self.main_table)
+            known = sorted(inspect(main).relationships.keys()) if main is not None else []
+            raise ValueError(
+                f"'{table_name}' is neither a model nor a relationship of "
+                f"{getattr(main, '__name__', self.main_table)} "
+                f"(relationships: {', '.join(known) or 'none'})"
+            )
 
         model_class = self.models[table_name]
         # Filtering and ordering address a column just as a select does: a
@@ -1407,6 +1426,88 @@ class FilterBuilder:
         # filter on it turns into a way of guessing its value.
         _refuse_secret(model_class, column_name)
         return getattr(model_class, column_name)
+
+    def _walk_relation_path(self, expr: str) -> Optional[tuple]:
+        """
+        Read a dotted expression as a walk over relationships, or decline it.
+
+        Declines — returns None — for anything that is not one: a bare column, or
+        the `Table.column` form the rest of the builder already understands. The
+        two share the dot, so the first segment decides: a relationship of the
+        main table opens a path, a model name does not.
+
+        Returns:
+            (chain, target_model, column_name), where chain is the list of
+            (owner_model, attribute, is_collection) to walk, or None
+
+        Raises:
+            ValueError: if a name is both a model and a relationship, or if a
+                segment names neither
+        """
+        if '.' not in expr:
+            return None
+
+        model = self.models.get(self.main_table)
+        if model is None:
+            return None
+
+        head = expr.split('.', 1)[0]
+        relationships = inspect(model).relationships
+        if head not in relationships:
+            return None
+        if head in self.models:
+            raise ValueError(
+                f"'{head}' is both a model and a relationship of {model.__name__}: "
+                f"the path '{expr}' is ambiguous"
+            )
+
+        segments = expr.split('.')
+        chain = []
+        for segment in segments[:-1]:
+            relationships = inspect(model).relationships
+            if segment not in relationships:
+                raise ValueError(
+                    f"'{segment}' is not a relationship of {model.__name__} in path '{expr}'"
+                )
+            chain.append((model, segment, relationships[segment].uselist))
+            model = relationships[segment].mapper.class_
+
+        column_name = segments[-1]
+        if not hasattr(model, column_name):
+            raise ValueError(f"'{model.__name__}' has no column '{column_name}' in path '{expr}'")
+
+        return chain, model, column_name
+
+    def _build_relation_filter(self, expr: str, op: str, value: Any) -> Optional[ClauseElement]:
+        """
+        Build a predicate that reaches another table through a relationship.
+
+        The direction of each step decides its translation, and the reason is the
+        cardinality of the result rather than taste. A step towards *one* — a
+        foreign key — cannot multiply rows, so it becomes a correlated `has()`.
+        A step towards *many* would: joining an author to their books returns
+        that author once per book, which inflates counts, shifts pagination and
+        makes "authors who never published with X" inexpressible. It becomes an
+        `any()`, an EXISTS that asks whether such a row exists without bringing
+        it into the result.
+
+        Returns None when the expression is not a path, so the caller falls back
+        to its ordinary column handling.
+        """
+        walk = self._walk_relation_path(expr)
+        if walk is None:
+            return None
+
+        chain, target, column_name = walk
+
+        # A secret column stays unreachable however long the road to it
+        _refuse_secret(target, column_name)
+
+        condition = self._apply_operator(getattr(target, column_name), op, value)
+        for owner, attribute, is_collection in reversed(chain):
+            related = getattr(owner, attribute)
+            condition = related.any(condition) if is_collection else related.has(condition)
+        return condition
 
     def _apply_operator(self, column: Any, op: str, value: Any) -> ClauseElement:
         """
