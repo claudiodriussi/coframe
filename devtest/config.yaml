@@ -14,6 +14,16 @@ plugins: [commons, plugins, plugins/libapp]
 # db engine for sqlalchemy
 db_engine: "sqlite:///devtest.sqlite"
 
+# Schema alignment (coframe.schema_sync). The server only ever looks: at startup
+# it compares the database with the schema the plugins describe and, on a
+# difference, stops ('error', the default), logs ('warn') or says nothing
+# ('off'). Changing the database is an explicit command:
+#   python devtest.py db-check           what differs (read-only, exit 1 if it does)
+#   python devtest.py db-sync --dry-run  the DDL it would run
+#   python devtest.py db-sync            apply it — adds only, never drops
+migrations:
+  on_startup: error
+
 # API configuration
 api:
   prefix: "coframe"  # API prefix - all endpoints will be under /coframe/* (or use "api/v1" for /api/v1/*, etc.)

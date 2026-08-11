@@ -434,14 +434,25 @@ class DB:
             result[name] = table_dict
         return result
 
-    def initialize_db(self, db_url: str, model: ModuleType) -> Any:
+    def initialize_db(self, db_url: str, model: ModuleType,
+                      create_all: bool = True, check_schema: bool = True) -> Any:
         """
         Initialize the database with the given connection URL, register the
         model module and build the models dictionary
 
+        `create_all` adds the tables that do not exist yet; it never alters an
+        existing one, which is what the schema check is for: it compares the
+        database with the schema the plugins describe and, according to
+        `migrations.on_startup` in config.yaml, stops the server ('error',
+        the default), logs ('warn') or says nothing ('off').  See
+        coframe.schema_sync — the alignment itself is an explicit command.
+
         Args:
             db_url: Database connection URL for SQLAlchemy
             model: Module containing all models
+            create_all: Create missing tables
+            check_schema: Run the startup schema check (off for the CLI, which
+                          needs to report the database as it actually is)
 
         Returns:
             The created engine instance
@@ -451,9 +462,16 @@ class DB:
                        if isinstance(cls, type) and not name.startswith('_')}
         from sqlalchemy import create_engine
         engine = create_engine(db_url)
-        Base.metadata.create_all(engine)
+        if create_all:
+            Base.metadata.create_all(engine)
         self.engine = engine
         self.db_type = self.get_database_type()
+
+        if check_schema:
+            from coframe.schema_sync import check_on_startup
+            policy = (self.pm.config.get('migrations') or {}).get('on_startup', 'error')
+            check_on_startup(engine, Base.metadata, policy, logger=self.pm.logger)
+
         return engine
 
     def get_database_type(self) -> str:

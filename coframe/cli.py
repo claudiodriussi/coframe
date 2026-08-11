@@ -13,10 +13,14 @@ Two layers:
                     write output to file or stdout.  Accepts an output_dir
                     so callers can point it at their project's data folder.
 
+Commands needing a live database (db-check, db-sync) are listed in DB_COMMANDS:
+the caller builds the app with an engine for those, and with the schema alone
+for the rest.
+
 Planned sections:
   dump_*     — read-only introspection (pages, tables, types, plugins, endpoints)
+  db_*       — schema alignment (coframe.schema_sync)
   [future]   — dump-endpoints: catalog of registered endpoints with metadata
-  [future]   — schema migrations (alembic wrappers)
   [future]   — backup / restore
   [future]   — db engine migration
 
@@ -328,6 +332,60 @@ def dump_types(app: Any, include_builtin: bool = False) -> Tuple[str, str]:
     return _to_yaml(output), 'type registry'
 
 
+# ── db-check / db-sync ─────────────────────────────────────────────────────────
+
+# Commands that need app.initialize_db() to have run — the others work on the
+# merged schema alone.
+DB_COMMANDS = {'db-check', 'db-sync'}
+
+
+def db_check(app: Any) -> Tuple[str, bool]:
+    """
+    Compare the database with the schema the plugins describe.
+
+    Returns:
+        (report, aligned) — read-only, nothing is written.
+    """
+    from coframe.db import Base
+    from coframe.schema_sync import diff_schema, format_diff
+
+    diff = diff_schema(app.engine, Base.metadata)
+    return format_diff(diff), diff.is_aligned
+
+
+def db_sync(app: Any, dry_run: bool = False) -> Tuple[str, bool]:
+    """
+    Apply the changes the database can take safely: new tables and columns,
+    new indexes, widened types, relaxed NOT NULLs.  Everything else is
+    reported and left alone — see coframe.schema_sync for why.
+
+    Returns:
+        (report, aligned_after) — with dry_run, the DDL that would run.
+    """
+    from coframe.db import Base
+    from coframe.schema_sync import apply_diff, diff_schema, format_diff, plan_sql
+
+    diff = diff_schema(app.engine, Base.metadata)
+
+    if diff.is_aligned:
+        return 'Database aligned with the schema.', True
+
+    lines = [format_diff(diff, sync_command=None)]
+
+    if dry_run:
+        sql = plan_sql(app.engine, diff)
+        if sql:
+            lines += ['', '--- SQL that would run ---', sql.rstrip()]
+        return '\n'.join(lines), False
+
+    if diff.safe:
+        executed = apply_diff(app.engine, diff, logger=app.pm.logger)
+        lines += ['', f'Applied {len(diff.safe)} change(s):']
+        lines += [f'  {statement}' for statement in executed]
+
+    return '\n'.join(lines), not diff.refused
+
+
 # ── CLI parser ─────────────────────────────────────────────────────────────────
 
 def make_parser() -> argparse.ArgumentParser:
@@ -354,6 +412,9 @@ examples:
   dump-types --include-builtin          also show SQLAlchemy built-in roots
   check                                 validate merged descriptors (refs, models, fields)
   check --dump                          also write full JSON dump to <output_dir>/appdump.json
+  db-check                              compare the database with the schema (exit 1 if it differs)
+  db-sync --dry-run                     show the DDL an alignment would run
+  db-sync                               apply it (adds only — never drops, never narrows)
         """,
     )
 
@@ -400,6 +461,20 @@ examples:
     p.add_argument('--dump', nargs='?', const='', metavar='PATH',
                    help='Also write the full effective-state JSON dump '
                         '(default path: <output_dir>/appdump.json)')
+
+    # ── db-check ───────────────────────────────────────────────────────────────
+    p = sub.add_parser(
+        'db-check',
+        help='Compare the database with the schema described by the plugins (read-only)',
+    )
+
+    # ── db-sync ────────────────────────────────────────────────────────────────
+    p = sub.add_parser(
+        'db-sync',
+        help='Align the database: add tables/columns/indexes, widen types. Never drops.',
+    )
+    p.add_argument('--dry-run', action='store_true',
+                   help='Print the DDL that would run, without touching the database')
 
     return parser
 
@@ -499,6 +574,18 @@ def run_cli(app: Any, args: argparse.Namespace, output_dir: Path = Path('.')) ->
             print(f'Full dump written: {out_path}')
 
         if n_errors:
+            sys.exit(1)
+
+    elif args.command == 'db-check':
+        report, aligned = db_check(app)
+        print(report)
+        if not aligned:
+            sys.exit(1)
+
+    elif args.command == 'db-sync':
+        report, aligned = db_sync(app, dry_run=args.dry_run)
+        print(report)
+        if not aligned:
             sys.exit(1)
 
     else:
