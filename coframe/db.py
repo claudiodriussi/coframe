@@ -370,6 +370,7 @@ class DB:
                 search_fields: ['name'],     # columns a text search matches (ILIKE)
                 search_pk: 'id',             # primary key, matched exactly (optional)
                 mixins: [...],               # optional
+                indexes: [{name, columns}],  # compound indexes, optional
               }
             }
         """
@@ -379,7 +380,7 @@ class DB:
             for col in table.effective_columns:
                 col_dict = {'name': col.name}
                 for attr in ('type', 'label', 'virtual', 'editable', 'nullable', 'secret',
-                             'default', 'deferred'):
+                             'default', 'deferred', 'index', 'unique'):
                     if attr in col.attributes:
                         col_dict[attr] = col.attributes[attr]
                     elif hasattr(col, 'db_type') and col.db_type and attr == 'type':
@@ -411,6 +412,16 @@ class DB:
             mixins = table.attributes.get('mixins', [])
             if mixins:
                 table_dict['mixins'] = mixins
+
+            # Compound indexes, as declared. What the client does with them is
+            # suggest an order the database can serve without sorting everything
+            # — a priority in a combo, never a restriction on what may be sorted.
+            indexes = table.attributes.get('indexes', [])
+            if indexes:
+                table_dict['indexes'] = [
+                    {'name': idx.get('name'), 'columns': idx.get('columns', [])}
+                    for idx in indexes
+                ]
 
             search = table.search_info
             if search['display_field']:
