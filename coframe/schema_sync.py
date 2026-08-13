@@ -345,6 +345,46 @@ def _classify(conn: Any, diff: Any) -> Optional[Change]:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+def _primary_key_changes(engine: Engine, metadata: sa.MetaData) -> List[Change]:
+    """
+    Report a table whose key in the database is not the key in the schema.
+
+    The comparison engine does not look at constraints, so a changed key is
+    invisible to it — it only sees the shadow it casts, a column appearing and
+    an index appearing. Where that shadow is applicable (an empty table, a
+    column with a default) a sync would add the column and stop, leaving a
+    database that reports itself aligned while the key is somewhere else: the
+    silent divergence this whole module exists to prevent.
+
+    Nothing here is ever applied. Changing a key means rebuilding the table —
+    new shape, copy the rows, swap — which is a data transformation, and the
+    closed list stops before those on purpose.
+    """
+    changes: List[Change] = []
+    inspector = sa.inspect(engine)
+    existing = set(inspector.get_table_names())
+
+    for table in metadata.tables.values():
+        if table.name not in existing:
+            continue
+        in_db = tuple(inspector.get_pk_constraint(table.name).get('constrained_columns') or ())
+        in_schema = tuple(col.name for col in table.primary_key.columns)
+        if in_db == in_schema:
+            continue
+        changes.append(Change(
+            kind='modify_primary_key', verdict=REFUSED, target=table.name,
+            description=f'primary key ({", ".join(in_db) or "none"}) '
+                        f'-> ({", ".join(in_schema) or "none"})',
+            reason='a key change rebuilds the table: the comparison engine cannot see it, '
+                   'and no sync applies it',
+            sql_hint=f'CREATE TABLE {table.name}__new (…);\n'
+                     f'INSERT INTO {table.name}__new SELECT … FROM {table.name};\n'
+                     f'DROP TABLE {table.name};\n'
+                     f'ALTER TABLE {table.name}__new RENAME TO {table.name};',
+        ))
+    return changes
+
+
 def diff_schema(engine: Engine, metadata: sa.MetaData) -> SchemaDiff:
     """
     Compare the database behind `engine` with `metadata`.
@@ -377,6 +417,7 @@ def diff_schema(engine: Engine, metadata: sa.MetaData) -> SchemaDiff:
                 if change is not None:
                     changes.append(change)
 
+    changes.extend(_primary_key_changes(engine, metadata))
     return SchemaDiff(changes=_ordered(changes))
 
 

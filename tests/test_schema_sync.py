@@ -268,6 +268,47 @@ def test_table_missing_from_the_schema_is_silence(engine):
     assert 'book' in sa.inspect(engine).get_table_names()
 
 
+def junction_metadata(*, surrogate_key):
+    """A junction between book and author, keyed the old way or the new one."""
+    md = sa.MetaData()
+    sa.Table('author', md, sa.Column('id', sa.Integer, primary_key=True))
+    sa.Table('book', md, sa.Column('id', sa.Integer, primary_key=True))
+    columns = [
+        sa.Column('book_id', sa.Integer, sa.ForeignKey('book.id'),
+                  primary_key=not surrogate_key, nullable=False),
+        sa.Column('author_id', sa.Integer, sa.ForeignKey('author.id'),
+                  primary_key=not surrogate_key, nullable=False),
+    ]
+    if surrogate_key:
+        columns.insert(0, sa.Column('id', sa.Integer, primary_key=True))
+    sa.Table('books_authors', md, *columns)
+    return md
+
+
+def test_a_changed_primary_key_is_refused_and_named(tmp_path):
+    """The comparison engine does not look at constraints: without this check the
+    key change is invisible, and on an empty table the sync would add the column
+    and then call the database aligned."""
+    eng = make_engine(tmp_path, 'junction.sqlite')
+    junction_metadata(surrogate_key=False).create_all(eng)
+
+    diff = diff_schema(eng, junction_metadata(surrogate_key=True))
+
+    key = by_target(diff)['books_authors']
+    assert key.verdict == REFUSED
+    assert key.description == 'primary key (book_id, author_id) -> (id)'
+    apply_diff(eng, diff)
+    assert sa.inspect(eng).get_pk_constraint(
+        'books_authors')['constrained_columns'] == ['book_id', 'author_id']
+
+
+def test_a_key_that_did_not_change_says_nothing(tmp_path):
+    eng = make_engine(tmp_path, 'junction.sqlite')
+    junction_metadata(surrogate_key=True).create_all(eng)
+
+    assert diff_schema(eng, junction_metadata(surrogate_key=True)).is_aligned
+
+
 # ── Dry run ────────────────────────────────────────────────────────────────────
 
 def test_dry_run_renders_the_ddl_without_touching_the_database(engine):
