@@ -27,8 +27,8 @@ def _auto_list_page(table_name: str, table: Any) -> Dict[str, Any]:
     Includes all non-secret effective_columns as table columns.
     FK columns are shown as raw id fields (no join auto-resolve).
 
-    M2M tables (composite PK) get a read-only toolbar — no add/delete
-    since those require both FK sides and a dedicated form.
+    A junction table needs no special case: it carries a key of its own like
+    every other table, so its rows are addressable and add/delete mean something.
     """
     columns = []
     for col in table.effective_columns:
@@ -40,11 +40,6 @@ def _auto_list_page(table_name: str, table: Any) -> Dict[str, Any]:
             entry['title'] = label
         columns.append(entry)
 
-    # M2M tables have a composite PK — restrict to read-only actions
-    m2m = table.attributes.get('many_to_many')
-
-    navigator: Any = {'hide': ['add', 'delete']} if m2m else True
-
     return {
         'title': table_name,
         '_auto': True,
@@ -52,7 +47,7 @@ def _auto_list_page(table_name: str, table: Any) -> Dict[str, Any]:
             'type': 'table',
             'source': {'model': table_name},
             'columns': columns,
-            'navigator': navigator,
+            'navigator': True,
         },
     }
 

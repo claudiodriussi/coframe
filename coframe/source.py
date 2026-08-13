@@ -632,13 +632,25 @@ class ColumnGenerator:
             self.imports.column_imports.add('ForeignKey')
 
         # Record the relationship; names and join spec are decided in resolve(),
-        # once the whole model is known.
-        self.relationships.add_foreign_key_relation(
-            table, column.name, fk_table, fk_id, soft, relation, backref
-        )
+        # once the whole model is known. A column that reaches a target of a
+        # junction is left out: the m2m branch emits its scalar and the rows
+        # collection, and a second pair would claim the same names — the naming
+        # invariant would refuse both.
+        if not self._is_junction_target(column, table):
+            self.relationships.add_foreign_key_relation(
+                table, column.name, fk_table, fk_id, soft, relation, backref
+            )
         self.imports.add_relationship_imports()
 
         return foreign
+
+    @staticmethod
+    def _is_junction_target(column: DbColumn, table: DbTable) -> bool:
+        """True when this column is one of the two a `many_to_many:` declares."""
+        m2m = table.attributes.get('many_to_many')
+        if not m2m:
+            return False
+        return column.name in (m2m['target1'].get('column'), m2m['target2'].get('column'))
 
 
 class Generator:
@@ -760,31 +772,16 @@ class Generator:
         )
         code = [class_declaration, tablename_code]
 
-        # Generate many to many columns
+        # A junction's own columns are written by the loop below like all the
+        # others — `db._calc_junctions` materialised them from the declaration.
+        # What is left here is the navigation it implies.
         m2m = table.attributes.get('many_to_many', None)
         if m2m:
-            def _m2m_column(target: Dict[str, Any]):
-                t = target['db_type']
-                py_type = t.python_type.__name__
-                sa_type = t.name
-                if t.inheritance:
-                    sa_type = t.inheritance[-1]
-                self.imports.column_imports.add(sa_type)
-                self.imports.add_python_type_import(py_type)
-                code.append(
-                    f"    {target['column']}: Mapped[{py_type}] = mapped_column({sa_type}, "
-                    f"ForeignKey('{target['table'].table_name}.{target['id']}'), primary_key=True)\n"
-                )
             try:
                 # A junction needs these whether or not the model has plain foreign
                 # keys elsewhere; they used to arrive only as a side effect of one.
-                self.imports.column_imports.add('ForeignKey')
                 self.imports.add_relationship_imports()
-
-                _m2m_column(m2m['target1'])
-                _m2m_column(m2m['target2'])
                 self.relationships.add_many_to_many(table, m2m['target1'], m2m['target2'])
-
             except (ValueError, KeyError) as e:
                 print(f"Error processing many-to-many relationship in {name}: {e}")
 
@@ -820,7 +817,7 @@ class Generator:
         self.imports.column_imports.add('Index')
 
         index_lines = []
-        for i, idx in enumerate(indexes):
+        for idx in indexes:
             # Build column list
             columns = idx.get('columns', [])
             if not columns:
@@ -833,14 +830,13 @@ class Generator:
             unique = idx.get('unique', False)
             unique_str = ', unique=True' if unique else ''
 
-            # Add comma (except for last element)
-            comma = ',' if i < len(indexes) - 1 else ''
-
-            # Optional description as comment
+            # Trailing comma on every line, last one included: a single index
+            # without it is a parenthesised expression and not a tuple, and
+            # SQLAlchemy refuses __table_args__ that is not one.
             description = idx.get('description', '')
             comment = f"  # {description}" if description else ''
 
-            index_lines.append(f"        Index('{name}', {cols_str}{unique_str}){comma}{comment}")
+            index_lines.append(f"        Index('{name}', {cols_str}{unique_str}),{comment}")
 
         if not index_lines:
             return ""

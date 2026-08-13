@@ -120,9 +120,10 @@ class DB:
         Process flow:
         1. Load all type definitions
         2. Create table structures
-        3. Process and validate column definitions
-        4. register all endpoints from plugins and from package
-        5. Load multi-tenant configuration
+        3. Materialize the columns a `many_to_many:` declaration implies
+        4. Process and validate column definitions
+        5. register all endpoints from plugins and from package
+        6. Load multi-tenant configuration
 
         Args:
             plugins: Instance containing all loaded plugins
@@ -130,6 +131,7 @@ class DB:
         self.pm = plugins
         self._calc_types()
         self._calc_tables()
+        self._calc_junctions()
         self._calc_columns()
         self._calc_endpoints()
         self._load_multi_tenant_config()
@@ -196,6 +198,31 @@ class DB:
             table = DbTable(table_name, plugin, value, self)
             self.tables[table_name] = table
             self.tables_list.append(table_name)
+
+    def _calc_junctions(self) -> None:
+        """
+        Write out the columns a `many_to_many:` declaration implies.
+
+        The declaration names two targets and the columns that reach them, and a
+        junction row is identified like any other record: those three columns are
+        materialized here as ordinary definitions, before columns are resolved, so
+        that everything downstream — type resolution, foreign keys,
+        effective_columns, the generated model, the schema the client receives —
+        sees a table like all the others. Doing it later, in the code generator,
+        is what used to leave a junction with columns SQLAlchemy knew about and
+        the schema layer did not: no addressable key, no fields in an auto-form.
+
+        Two passes, so that a junction pointing at another junction does not
+        depend on the order tables happen to be declared in.
+        """
+        schema_cfg = self.pm.config.get('schema', {}) if self.pm else {}
+        pk_name = schema_cfg.get('pk_name', 'id')
+
+        junctions = [t for t in self.tables.values() if t.attributes.get('many_to_many')]
+        for table in junctions:
+            table.materialize_junction_key(self, pk_name)
+        for table in junctions:
+            table.materialize_junction_targets(self)
 
     def _calc_columns(self) -> None:
         """
@@ -363,8 +390,7 @@ class DB:
         Returns:
             {
               TableName: {
-                pk_fields: ['id'],           # single-col PK (normal tables)
-                pk_fields: ['a_id', 'b_id'], # composite PK (M2M tables)
+                pk_fields: ['id'],           # the key, from the columns that declare it
                 columns: [ {name, type, virtual, editable, label, ...} ],
                 display_field: 'name',       # column to show in FK comboboxes
                 search_fields: ['name'],     # columns a text search matches (ILIKE)
@@ -390,20 +416,12 @@ class DB:
                     col_dict['foreign_key'] = {'target': fk['table'].name, 'field': fk['id']}
                 cols.append(col_dict)
 
-            # Determine PK fields:
-            # - M2M tables: composite PK from many_to_many target columns
-            # - Regular tables: columns where primary_key attr is True
-            m2m = table.attributes.get('many_to_many')
-            if m2m:
-                pk_fields = [
-                    m2m['target1']['column'],
-                    m2m['target2']['column'],
-                ]
-            else:
-                pk_fields = [
-                    col.name for col in table.effective_columns
-                    if col.attributes.get('primary_key')
-                ]
+            # The key is read from the columns that declare it — junctions
+            # included, since a junction declares one like everyone else.
+            pk_fields = [
+                col.name for col in table.effective_columns
+                if col.attributes.get('primary_key')
+            ]
 
             table_dict: Dict[str, Any] = {
                 'pk_fields': pk_fields,
@@ -819,8 +837,9 @@ class DbTable:
             attributes: New attributes to merge
             plugin: Plugin providing the updates
         """
-        # Process columns
-        for column in attributes['columns']:
+        # Process columns. A table may declare none — a junction whose columns are
+        # all implied by `many_to_many:` is the ordinary case.
+        for column in attributes.get('columns', []):
             column['plugin'] = plugin
             self._columns.append(column)
 
@@ -830,6 +849,127 @@ class DbTable:
         self.plugins.append(plugin)
         # Remove processed columns from attributes
         self.attributes.pop('columns', None)
+
+    def _declared_primary_key(self, db: DB) -> Optional[str]:
+        """Name of the primary key this table declares, from a column or its type."""
+        def is_key(column: Dict[str, Any]) -> bool:
+            if 'primary_key' in column:
+                return bool(column['primary_key'])
+            declared_type = db.types.get(column.get('type'))
+            return bool(declared_type and declared_type.attributes.get('primary_key'))
+
+        for column in self._columns:
+            if is_key(column):
+                return column['name']
+        # A mixin can carry the key too — its columns are the type's, unresolved
+        # at this point but already merged along the type's own inheritance.
+        for mixin_name in self.attributes.get('mixins', []):
+            mixin = db.types.get(mixin_name)
+            for column in (mixin.attributes.get('columns', []) if mixin else []):
+                if is_key(column):
+                    return column['name']
+        return None
+
+    def materialize_junction_key(self, db: DB, pk_name: str = 'id') -> None:
+        """
+        Give the junction a key of its own, unless it declares one.
+
+        A junction with a key of one column is addressable like every other
+        record — `db` can update or delete one row of it, a form can open it, a
+        buffered collection can hold it. The pair stays unique (the index below),
+        it just stops being the identity. The name comes from
+        `schema.pk_name`, so an installation with another convention can say so;
+        a single table out of convention declares its key instead, and then
+        nothing is injected.
+
+        The key is written before the target columns of every junction, so that
+        one junction may reference another whatever the declaration order.
+        """
+        if self._declared_primary_key(db):
+            return
+        if any(col['name'] == pk_name for col in self._columns):
+            raise ValueError(
+                f"Junction table '{self.name}' declares a column named '{pk_name}' that is not "
+                f"a primary key: it is the name the generated key would take. Either make it "
+                f"the key (primary_key: true) or rename it."
+            )
+        self._columns.insert(0, {
+            'name': pk_name, 'type': 'Integer', 'primary_key': True, 'autoincrement': True,
+            'plugin': self.plugins[0] if self.plugins else None,
+        })
+
+    def materialize_junction_targets(self, db: DB) -> None:
+        """
+        Write the two columns that reach the targets, and the index that keeps
+        one link per pair — which is what the composite key used to guarantee.
+
+        Each column takes the *base* type of the key it points at, never the
+        declared one: a key type carries `primary_key` (that is what `ID` is),
+        and copying it would make these columns keys again.
+        """
+        m2m = self.attributes['many_to_many']
+        declared = {col['name'] for col in self._columns}
+        pair, injected = [], []
+
+        for key in ('target1', 'target2'):
+            target = m2m[key]
+            name = target.get('column')
+            reference = target.get('table')
+            if not name or not isinstance(reference, str) or '.' not in reference:
+                raise ValueError(
+                    f"Table '{self.name}': many_to_many {key} needs a `table: Table.column` "
+                    f"reference and a `column:` name")
+            pair.append(name)
+            if name not in declared:
+                injected.append(
+                    self._junction_target_column(db, name, *reference.split('.', 1)))
+
+        # Right after the key: column order is what a generated form follows, and
+        # the two columns the junction exists for come before whatever it carries.
+        after_key = next(
+            (i + 1 for i, col in enumerate(self._columns)
+             if col['name'] == self._declared_primary_key(db)), 0)
+        self._columns[after_key:after_key] = injected
+
+        indexes = self.attributes.setdefault('indexes', [])
+        if not any(list(idx.get('columns', [])) == pair for idx in indexes):
+            indexes.append({
+                'name': f"uq_{self.table_name}_{'_'.join(pair)}",
+                'columns': pair,
+                'unique': True,
+                'description': 'one link per pair',
+            })
+
+    def _junction_target_column(self, db: DB, name: str,
+                                target_table: str, target_key: str) -> Dict[str, Any]:
+        """The foreign key column reaching one target of a junction."""
+        foreign = db.tables.get(target_table)
+        if foreign is None:
+            raise ValueError(f"Table '{self.name}': many_to_many target table "
+                             f"'{target_table}' does not exist")
+
+        key = next((col for col in foreign._columns if col.get('name') == target_key), None)
+        if key is None or not key.get('type'):
+            raise ValueError(f"Table '{self.name}': many_to_many target "
+                             f"'{target_table}.{target_key}' does not exist")
+
+        resolved = db.types.get(key['type'])
+        column: Dict[str, Any] = {
+            'name': name,
+            'type': resolved.inheritance[-1] if resolved and resolved.inheritance else key['type'],
+            'nullable': False,
+            'foreign_key': {'target': f'{target_table}.{target_key}'},
+            'plugin': self.plugins[0] if self.plugins else None,
+        }
+        # Whatever shapes the key's type must shape the column pointing at it: a
+        # varchar(8) key reached by an unbounded string is a comparison between
+        # two different types. The column that declares it wins over the type,
+        # which is the rule everywhere else.
+        for arg in ('length', 'precision', 'scale', 'timezone'):
+            value = key.get(arg, resolved.attributes.get(arg) if resolved else None)
+            if value is not None:
+                column[arg] = value
+        return column
 
     def resolve_m2m(self, db: DB) -> None:
         """

@@ -16,6 +16,7 @@ import importlib.util
 import pytest
 import yaml
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, configure_mappers
 
 import coframe.utils
@@ -32,11 +33,12 @@ def fresh_registry():
     Base.metadata.clear()
 
 
-def generate(tmp_path, monkeypatch, tables, source=None):
-    """Write a one-plugin app declaring `tables`, and return the generated source.
+def build(tmp_path, monkeypatch, tables, source=None, config=None):
+    """Write a one-plugin app declaring `tables`, and return the resolved schema.
 
     `source` is the plugin's model.py, when the test needs generated classes to
-    inherit from a Python class of the same name.
+    inherit from a Python class of the same name; `config` adds keys to the app
+    config.yaml.
     """
     plugin = tmp_path / 'plugins' / 'app'
     plugin.mkdir(parents=True, exist_ok=True)   # a test may generate twice
@@ -46,7 +48,7 @@ def generate(tmp_path, monkeypatch, tables, source=None):
         (plugin / 'model.py').write_text(source)
 
     cfg = tmp_path / 'config.yaml'
-    cfg.write_text(yaml.safe_dump({'name': 'test', 'plugins': ['plugins']}))
+    cfg.write_text(yaml.safe_dump({'name': 'test', 'plugins': ['plugins'], **(config or {})}))
     monkeypatch.chdir(tmp_path)
 
     manager = PluginsManager()
@@ -56,7 +58,12 @@ def generate(tmp_path, monkeypatch, tables, source=None):
 
     db = DB()
     db.calc_db(manager)
+    return db
 
+
+def generate(tmp_path, monkeypatch, tables, source=None, config=None):
+    """The model source generated for `tables`."""
+    db = build(tmp_path, monkeypatch, tables, source, config)
     out = tmp_path / 'generated_model.py'
     Generator(db).generate(filename=str(out))
     return out.read_text()
@@ -493,3 +500,164 @@ def test_self_referential_junction_must_name_its_sides(tmp_path, monkeypatch):
                 },
             },
         })
+
+
+# ── the columns a junction is made of ─────────────────────────────────────────
+#
+# `many_to_many:` is sugar: the two columns that reach the targets and the key of
+# the junction itself are written into the table definition (db._calc_junctions),
+# before columns are resolved. They used to be written straight into the
+# generated model instead, which left the junction with columns SQLAlchemy knew
+# about and the schema layer did not — no addressable key, and an auto-form with
+# the note but not the author.
+
+def test_a_junction_is_a_table_like_the_others(tmp_path, monkeypatch):
+    """Key, two foreign keys and a note, all of them ordinary columns."""
+    db = build(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors'),
+    })
+
+    schema = db.get_table_schema()['BookAuthor']
+    assert schema['pk_fields'] == ['id']
+    # The two columns the junction exists for come before what it carries
+    assert [col['name'] for col in schema['columns']] == ['id', 'book_id', 'author_id', 'notes']
+    assert schema['columns'][1]['foreign_key'] == {'target': 'Book', 'field': 'id'}
+    assert schema['columns'][2]['foreign_key'] == {'target': 'Author', 'field': 'id'}
+
+
+def test_a_junction_row_can_be_reached_by_its_key(tmp_path, monkeypatch):
+    """Which is the point: a row of it can be opened, updated and deleted."""
+    source = generate(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors'),
+    })
+    module = load(tmp_path, source)
+    engine = create_engine('sqlite://')
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        book, author = module.Book(), module.Author()
+        session.add_all([book, author])
+        session.flush()
+        link = module.BookAuthor(book_id=book.id, author_id=author.id, notes='curatore')
+        session.add(link)
+        session.flush()
+
+        assert link.id is not None
+        found = session.get(module.BookAuthor, link.id)
+        found.notes = 'traduttore'
+        session.flush()
+        assert session.get(module.BookAuthor, link.id).notes == 'traduttore'
+
+
+def test_the_pair_stays_unique(tmp_path, monkeypatch):
+    """What the composite key used to guarantee is now an index that says so."""
+    source = generate(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors'),
+    })
+    module = load(tmp_path, source)
+    engine = create_engine('sqlite://')
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        book, author = module.Book(), module.Author()
+        session.add_all([book, author])
+        session.flush()
+        session.add(module.BookAuthor(book_id=book.id, author_id=author.id))
+        session.flush()
+        session.add(module.BookAuthor(book_id=book.id, author_id=author.id))
+        with pytest.raises(IntegrityError):
+            session.flush()
+
+
+def test_a_junction_may_declare_no_columns_at_all(tmp_path, monkeypatch):
+    """`columns:` enriches the relation; without it the junction is still a table.
+
+    It used to raise KeyError while the plugins were loading.
+    """
+    db = build(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': {
+            'name': 'books_authors',
+            'many_to_many': {
+                'target1': {'table': 'Book.id', 'column': 'book_id'},
+                'target2': {'table': 'Author.id', 'column': 'author_id'},
+            },
+        },
+    })
+
+    schema = db.get_table_schema()['BookAuthor']
+    assert schema['pk_fields'] == ['id']
+    assert [col['name'] for col in schema['columns']] == ['id', 'book_id', 'author_id']
+
+
+def test_a_junction_that_declares_a_key_keeps_it(tmp_path, monkeypatch):
+    """The escape for a table whose key is not ours to choose — a legacy one."""
+    db = build(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': {
+            'name': 'books_authors',
+            'columns': [{'name': 'ba_code', 'type': 'String', 'length': 8, 'primary_key': True}],
+            'many_to_many': {
+                'target1': {'table': 'Book.id', 'column': 'book_id'},
+                'target2': {'table': 'Author.id', 'column': 'author_id'},
+            },
+        },
+    })
+
+    schema = db.get_table_schema()['BookAuthor']
+    assert schema['pk_fields'] == ['ba_code']
+    assert [col['name'] for col in schema['columns']] == ['ba_code', 'book_id', 'author_id']
+
+
+def test_the_generated_key_takes_the_name_the_config_asks_for(tmp_path, monkeypatch):
+    """`schema.pk_name` decides what the framework writes, never what it reads."""
+    db = build(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors'),
+    }, config={'schema': {'pk_name': 'oid'}})
+
+    assert db.get_table_schema()['BookAuthor']['pk_fields'] == ['oid']
+
+
+def test_a_column_named_like_the_key_but_not_the_key_is_refused(tmp_path, monkeypatch):
+    """Silently it would collide with the generated one, two columns down."""
+    with pytest.raises(ValueError, match="not a primary key"):
+        build(tmp_path, monkeypatch, {
+            'Author': table(name='authors'),
+            'Book': table(name='books'),
+            'BookAuthor': {
+                'name': 'books_authors',
+                'columns': [{'name': 'id', 'type': 'String', 'length': 8}],
+                'many_to_many': {
+                    'target1': {'table': 'Book.id', 'column': 'book_id'},
+                    'target2': {'table': 'Author.id', 'column': 'author_id'},
+                },
+            },
+        })
+
+
+def test_the_target_column_takes_the_base_type_of_the_key_it_points_at(tmp_path, monkeypatch):
+    """A key type carries `primary_key` — copying it would make these keys again."""
+    source = generate(tmp_path, monkeypatch, {
+        'Author': {'name': 'authors',
+                   'columns': [{'name': 'code', 'type': 'String', 'length': 8,
+                                'primary_key': True}]},
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors', column='author_code',
+                               target2={'table': 'Author.code'}),
+    })
+
+    author_fk = line(source, 'author_code', 'BookAuthor')
+    assert 'String(length=8)' in author_fk
+    assert 'primary_key' not in author_fk
+    assert "ForeignKey('authors.code')" in author_fk
+    load(tmp_path, source)

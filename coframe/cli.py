@@ -139,13 +139,10 @@ def _table_dict(table: Any) -> Dict[str, Any]:
     """Serialize a DbTable to a dict for developer inspection."""
     # PK fields (same logic as get_table_schema)
     m2m = table.attributes.get('many_to_many')
-    if m2m:
-        pk_fields = [m2m['target1']['column'], m2m['target2']['column']]
-    else:
-        pk_fields = [
-            col.name for col in table.effective_columns
-            if col.attributes.get('primary_key')
-        ]
+    pk_fields = [
+        col.name for col in table.effective_columns
+        if col.attributes.get('primary_key')
+    ]
 
     d: Dict[str, Any] = {'pk_fields': pk_fields}
 
