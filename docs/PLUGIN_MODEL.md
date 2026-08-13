@@ -956,6 +956,33 @@ of its own (`notes` above). Frameworks that create the junction implicitly make
 you convert to an explicit one the day a column is needed — with rows already in
 it.
 
+`columns:` is what *enriches* the relation and may be left out entirely: a
+junction that declares only `many_to_many:` is the ordinary case.
+
+#### The columns a junction is made of
+
+The declaration is sugar. What it materializes, before anything else resolves:
+
+| Column | Why |
+|--------|-----|
+| the key (`id`) | a junction row is a record: it can be opened in a form, updated and deleted by key, held in a buffered collection |
+| `book_id`, `author_id` | the two ends, `NOT NULL`, with their foreign key constraint and the base type of the key they point at |
+| unique index on the pair | one link per pair — what a composite key used to guarantee |
+
+They are ordinary columns from that point on: the generated model, the schema
+the client receives, `db` CRUD and an auto-generated form all treat the junction
+like any other table. `dump-table BookAuthor` shows them.
+
+Two ways to decide otherwise:
+
+- **the whole installation** — `schema.pk_name` in `config.yaml` names the
+  generated key (default `id`). It decides what the framework *writes*, never
+  what it reads: reading always goes through the columns that declare the key,
+  so a table out of convention keeps working;
+- **one table** — declare a primary key of your own in `columns:`, and nothing
+  is injected. That is the escape for a legacy junction whose key is not ours
+  to choose.
+
 #### What a junction generates
 
 Six attributes, three per side. For the junction above:
