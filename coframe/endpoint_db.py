@@ -64,7 +64,7 @@ def db_operations(data: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "message": str(e), "code": 500}
 
 
-def _pk_field(db_table) -> str:
+def pk_field(db_table) -> str:
     """Return the first PK field name for a table, defaulting to 'id'."""
     if db_table is None:
         return 'id'
@@ -72,7 +72,7 @@ def _pk_field(db_table) -> str:
     return pk_cols[0] if pk_cols else 'id'
 
 
-def _write_values(db_table, record_data: Dict[str, Any]) -> Dict[str, Any]:
+def write_values(db_table, record_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Prepare incoming values for storage, following what the columns declare.
 
@@ -113,7 +113,7 @@ def _write_values(db_table, record_data: Dict[str, Any]) -> Dict[str, Any]:
 
 def handle_get(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle GET operations (list or single record)"""
-    record_id = params.get(_pk_field(db_table))
+    record_id = params.get(pk_field(db_table))
     start = int(params.get('start', 0))
     limit = int(params.get('limit', 100))
     query_filters = params.get('query', {})
@@ -175,7 +175,7 @@ def handle_get(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[
             }
 
 
-def _coerce_value(model_class, key: str, value: Any) -> Any:
+def coerce_value(model_class, key: str, value: Any) -> Any:
     """Coerce string values to the Python type expected by the SQLAlchemy column."""
     if not isinstance(value, str) or value == '':
         return value
@@ -205,8 +205,8 @@ def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Di
 
     # Create new instance
     try:
-        record_data = _write_values(db_table, record_data)
-        coerced = {k: _coerce_value(model_class, k, v) for k, v in record_data.items()}
+        record_data = write_values(db_table, record_data)
+        coerced = {k: coerce_value(model_class, k, v) for k, v in record_data.items()}
         new_record = model_class(**coerced)
 
         with app.get_session() as session:
@@ -228,7 +228,7 @@ def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Di
 
 def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle UPDATE operations"""
-    record_id = params.get(_pk_field(db_table))
+    record_id = params.get(pk_field(db_table))
     if not record_id:
         return {"status": "error", "message": _('Record ID is required for updates'), "code": 400}
 
@@ -236,7 +236,7 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
     if not record_data:
         return {"status": "error", "message": _('No data provided for update'), "code": 400}
 
-    record_data = _write_values(db_table, record_data)
+    record_data = write_values(db_table, record_data)
 
     with app.get_session() as session:
         # Find the record
@@ -248,7 +248,7 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
         for key, value in record_data.items():
             if hasattr(record, key):
                 try:
-                    setattr(record, key, _coerce_value(model_class, key, value))
+                    setattr(record, key, coerce_value(model_class, key, value))
                 except AttributeError:
                     pass
 
@@ -267,7 +267,7 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
 
 def handle_delete(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle DELETE operations"""
-    record_id = params.get(_pk_field(db_table))
+    record_id = params.get(pk_field(db_table))
     if not record_id:
         return {"status": "error", "message": _('Record ID is required for deletion'), "code": 400}
 

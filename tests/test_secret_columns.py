@@ -16,7 +16,7 @@ from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import declarative_base
 
 from coframe import transforms
-from coframe.endpoint_db import _write_values, build_filters
+from coframe.endpoint_db import write_values, build_filters
 from coframe.querybuilder import SelectBuilder
 from coframe.utils import secret_columns, serialize_model
 
@@ -205,7 +205,7 @@ def test_filtering_on_ordinary_columns_still_works():
 # ── Write path ───────────────────────────────────────────────────────────────
 
 def test_write_values_hashes_a_secret_on_the_way_in():
-    result = _write_values(user_table(), {'username': 'admin', 'password': 's3cret'})
+    result = write_values(user_table(), {'username': 'admin', 'password': 's3cret'})
 
     assert result['username'] == 'admin'
     assert result['password'] != 's3cret'
@@ -215,23 +215,23 @@ def test_write_values_hashes_a_secret_on_the_way_in():
 def test_write_values_drops_an_empty_secret():
     """Saving a form that never showed the password must not clear it."""
     for empty in ('', None):
-        assert _write_values(user_table(), {'username': 'admin', 'password': empty}) \
+        assert write_values(user_table(), {'username': 'admin', 'password': empty}) \
             == {'username': 'admin'}
 
 
 def test_write_values_keeps_other_empty_values():
     """Only secrets get the "empty means unchanged" reading."""
-    assert _write_values(user_table(), {'username': ''}) == {'username': ''}
+    assert write_values(user_table(), {'username': ''}) == {'username': ''}
 
 
 def test_write_values_without_a_definition_passes_through():
     data = {'username': 'admin', 'password': 'plain'}
 
-    assert _write_values(None, data) == data
+    assert write_values(None, data) == data
 
 
 def test_write_values_refuses_an_unknown_transform():
     table = StubTable([StubColumn('code', on_write='does_not_exist')])
 
     with pytest.raises(ValueError, match='does_not_exist'):
-        _write_values(table, {'code': 'x'})
+        write_values(table, {'code': 'x'})
