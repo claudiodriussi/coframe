@@ -48,13 +48,16 @@ TABLES = {
             'target2': {'table': 'Author.id', 'column': 'author_id'},
         },
     },
+    # Owned, and owned again one level down: a chapter is a part of its book, a
+    # note a part of its chapter.
     'Chapter': {
         'name': 'chapters',
         'columns': [
             {'name': 'id', 'type': 'Integer', 'primary_key': True, 'autoincrement': True},
             {'name': 'title', 'type': 'String', 'length': 120},
             {'name': 'kind', 'type': 'String', 'length': 20},
-            {'name': 'book_id', 'type': 'Integer', 'foreign_key': {'target': 'Book.id'}},
+            {'name': 'book_id', 'type': 'Integer',
+             'foreign_key': {'target': 'Book.id', 'owned': True}},
         ],
     },
     'Note': {
@@ -62,7 +65,17 @@ TABLES = {
         'columns': [
             {'name': 'id', 'type': 'Integer', 'primary_key': True, 'autoincrement': True},
             {'name': 'text', 'type': 'String', 'length': 200},
-            {'name': 'chapter_id', 'type': 'Integer', 'foreign_key': {'target': 'Chapter.id'}},
+            {'name': 'chapter_id', 'type': 'Integer',
+             'foreign_key': {'target': 'Chapter.id', 'owned': True}},
+        ],
+    },
+    # Not owned: a loan grows in time and is nobody's part. It survives the book.
+    'Loan': {
+        'name': 'loans',
+        'columns': [
+            {'name': 'id', 'type': 'Integer', 'primary_key': True, 'autoincrement': True},
+            {'name': 'due_date', 'type': 'String', 'length': 20},
+            {'name': 'book_id', 'type': 'Integer', 'foreign_key': {'target': 'Book.id'}},
         ],
     },
 }
@@ -306,6 +319,96 @@ def test_a_form_without_the_node_leaves_the_children_alone(app):
 
     assert rows(app, 'Book')[0]['isbn'] == '88-06-15997-1'
     assert len(rows(app, 'BookAuthor')) == 1
+
+
+# ── Composition: what a row owns goes with it ───────────────────────────────
+#
+# `owned: true` on a foreign key says the row is a part of its parent. It is the
+# ORM that enforces it, not the DDL, so it reads the same for a soft key, survives
+# dialects that refuse the constraint, and asks nothing of a database already in
+# place. The client does not have to declare any of these deletions — and past the
+# second level it could not, since it never loaded those rows.
+
+def test_deleting_a_book_takes_its_junction_rows_and_leaves_the_authors(app):
+    """The cascade only ever runs parent → child, and an author is a parent."""
+    gaiman = make_author(app, 'Gaiman')
+    pratchett = make_author(app, 'Pratchett')
+
+    created = ok(save_tree({
+        'page': 'book_form',
+        'root': {'op': 'create', 'id': -1, 'values': {'title': 'Good Omens'},
+                 'children': {'authors': [
+                     {'op': 'create', 'id': -2, 'values': {'author_id': gaiman}},
+                     {'op': 'create', 'id': -3, 'values': {'author_id': pratchett}},
+                 ]}},
+    }))
+
+    ok(save_tree({'page': 'book_form',
+                  'root': {'op': 'delete', 'id': created['id']}}))
+
+    assert rows(app, 'Book') == []
+    assert rows(app, 'BookAuthor') == []
+    assert {row['name'] for row in rows(app, 'Author')} == {'Gaiman', 'Pratchett'}
+
+
+def test_the_cascade_reaches_the_grandchildren_nobody_declared(app):
+    created = ok(save_tree({
+        'page': 'book_form',
+        'root': {'op': 'create', 'id': -1, 'values': {'title': 'Dune'},
+                 'children': {'chapters': [
+                     {'op': 'create', 'id': -2, 'values': {'title': 'Arrakis'},
+                      'children': {'notes': [{'op': 'create', 'id': -3,
+                                              'values': {'text': 'spice'}}]}},
+                 ]}},
+    }))
+
+    ok(save_tree({'page': 'book_form',
+                  'root': {'op': 'delete', 'id': created['id']}}))
+
+    assert rows(app, 'Chapter') == []
+    assert rows(app, 'Note') == []
+
+
+def test_deleting_one_collection_row_takes_its_own_children(app):
+    """Removing a row from the grid: the parent stays, the row's parts go with it."""
+    created = ok(save_tree({
+        'page': 'book_form',
+        'root': {'op': 'create', 'id': -1, 'values': {'title': 'Dune'},
+                 'children': {'chapters': [
+                     {'op': 'create', 'id': -2, 'values': {'title': 'Arrakis'},
+                      'children': {'notes': [{'op': 'create', 'id': -3,
+                                              'values': {'text': 'spice'}}]}},
+                     {'op': 'create', 'id': -4, 'values': {'title': 'Caladan'},
+                      'children': {'notes': [{'op': 'create', 'id': -5,
+                                              'values': {'text': 'water'}}]}},
+                 ]}},
+    }))
+
+    ok(save_tree({
+        'page': 'book_form',
+        'root': {'op': 'update', 'id': created['id'], 'values': {},
+                 'children': {'chapters': [
+                     {'op': 'delete', 'id': created['id_map'][-2]}]}},
+    }))
+
+    assert [row['title'] for row in rows(app, 'Chapter')] == ['Caladan']
+    assert [row['text'] for row in rows(app, 'Note')] == ['water']
+
+
+def test_what_is_not_owned_survives_the_parent(app):
+    """A loan grows in time and is nobody's part: it is not swept along."""
+    created = ok(save_tree({'page': 'book_form',
+                            'root': {'op': 'create', 'id': -1, 'values': {'title': 'Dune'}}}))
+
+    model_class = app.find_model_class('Loan')
+    with app.get_session() as session:
+        session.add(model_class(book_id=created['id'], due_date='2026-09-01'))
+        session.commit()
+
+    ok(save_tree({'page': 'book_form',
+                  'root': {'op': 'delete', 'id': created['id']}}))
+
+    assert len(rows(app, 'Loan')) == 1
 
 
 def test_a_delete_needs_the_id_of_a_saved_row(app):

@@ -188,6 +188,7 @@ class ForeignKeyRelation:
     soft: bool                # no DB-level constraint (see § 4.5)
     relation: Optional[str]   # explicit forward name from YAML, if given
     backref: Optional[str]    # explicit back name from YAML, if given
+    owned: bool = False       # the row does not exist without its parent (see § 4.5)
 
     @property
     def self_referential(self) -> bool:
@@ -233,7 +234,8 @@ class RelationshipManager:
     def add_foreign_key_relation(self, table: DbTable, column_name: str, fk_table: DbTable,
                                  fk_id: str = 'id', soft: bool = False,
                                  relation: Optional[str] = None,
-                                 backref: Optional[str] = None) -> None:
+                                 backref: Optional[str] = None,
+                                 owned: bool = False) -> None:
         """
         Record a foreign key. The code is emitted later, by resolve().
 
@@ -247,6 +249,8 @@ class RelationshipManager:
                   infer it from a constraint.
             relation: Explicit name for the forward attribute (YAML `relation:`)
             backref: Explicit name for the back attribute (YAML `backref:`)
+            owned: If True the row is a part of its parent and does not outlive it —
+                   the parent's collection cascades the delete (YAML `owned:`)
         """
         if self._resolved:
             # Only reachable if a FK column is generated outside the table pass —
@@ -258,7 +262,7 @@ class RelationshipManager:
             )
         self.foreign_keys.append(ForeignKeyRelation(
             table=table, column=column_name, fk_table=fk_table, fk_id=fk_id,
-            soft=soft, relation=relation, backref=backref,
+            soft=soft, relation=relation, backref=backref, owned=owned,
         ))
 
     def add_many_to_many(self, junction: DbTable, target1: Dict[str, Any],
@@ -434,10 +438,17 @@ class RelationshipManager:
             f"relationship('{fk.fk_table.name}'{common}{remote}, back_populates='{back}')\n"
         )
 
+        # The cascade goes on the parent's collection and never on the child's
+        # scalar: it is the parent that owns the rows, not the other way round.
+        # Without it SQLAlchemy's default applies — the children are loaded and
+        # their foreign key set to NULL, which quietly orphans them where the
+        # column is nullable and fails on a driver error where it is not.
+        cascade = ", cascade='all, delete-orphan'" if fk.owned else ""
+
         relation = self.add_relation_key(fk.fk_table.name, self.back_relations)
         relation.append(
             f"{indent}{back}: Mapped[List['{fk.table.name}']] = "
-            f"relationship('{fk.table.name}'{common}, back_populates='{forward}')\n"
+            f"relationship('{fk.table.name}'{common}{cascade}, back_populates='{forward}')\n"
         )
 
     def _emit_many_to_many(self, junction: DbTable, this: Dict[str, Any], other: Dict[str, Any],
@@ -459,10 +470,18 @@ class RelationshipManager:
 
         # On this target: the junction rows, which carry whatever the relation itself
         # has to say (a rating, a role, a date).
+        #
+        # Owned by default, and on both sides: a junction row means nothing without
+        # either of its ends, so deleting a book takes its books_authors rows and
+        # leaves the authors — the cascade only ever runs from parent to child, and
+        # the author is a parent of that row, never its child. `owned: false` on a
+        # target derogates, for the junction that is really a historical record.
+        cascade = ", cascade='all, delete-orphan'" if this.get('owned', True) else ""
+
         code = self.add_relation_key(table.name, self.back_relations)
         code.append(
             f"{indent}{rows}: Mapped[List['{junction.name}']] = "
-            f"relationship('{junction.name}', foreign_keys='{column}', "
+            f"relationship('{junction.name}', foreign_keys='{column}'{cascade}, "
             f"back_populates='{relation}')\n"
         )
 
@@ -616,11 +635,19 @@ class ColumnGenerator:
         # parent (unknown / late-bound codes, dirty imports). See PLUGIN_MODEL § 4.5.
         soft = fk.get('constraint') is False
 
+        # `owned: true` → the row is a part of its parent: deleting the parent
+        # deletes it, and so on down. Enforced by the ORM and not by the DDL, so it
+        # covers soft foreign keys too, survives dialects that refuse the constraint
+        # (a self-referential ON DELETE CASCADE, say), and needs no migration on a
+        # database already in place. See PLUGIN_MODEL § 4.5.
+        owned = fk.get('owned') is True
+
         # Additional ForeignKey() arguments (ondelete, onupdate, …). `constraint`
-        # is a Coframe hint, not a ForeignKey kwarg — never forward it.
+        # and `owned` are Coframe hints, not ForeignKey kwargs — never forward them.
         fk_args = []
         for a in fk:
-            if a not in ['target', 'table', 'id', 'constraint', 'relation', 'backref']:
+            if a not in ['target', 'table', 'id', 'constraint', 'owned',
+                         'relation', 'backref']:
                 fk_args.append(f"{a}={fk[a]}")
 
         fk_args_str = f", {', '.join(fk_args)}" if fk_args else ""
@@ -638,7 +665,7 @@ class ColumnGenerator:
         # invariant would refuse both.
         if not self._is_junction_target(column, table):
             self.relationships.add_foreign_key_relation(
-                table, column.name, fk_table, fk_id, soft, relation, backref
+                table, column.name, fk_table, fk_id, soft, relation, backref, owned
             )
         self.imports.add_relationship_imports()
 

@@ -193,3 +193,62 @@ def test_db_sections_not_walked_as_descriptors():
     pm = PluginsManager()
     pm.merge_dicts({'tables': {}, 'types': {}, 'schemas': {}, 'menus': {}}, 'p')
     assert _descriptor_sections(pm) == ['menus']
+
+
+# ── collection nodes rest on an ownership declaration ─────────────────────────
+#
+# A collection is a composition: its rows are parts of the parent. The generator
+# cannot read that off the node — it runs on the schema, before any page exists —
+# so ownership is declared on the foreign key and the agreement is checked here.
+
+def collections_app(node, table_attrs=None, fk=None):
+    pm = PluginsManager()
+    pm.merge_dicts({'pages': {'book_form': {
+        'content': {
+            'type': 'form',
+            'source': {'model': 'Book'},
+            'layout': [{'type': 'collection', 'id': 'chapters', **node}],
+        },
+    }}}, 'testplugin')
+
+    child = FakeTable('id', 'title', 'book_id')
+    child.attributes = table_attrs or {}
+    child.effective_columns[2].attributes = {'foreign_key': fk} if fk else {}
+
+    return FakeApp(pm, {'Book': FakeTable('id', 'title'), 'Chapter': child})
+
+
+NODE = {'model': 'Chapter', 'fk': 'book_id'}
+
+
+def test_a_collection_on_an_unowned_key_is_refused():
+    issues = by_code(run_checks(collections_app(NODE, fk={'target': 'Book.id'})),
+                     'collection-not-owned')
+    assert len(issues) == 1
+    assert issues[0]['path'] == 'pages.book_form.content.layout[chapters].fk'
+    assert 'Chapter.book_id' in issues[0]['message']
+
+
+def test_a_collection_on_an_owned_key_passes():
+    app = collections_app(NODE, fk={'target': 'Book.id', 'owned': True})
+    assert by_code(run_checks(app), 'collection-not-owned') == []
+
+
+def test_a_junction_needs_no_declaration():
+    """Owned by both ends by default, so the flag is not written anywhere."""
+    app = collections_app(NODE, fk={'target': 'Book.id'}, table_attrs={'many_to_many': {
+        'target1': {'table': 'Book.id', 'column': 'book_id'},
+        'target2': {'table': 'Author.id', 'column': 'author_id'},
+    }})
+    assert by_code(run_checks(app), 'collection-not-owned') == []
+
+
+def test_a_collection_whose_fk_is_not_a_key_at_all():
+    issues = by_code(run_checks(collections_app(NODE)), 'collection-fk-not-a-key')
+    assert len(issues) == 1
+
+
+def test_a_collection_naming_a_column_that_does_not_exist():
+    app = collections_app({'model': 'Chapter', 'fk': 'nowhere_id'})
+    issues = by_code(run_checks(app), 'field-unknown')
+    assert any(i['path'].endswith('layout[chapters].fk') for i in issues)

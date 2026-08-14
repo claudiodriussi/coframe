@@ -661,3 +661,105 @@ def test_the_target_column_takes_the_base_type_of_the_key_it_points_at(tmp_path,
     assert 'primary_key' not in author_fk
     assert "ForeignKey('authors.code')" in author_fk
     load(tmp_path, source)
+
+
+# ── ownership ─────────────────────────────────────────────────────────────────
+#
+# `owned: true` says the row is a part of its parent and does not outlive it. It
+# becomes an ORM cascade and never DDL: that way it reads the same on a soft key,
+# it survives dialects that refuse the constraint (SQL Server rejects a
+# self-referential ON DELETE CASCADE outright), and it asks nothing of a database
+# already installed. See PLUGIN_MODEL § 4.5.
+
+def owned_fk(target='Book.id', **extra):
+    return {'name': 'book_id', 'type': 'Integer',
+            'foreign_key': {'target': target, 'owned': True, **extra}}
+
+
+def test_owned_puts_the_cascade_on_the_parent_and_not_on_the_child(tmp_path, monkeypatch):
+    """It is the parent that owns the rows: the child's scalar must stay clean."""
+    source = generate(tmp_path, monkeypatch, {
+        'Book': table(name='books'),
+        'Chapter': table(owned_fk(), name='chapters'),
+    })
+
+    assert "cascade='all, delete-orphan'" in line(source, 'chapters', 'Book')
+    assert 'cascade' not in line(source, 'book', 'Chapter')
+    load(tmp_path, source)
+
+
+def test_a_foreign_key_that_says_nothing_carries_no_cascade(tmp_path, monkeypatch):
+    source = generate(tmp_path, monkeypatch, {
+        'Book': table(name='books'),
+        'Loan': table({'name': 'book_id', 'type': 'Integer',
+                       'foreign_key': {'target': 'Book.id'}}, name='loans'),
+    })
+
+    assert 'cascade' not in line(source, 'loans', 'Book')
+    load(tmp_path, source)
+
+
+def test_owned_is_a_coframe_hint_and_never_reaches_ForeignKey(tmp_path, monkeypatch):
+    """Forwarded as a kwarg it would be a TypeError at import of the model."""
+    source = generate(tmp_path, monkeypatch, {
+        'Book': table(name='books'),
+        'Chapter': table(owned_fk(), name='chapters'),
+    })
+
+    assert "ForeignKey('books.id')" in line(source, 'book_id', 'Chapter')
+    load(tmp_path, source)
+
+
+def test_a_soft_key_can_be_owned_too(tmp_path, monkeypatch):
+    """The point of putting this in the ORM: no constraint, same behaviour."""
+    source = generate(tmp_path, monkeypatch, {
+        'Book': table(name='books'),
+        'Chapter': table(owned_fk(constraint=False), name='chapters'),
+    })
+
+    chapters = line(source, 'chapters', 'Book')
+    assert "cascade='all, delete-orphan'" in chapters
+    assert 'primaryjoin' in chapters
+    assert 'ForeignKey' not in line(source, 'book_id', 'Chapter')
+    load(tmp_path, source)
+
+
+def test_a_self_reference_can_be_owned(tmp_path, monkeypatch):
+    """The case a DDL cascade could not express on every engine."""
+    source = generate(tmp_path, monkeypatch, {
+        'Partner': table({'name': 'parent_id', 'type': 'Integer',
+                          'foreign_key': {'target': 'Partner.id', 'owned': True}},
+                         name='partners'),
+    })
+
+    assert "cascade='all, delete-orphan'" in line(source, 'partners', 'Partner')
+    load(tmp_path, source)
+
+
+def test_a_junction_is_owned_by_both_its_ends_without_saying_so(tmp_path, monkeypatch):
+    """A junction row means nothing without either end, so it is the default."""
+    source = generate(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors'),
+    })
+
+    assert "cascade='all, delete-orphan'" in line(source, 'author_m2m', 'Book')
+    assert "cascade='all, delete-orphan'" in line(source, 'book_m2m', 'Author')
+    # Never on the shortcut: it is viewonly, and SQLAlchemy refuses delete-orphan
+    # on a relationship with `secondary` unless it is told there is a single parent.
+    assert 'cascade' not in line(source, 'authors', 'Book')
+    load(tmp_path, source)
+
+
+def test_a_junction_target_may_derogate(tmp_path, monkeypatch):
+    """For the junction that is really a historical record of one of its ends."""
+    source = generate(tmp_path, monkeypatch, {
+        'Author': table(name='authors'),
+        'Book': table(name='books'),
+        'BookAuthor': junction('books_authors', target2={'owned': False}),
+    })
+
+    assert "cascade='all, delete-orphan'" in line(source, 'author_m2m', 'Book')
+    assert 'cascade' not in line(source, 'book_m2m', 'Author')
+    load(tmp_path, source)

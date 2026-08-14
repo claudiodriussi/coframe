@@ -930,6 +930,57 @@ modelled):
 > enforced; the distinction bites on PostgreSQL/MySQL. Soft FKs behave the same
 > everywhere: never enforced, by design.
 
+#### Ownership (`owned`)
+
+`owned: true` says the row is a **part** of the row it points at, and does not
+outlive it. Deleting the parent deletes it, and whatever it owns in turn.
+
+```yaml
+  Chapter:
+    columns:
+      - name: book_id
+        type: Integer
+        foreign_key:
+          target: Book.id
+          owned: true          # a chapter is a part of its book
+```
+
+It is declared on the **child's** foreign key and never as a list on the parent:
+a plugin that adds a child table then declares its own belonging without reaching
+into a declaration that belongs to somebody else.
+
+The generator turns it into `cascade='all, delete-orphan'` on the parent's
+collection — never on the child's scalar, since it is the parent that owns the
+rows. **Enforced by the ORM, not by the DDL**, and that is a decision rather than
+a shortcut:
+
+- it reads the same on a **soft** foreign key, where the database has no say at
+  all — otherwise half the mechanism would live somewhere else;
+- it survives dialects that refuse the constraint: SQL Server rejects
+  `ON DELETE CASCADE` on a self-referential foreign key outright, and that is a
+  shape Coframe models routinely (a partner and its contacts);
+- it needs **no migration**: adding it to an installed application is a code
+  change, whereas altering a constraint is a schema change `db-sync` cannot
+  perform — its list is closed and its comparator does not look at constraints;
+- deletions stay **observable** by SQLAlchemy events, and thus by audit and by
+  query behaviors. A cascade inside the engine is invisible to the application.
+
+The database still holds the **constraint**, which is what integrity means: no
+writer, ours or anyone's, can leave a reference pointing at nothing. Ownership is
+a separate statement, about meaning rather than integrity — it says which rows are
+parts.
+
+**Without `owned`** the relationship keeps SQLAlchemy's default: on deleting the
+parent the children are loaded and their foreign key set to NULL. That is right
+for a relation that grows in time and belongs to nobody — a loan, a review — but
+note what it does: the row survives with its reference **erased**. Where the
+column is `nullable: false` the delete fails instead, on a driver error.
+
+A **collection node** in a page (`type: collection`) is a composition by
+definition, so its foreign key must be declared owned; `coframe.diagnostics`
+reports the disagreement, since the generator runs on the schema and cannot read
+a page. See `docs/pending/relations.md § 18`.
+
 ### 4.6 Many-to-Many Relationships
 
 A junction table is declared with a `many_to_many` key instead of (or in
@@ -1040,6 +1091,28 @@ they come from the two columns, which cannot share a name; the four on the
 target must be declared. The joins are generated in full (`primaryjoin` +
 `secondaryjoin`), because with both columns pointing at one table there is
 nothing for SQLAlchemy to infer.
+
+#### A junction is owned by both its ends
+
+Ownership (§ 4.5) is **on by default for both targets**, and nothing is written
+in the YAML: a junction row means nothing without either end. Deleting a book
+takes its `books_authors` rows and leaves the authors untouched — a cascade only
+ever runs from parent to child, and the author is a *parent* of that row.
+
+The cascade goes on the rows collection (`Book.author_m2m`) and never on the
+shortcut that skips the junction (`Book.authors`), which is `viewonly` and could
+not carry it anyway.
+
+A target may derogate, for the junction that is really a historical record of one
+of its ends:
+
+```yaml
+    many_to_many:
+      target2:
+        table: Author.id
+        column: author_id
+        owned: false        # the rows survive the author
+```
 
 ### 4.7 Indexes
 

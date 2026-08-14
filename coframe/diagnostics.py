@@ -116,6 +116,9 @@ def _walk(app: Any, obj: Any, path: str, plugin: Optional[str],
         if obj.get('action') == 'stack_push':
             _check_push_target(app, obj, path, plugin, issues)
 
+        if obj.get('type') == 'collection':
+            _check_collection(app, obj, path, plugin, issues)
+
         for key, value in obj.items():
             if key.startswith('$'):
                 continue
@@ -153,6 +156,54 @@ def _check_view(app: Any, view: Dict[str, Any], path: str,
 
     _check_fields(view.get('fields') or [], colnames, model,
                   f'{path}.fields', plugin, issues)
+
+
+def _check_collection(app: Any, node: Dict[str, Any], path: str,
+                      plugin: Optional[str], issues: List[Dict[str, Any]]) -> None:
+    """A collection node must rest on a foreign key its model declares as owned.
+
+    A collection *is* a composition: its rows are parts of the parent and do not
+    outlive it. The generator cannot read that off the node — it runs on the schema,
+    long before any page is loaded — so ownership is declared on the foreign key in
+    model.yaml and the agreement between the two is checked here. What could not be
+    inferred becomes an invariant somebody verifies.
+    """
+    model = node.get('model')
+    fk = node.get('fk')
+    if not isinstance(model, str) or not isinstance(fk, str):
+        return          # a malformed node: pages.resolve_collections says so, loudly
+
+    table = app.tables.get(model)
+    if table is None:
+        issues.append(make_issue(
+            'error', 'model-missing', f'{path}.model',
+            f"table '{model}' is not defined", plugin))
+        return
+
+    column = next((c for c in table.effective_columns if c.name == fk), None)
+    if column is None:
+        issues.append(make_issue(
+            'error', 'field-unknown', f'{path}.fk',
+            f"'{model}' has no column '{fk}'", plugin))
+        return
+
+    foreign_key = column.attributes.get('foreign_key')
+    if not foreign_key:
+        issues.append(make_issue(
+            'error', 'collection-fk-not-a-key', f'{path}.fk',
+            f"'{model}.{fk}' is not a foreign key", plugin))
+        return
+
+    # A junction is owned by both its ends unless a target derogates, so the flag
+    # need not be written; anywhere else it must be.
+    if 'many_to_many' in table.attributes:
+        return
+
+    if foreign_key.get('owned') is not True:
+        issues.append(make_issue(
+            'error', 'collection-not-owned', f'{path}.fk',
+            f"'{model}.{fk}' is not declared 'owned: true' — a collection is a "
+            f"composition, and its rows must not outlive the parent", plugin))
 
 
 def _check_field(app: Any, field: str, colnames: Set[str], model: str,
