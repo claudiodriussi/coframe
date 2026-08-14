@@ -211,8 +211,8 @@ def _check_push_target(app: Any, action: Dict[str, Any], path: str,
     if target in pages:
         return
 
-    from coframe.endpoint_panels import _resolve_auto_page
-    if _resolve_auto_page(app, target) is None:
+    from coframe.pages import resolve_auto_page
+    if resolve_auto_page(app, target) is None:
         issues.append(make_issue(
             'error', 'panel-missing', f'{path}.panel',
             f"stack_push target '{target}' is not a page and cannot be auto-generated",

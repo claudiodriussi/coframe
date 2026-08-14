@@ -72,13 +72,13 @@ def dump_page(app: Any, page_id: str, auto: bool = False, raw: bool = False) -> 
     Raises:
         ValueError: if the page cannot be found or auto-generated
     """
-    from coframe.endpoint_panels import _resolve_auto_page, _strip_meta
+    from coframe.pages import load_page, resolve_auto_page, strip_meta
 
     descriptor = None
     source_label = ''
 
     if auto:
-        descriptor = _resolve_auto_page(app, page_id)
+        descriptor = resolve_auto_page(app, page_id)
         if descriptor is None:
             raise ValueError(f"Cannot auto-generate '{page_id}' — no matching table found")
         source_label = 'auto-generated'
@@ -86,13 +86,15 @@ def dump_page(app: Any, page_id: str, auto: bool = False, raw: bool = False) -> 
         raw_panel = app.pm.get(f'pages.{page_id}')
         if raw_panel is not None:
             if raw:
-                descriptor = _strip_meta(raw_panel)
+                descriptor = strip_meta(raw_panel)
                 source_label = 'explicit, $ref not expanded'
             else:
-                descriptor = _strip_meta(app.pm.resolve_refs(raw_panel))
+                # The full resolution the endpoint performs — refs expanded and
+                # collection nodes completed — so the dump shows what runs.
+                descriptor = strip_meta(load_page(app, page_id))
                 source_label = 'explicit, $ref expanded'
         else:
-            descriptor = _resolve_auto_page(app, page_id)
+            descriptor = resolve_auto_page(app, page_id)
             if descriptor is None:
                 raise ValueError(f"Page '{page_id}' not found and cannot be auto-generated")
             source_label = 'auto-generated — no explicit YAML found'

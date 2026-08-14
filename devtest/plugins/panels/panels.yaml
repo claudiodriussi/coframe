@@ -146,6 +146,44 @@ pages:
           pass: [id]
         $ref: "views.book_authors_view"
 
+  # ── Aggregate bench: a book and its authors, written as one tree ─────────
+  #    The collection node declares what gets written — the table and the column
+  #    that points back at the book — while `view` only says how it looks. The
+  #    row form is left to default to BookAuthor_form, which auto-generates:
+  #    the bench works before anyone writes a descriptor for it.
+  book_form:
+    title: Book
+    content:
+      type: form
+      source:
+        model: Book
+        id: $props.id
+      layout:
+        - type: section
+          columns:
+            - fields:
+                - name: title
+                - name: isbn
+                - name: publisher_id
+                  widget: combobox
+                - name: publication_date
+                - name: price
+
+        - type: collection
+          id: authors
+          label: Authors
+          model: BookAuthor
+          fk: book_id
+          view:
+            type: table
+            columns:
+              - field: author_id
+                title: Author
+              - field: notes
+                title: Notes
+      actions:
+        toolbar: [save, cancel]
+
   # ── Panel cascade: content → lines → line_detail ─────────────────────────
   loan_manager:
     title: Loans
