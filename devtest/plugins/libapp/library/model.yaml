@@ -96,10 +96,13 @@ tables:
         foreign_key:
           target: LibraryUser.id
 
+      # A review is edited inside the book's form and still outlives it: lifetime
+      # and editing surface are independent axes, and saying so settles the question.
       - name: book_id
         nullable: false
         foreign_key:
           target: Book.id
+          owned: false
 
   Loan:
     name: loans

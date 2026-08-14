@@ -221,17 +221,27 @@ def collections_app(node, table_attrs=None, fk=None):
 NODE = {'model': 'Chapter', 'fk': 'book_id'}
 
 
-def test_a_collection_on_an_unowned_key_is_refused():
+UNSTATED = 'collection-ownership-unstated'
+
+
+def test_a_collection_that_says_nothing_about_ownership_is_asked():
     issues = by_code(run_checks(collections_app(NODE, fk={'target': 'Book.id'})),
-                     'collection-not-owned')
+                     UNSTATED)
     assert len(issues) == 1
+    assert issues[0]['severity'] == 'warning'      # a question, not a refusal
     assert issues[0]['path'] == 'pages.book_form.content.layout[chapters].fk'
     assert 'Chapter.book_id' in issues[0]['message']
 
 
 def test_a_collection_on_an_owned_key_passes():
     app = collections_app(NODE, fk={'target': 'Book.id', 'owned': True})
-    assert by_code(run_checks(app), 'collection-not-owned') == []
+    assert by_code(run_checks(app), UNSTATED) == []
+
+
+def test_an_explicit_false_settles_the_question():
+    """Reviews of a book: edited inside its form, and outliving it on purpose."""
+    app = collections_app(NODE, fk={'target': 'Book.id', 'owned': False})
+    assert by_code(run_checks(app), UNSTATED) == []
 
 
 def test_a_junction_needs_no_declaration():
@@ -240,7 +250,7 @@ def test_a_junction_needs_no_declaration():
         'target1': {'table': 'Book.id', 'column': 'book_id'},
         'target2': {'table': 'Author.id', 'column': 'author_id'},
     }})
-    assert by_code(run_checks(app), 'collection-not-owned') == []
+    assert by_code(run_checks(app), UNSTATED) == []
 
 
 def test_a_collection_whose_fk_is_not_a_key_at_all():

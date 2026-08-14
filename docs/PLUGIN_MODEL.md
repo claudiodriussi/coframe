@@ -976,10 +976,17 @@ for a relation that grows in time and belongs to nobody — a loan, a review —
 note what it does: the row survives with its reference **erased**. Where the
 column is `nullable: false` the delete fails instead, on a driver error.
 
-A **collection node** in a page (`type: collection`) is a composition by
-definition, so its foreign key must be declared owned; `coframe.diagnostics`
-reports the disagreement, since the generator runs on the schema and cannot read
-a page. See `docs/pending/relations.md § 18`.
+**Ownership is not the same question as presentation.** A **collection node** in a
+page (`type: collection`) says a set of rows is edited inside the parent's form,
+in one buffer and one transaction; `owned` says whether those rows are parts of it.
+Most collections are compositions — the lines of a document, the contacts of a
+partner — but not all: the reviews of a book can be edited there and still outlive
+it. The two are declared separately and neither implies the other.
+
+Because the mistake is silent, `coframe.diagnostics` **asks** — a collection node
+on a foreign key that says nothing about ownership raises a *warning*, which either
+answer silences. A junction needs no answer: it is owned by both ends already.
+See `docs/pending/relations.md § 18`.
 
 ### 4.6 Many-to-Many Relationships
 

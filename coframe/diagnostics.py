@@ -160,13 +160,19 @@ def _check_view(app: Any, view: Dict[str, Any], path: str,
 
 def _check_collection(app: Any, node: Dict[str, Any], path: str,
                       plugin: Optional[str], issues: List[Dict[str, Any]]) -> None:
-    """A collection node must rest on a foreign key its model declares as owned.
+    """A collection node should say whether the rows it edits are parts of the parent.
 
-    A collection *is* a composition: its rows are parts of the parent and do not
-    outlive it. The generator cannot read that off the node — it runs on the schema,
-    long before any page is loaded — so ownership is declared on the foreign key in
-    model.yaml and the agreement between the two is checked here. What could not be
-    inferred becomes an invariant somebody verifies.
+    Ownership and presentation are different axes. `owned` (PLUGIN_MODEL § 4.5) is
+    about lifetime: whether the row is a part and dies with its parent. The node is
+    about editing: whether it is worked on inside the parent's form, in one buffer
+    and one transaction. Most collections are compositions — document lines, the
+    contacts of a partner — but not all: the reviews of a book can be edited there
+    and still outlive it.
+
+    So this asks for a decision instead of imposing one, and goes quiet as soon as
+    either answer is written. It exists because the mistake it catches is silent:
+    rows that look contained, and are left behind with a null key the first time the
+    parent is deleted.
     """
     model = node.get('model')
     fk = node.get('fk')
@@ -194,16 +200,17 @@ def _check_collection(app: Any, node: Dict[str, Any], path: str,
             f"'{model}.{fk}' is not a foreign key", plugin))
         return
 
-    # A junction is owned by both its ends unless a target derogates, so the flag
-    # need not be written; anywhere else it must be.
+    # A junction is owned by both its ends unless a target derogates, so there the
+    # question is already answered and nothing needs writing.
     if 'many_to_many' in table.attributes:
         return
 
-    if foreign_key.get('owned') is not True:
+    if 'owned' not in foreign_key:
         issues.append(make_issue(
-            'error', 'collection-not-owned', f'{path}.fk',
-            f"'{model}.{fk}' is not declared 'owned: true' — a collection is a "
-            f"composition, and its rows must not outlive the parent", plugin))
+            'warning', 'collection-ownership-unstated', f'{path}.fk',
+            f"'{model}.{fk}' does not say whether it is owned: rows edited here will "
+            f"not follow the parent when it is deleted — write 'owned: false' to "
+            f"confirm that, or 'owned: true' to make them parts of it", plugin))
 
 
 def _check_field(app: Any, field: str, colnames: Set[str], model: str,

@@ -181,6 +181,24 @@ pages:
                 title: Author
               - field: notes
                 title: Notes
+
+        # The other family, on the same form: reviews are edited here and are not
+        # parts of the book — `Review.book_id` says `owned: false`, so deleting a
+        # book leaves them. Editing surface and lifetime are separate axes.
+        - type: collection
+          id: reviews
+          label: Reviews
+          model: Review
+          fk: book_id
+          view:
+            type: table
+            columns:
+              - field: review_date
+                title: Date
+              - field: rating
+                title: Rating
+              - field: comment
+                title: Comment
       actions:
         toolbar: [save, cancel]
 
