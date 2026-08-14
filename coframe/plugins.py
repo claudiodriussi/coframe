@@ -8,6 +8,22 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 import yaml
 from coframe.utils import get_logger, set_formatter, logging_to_file, deep_merge
 
+_CORE_TIMESTAMP: Optional[float] = None
+
+
+def _core_timestamp() -> float:
+    """
+    Newest modification time among the core modules, computed once.
+
+    Only the package's own top-level files: the generator and the schema live
+    there, while `locale/` holds translations that cannot change a model.
+    """
+    global _CORE_TIMESTAMP
+    if _CORE_TIMESTAMP is None:
+        core = Path(__file__).parent
+        _CORE_TIMESTAMP = max((f.stat().st_mtime for f in core.glob('*.py')), default=0.0)
+    return _CORE_TIMESTAMP
+
 
 class PluginsManager:
     """
@@ -615,12 +631,19 @@ class PluginsManager:
 
     def get_timestamp(self) -> float:
         """
-        Get the most recent timestamp from all plugins.
+        Get the most recent timestamp among the inputs of what is generated.
+
+        The plugins are one input; **the generator is the other**. A change to
+        `source.py` or `db.py` changes the model produced from the very same
+        YAML, so leaving the package out means a `git pull` that alters the
+        generation leaves a stale `model.py` in place — with the new schema
+        already in the database. The failure is confusing and silent, which is
+        why the package counts.
 
         Returns:
-            float: The timestamp of the most recent file across all plugins
+            float: The timestamp of the most recent file, plugins and core
         """
-        latest_timestamp = 0
+        latest_timestamp = _core_timestamp()
         for name, plugin in self.plugins.items():
             if plugin.timestamp > latest_timestamp:
                 latest_timestamp = plugin.timestamp
