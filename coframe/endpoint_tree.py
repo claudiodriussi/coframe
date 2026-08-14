@@ -79,9 +79,18 @@ def _select(app, session, model_name: str, conditions: List[Any],
     Goes through the querybuilder rather than the ORM because a collection's
     `domain` is written in querybuilder syntax, and because the `*` expansion
     there already drops the columns a table declares secret.
+
+    `resolve: true` on every query of the tree, root and collections alike. The
+    flag means "I am resolving something already stored, not proposing what is
+    acceptable now", and an aggregate somebody opened by key is exactly that: its
+    contents are stored facts, not a picklist. Under a behavior that scopes a list
+    — Archivable — a browse list rightly hides archived rows, while a record must
+    open whole: half an aggregate is not a smaller aggregate, it is a wrong one,
+    and a row invisible in the only place it can be edited can never be restored.
+    The view's `domain` still applies: that is a filter, not a behavior.
     """
     builder = DynamicQueryBuilder(session, app.models)
-    query_def: Dict[str, Any] = {'table': model_name}
+    query_def: Dict[str, Any] = {'table': model_name, 'resolve': True}
     if conditions:
         query_def['filters'] = {'conditions': conditions}
     if order_by:
@@ -120,7 +129,14 @@ def _load_level(app, session, collections: Dict[str, Collection],
 
 
 def _load_tree(app, session, aggregate: Aggregate, record_id: Any) -> Optional[Dict[str, Any]]:
-    """Load the root record and everything below it, or None if it does not exist."""
+    """Load the root record and everything below it, or None if it does not exist.
+
+    One path for the whole tree — see `_select` for why it resolves rather than
+    browses. Fetching the root by key through the ORM instead would answer the same
+    question, but it would serialize it differently: `serialize_model` hands back a
+    `date` where the querybuilder hands back its ISO form, and two spellings of the
+    same kind of value in one payload is a trap for whoever reads it.
+    """
     _, db_table, pk = _table_of(app, aggregate.model)
     rows = _select(app, session, aggregate.model, [{pk: record_id}], None)
     if not rows:

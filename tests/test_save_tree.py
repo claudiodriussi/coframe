@@ -14,7 +14,7 @@ import importlib.util
 
 import pytest
 import yaml
-from sqlalchemy import event
+from sqlalchemy import event, text
 
 import coframe.utils
 from coframe.db import DB, Base
@@ -647,6 +647,53 @@ def test_a_level_costs_one_query_per_collection_and_not_one_per_row(app):
     # root + authors + chapters + notes — three chapters and two notes change nothing
     selects = [s for s in statements if s.lstrip().upper().startswith('SELECT')]
     assert len(selects) == 4
+
+
+def test_an_aggregate_opens_whole_under_a_behavior_that_scopes_lists(app):
+    """A behavior scopes a browse list. An aggregate opened by key is not one.
+
+    Archivable is the case that matters: a book kept out of the picker must still
+    open, and open *whole* — its authors are stored facts, not a picklist of what
+    is selectable now, and a child invisible in the only place it can be edited
+    could never be restored.
+    """
+    class HideEverything:
+        @classmethod
+        def applies_to(cls, model_class):
+            return True
+
+        @classmethod
+        def apply(cls, model_class, query_def, query):
+            return query.where(text('1 = 0'))
+
+    created = ok(save_tree({
+        'page': 'book_form',
+        'root': {'op': 'create', 'id': -1, 'values': {'title': 'Dune'},
+                 'children': {'chapters': [
+                     {'op': 'create', 'id': -2, 'values': {'title': 'Arrakis'}}]}},
+    }))
+
+    app.query_behaviors.append(HideEverything)
+    root = ok(load_tree({'page': 'book_form', 'id': created['id']}))
+
+    assert root['values']['title'] == 'Dune'
+    assert [row['values']['title'] for row in root['children']['chapters']] == ['Arrakis']
+
+
+def test_the_domain_of_a_tab_is_a_filter_and_still_applies(app):
+    """`resolve` skips behaviors, never the view's own conditions."""
+    created = ok(save_tree({
+        'page': 'book_form',
+        'root': {'op': 'create', 'id': -1, 'values': {'title': 'Dune'},
+                 'children': {'chapters': [
+                     {'op': 'create', 'id': -2, 'values': {'title': 'Arrakis', 'kind': 'body'}},
+                     {'op': 'create', 'id': -3, 'values': {'title': 'Ecology',
+                                                           'kind': 'appendix'}},
+                 ]}},
+    }))
+
+    tab = ok(load_tree({'page': 'book_appendix_form', 'id': created['id']}))
+    assert [row['values']['title'] for row in tab['children']['appendix']] == ['Ecology']
 
 
 def test_loading_a_record_that_is_not_there(app):
