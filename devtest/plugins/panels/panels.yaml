@@ -159,48 +159,74 @@ pages:
         model: Book
         id: $props.id
       layout:
+        # A column lays its fields left to right and wraps when they no longer
+        # fit: a field with no width takes an equal share of what is left, so
+        # five of them end up on one line. `width` pins a size and `filler` is a
+        # zero-height item that fills the line, pushing what follows onto the
+        # next one — the line break of this layout.
         - type: section
           columns:
             - fields:
                 - name: title
+                  width: 55%
                 - name: isbn
+                  width: 25%
+                - filler:
                 - name: publisher_id
                   widget: combobox
+                  width: 35%
                 - name: publication_date
+                  width: 20%
                 - name: price
+                  width: 15%
 
-        - type: collection
-          id: authors
-          label: Authors
-          model: BookAuthor
-          fk: book_id
-          view:
-            type: table
-            columns:
-              - field: author_id
-                title: Author
-              - field: notes
-                title: Notes
+        # Two collections, one under the other, become two tabs by moving the
+        # nodes inside a `tabs`: the node does not change, only where it sits.
+        - type: tabs
+          pages:
+            - label: Authors
+              layout:
+                - type: collection
+                  id: authors
+                  model: BookAuthor
+                  fk: book_id
+                  view:
+                    type: table
+                    columns:
+                      # A bare key is a value and costs nothing; a path asks for
+                      # the name behind it. Both are declared here to show that
+                      # they are separate columns, and that neither is implied.
+                      - field: author_id
+                        title: Id
+                        width: 70
+                      - field: author_id.full_name
+                        title: Author
+                      - field: notes
+                        title: Notes
 
-        # The other family, on the same form: reviews are edited here and are not
-        # parts of the book — `Review.book_id` says `owned: false`, so deleting a
-        # book leaves them. Editing surface and lifetime are separate axes.
-        - type: collection
-          id: reviews
-          label: Reviews
-          model: Review
-          fk: book_id
-          view:
-            type: table
-            columns:
-              - field: review_date
-                title: Date
-              - field: rating
-                title: Rating
-              - field: comment
-                title: Comment
+            # The other family, on the same form: reviews are edited here and are
+            # not parts of the book — `Review.book_id` says `owned: false`, so
+            # deleting a book leaves them. Editing surface and lifetime are
+            # separate axes.
+            - label: Reviews
+              layout:
+                - type: collection
+                  id: reviews
+                  model: Review
+                  fk: book_id
+                  view:
+                    type: table
+                    columns:
+                      - field: review_date
+                        title: Date
+                      - field: rating
+                        title: Rating
+                      - field: comment
+                        title: Comment
       actions:
         toolbar: [save, cancel]
+      policy:
+        editable: true
 
   # ── Panel cascade: content → lines → line_detail ─────────────────────────
   loan_manager:
