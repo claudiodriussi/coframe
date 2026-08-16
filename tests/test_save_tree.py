@@ -538,6 +538,118 @@ def test_an_unknown_page_writes_nothing(app):
     assert rows(app, 'Book') == []
 
 
+# ── Pass-through: the rows that are only on the way ─────────────────────────
+
+def _book_with_a_note(app):
+    """A book, a chapter, a note — the shortest tree with something in the middle."""
+    created = ok(save_tree({
+        'page': 'book_form',
+        'root': {'op': 'create', 'id': -1, 'values': {'title': 'Dune'},
+                 'children': {'chapters': [
+                     {'op': 'create', 'id': -2, 'values': {'title': 'Arrakis'},
+                      'children': {'notes': [{'op': 'create', 'id': -3,
+                                              'values': {'text': 'spice'}}]}},
+                 ]}},
+    }))
+    return created['id'], created['id_map'][-2], created['id_map'][-3]
+
+
+def test_an_untouched_row_is_only_the_way_down_to_a_grandchild(app):
+    """No `op` means no write: the node is there because a note below it changed."""
+    book_id, chapter_id, note_id = _book_with_a_note(app)
+
+    ok(save_tree({
+        'page': 'book_form',
+        'root': {'op': 'update', 'id': book_id, 'values': {},
+                 'children': {'chapters': [
+                     # Values and all — a pass-through carries whatever the buffer
+                     # holds, and none of it is written.
+                     {'id': chapter_id, 'values': {'title': 'Caladan'},
+                      'children': {'notes': [
+                          {'op': 'update', 'id': note_id, 'values': {'text': 'melange'}}]}},
+                 ]}},
+    }))
+
+    assert rows(app, 'Chapter')[0]['title'] == 'Arrakis'
+    assert rows(app, 'Note')[0]['text'] == 'melange'
+
+
+def test_the_root_may_pass_through_as_well(app):
+    book_id, _chapter_id, _note_id = _book_with_a_note(app)
+
+    ok(save_tree({
+        'page': 'book_form',
+        'root': {'id': book_id, 'values': {'title': 'Messiah'},
+                 'children': {'chapters': [
+                     {'op': 'create', 'id': -1, 'values': {'title': 'Appendix'}}]}},
+    }))
+
+    assert rows(app, 'Book')[0]['title'] == 'Dune'
+    assert {row['title'] for row in rows(app, 'Chapter')} == {'Arrakis', 'Appendix'}
+    assert {row['book_id'] for row in rows(app, 'Chapter')} == {book_id}
+
+
+def test_what_load_returns_is_accepted_unchanged(app):
+    """The two shapes are one: an answer fed straight back writes nothing."""
+    book_id, _chapter_id, _note_id = _book_with_a_note(app)
+    before = (rows(app, 'Book'), rows(app, 'Chapter'), rows(app, 'Note'))
+
+    tree = ok(load_tree({'page': 'book_form', 'id': book_id}))
+    ok(save_tree({'page': 'book_form', 'root': tree}))
+
+    assert (rows(app, 'Book'), rows(app, 'Chapter'), rows(app, 'Note')) == before
+
+
+def test_a_pass_through_needs_the_id_of_a_saved_row(app):
+    """A row that was never written has nothing below it to reach."""
+    result = save_tree({
+        'page': 'book_form',
+        'root': {'op': 'create', 'id': -1, 'values': {'title': 'x'},
+                 'children': {'chapters': [{'id': -2, 'values': {}}]}},
+    })
+
+    assert result['code'] == 400
+    assert rows(app, 'Book') == []
+
+
+def test_a_pass_through_cannot_reach_into_another_aggregate(app):
+    """Nothing is written on the node, so the parent it claims is checked instead."""
+    _first, chapter_of_first, _note = _book_with_a_note(app)
+    second = ok(save_tree({'page': 'book_form',
+                           'root': {'op': 'create', 'id': -1, 'values': {'title': 'Ubik'}}}))
+
+    result = save_tree({
+        'page': 'book_form',
+        'root': {'op': 'update', 'id': second['id'], 'values': {},
+                 'children': {'chapters': [
+                     {'id': chapter_of_first, 'values': {},
+                      'children': {'notes': [{'op': 'create', 'id': -2,
+                                              'values': {'text': 'grafted'}}]}},
+                 ]}},
+    })
+
+    assert result['code'] == 400
+    assert str(chapter_of_first) in result['message']
+    assert len(rows(app, 'Note')) == 1      # the one the fixture wrote, and no other
+
+
+def test_a_row_that_would_survive_its_deleted_parent_is_refused(app):
+    """Below a row that goes away only deletions make sense — silence included."""
+    book_id, chapter_id, note_id = _book_with_a_note(app)
+
+    result = save_tree({
+        'page': 'book_form',
+        'root': {'op': 'update', 'id': book_id, 'values': {},
+                 'children': {'chapters': [
+                     {'op': 'delete', 'id': chapter_id,
+                      'children': {'notes': [{'id': note_id, 'values': {}}]}},
+                 ]}},
+    })
+
+    assert result['code'] == 400
+    assert rows(app, 'Chapter') != []
+
+
 # ── Domain and defaults: the same invariant in both directions ──────────────
 
 def test_a_row_created_under_a_domain_is_stamped_to_satisfy_it(app):

@@ -27,6 +27,12 @@ value in a foreign key column is resolved through `id_map` before writing. That
 costs three lines and gives references between siblings created in the same
 transaction for free.
 
+A node carries an `op` only where the user acted. Without one it is a
+**pass-through** — an untouched row that is in the payload because something below
+it changed, and the way down runs through it. Nothing is written, the row is
+verified against the parent it claims, and the descent continues. That is what
+keeps `load_tree`'s answer and `save_tree`'s request one shape.
+
 `db` stays what it is — a single record, one call, its own transaction. Whether
 this becomes the only write path is a decision for the day the client moves.
 """
@@ -217,6 +223,34 @@ def _require_saved_id(model_name: str, node_id: Any, op: str) -> None:
             f"A {op} on '{model_name}' needs the id of a saved row, got {node_id!r}")
 
 
+def _passthrough_id(app, session, node_def, node_id: Any,
+                    inherited: Dict[str, Any]) -> Any:
+    """Verify an untouched row and hand its key down to its children.
+
+    A node without an `op` writes nothing: it is in the payload only because
+    something below it changed, and the path to a grandchild runs through it. That
+    is why the row is *checked* instead of written — the foreign key the parent
+    supplies is never applied here, so without the check a row belonging to another
+    parent would let children be grafted onto an aggregate nobody opened.
+    """
+    _require_saved_id(node_def.model, node_id, 'pass-through')
+
+    model_class, _, _ = _table_of(app, node_def.model)
+    obj = session.get(model_class, node_id)
+    if obj is None:
+        raise ValueError(f"No record {node_id} in '{node_def.model}'")
+
+    for key, value in inherited.items():
+        current = getattr(obj, key, None)
+        if current != value:
+            raise ValueError(
+                f"Row {node_id} of '{node_def.model}' has '{key}' = {current!r}, but "
+                f"the collection it appears in belongs to {value!r} — an unchanged "
+                f"row is verified, never reparented")
+
+    return node_id
+
+
 def _save_node(app, session, node_def, node: Dict[str, Any],
                inherited: Dict[str, Any], defaults: Dict[str, Any],
                id_map: Dict[int, Any], deletes: List[Tuple[int, str, Any]],
@@ -231,10 +265,19 @@ def _save_node(app, session, node_def, node: Dict[str, Any],
     model_class, db_table, pk = _table_of(app, node_def.model)
 
     op = str(node.get('op') or '').lower()
-    if op not in _OPS:
+    if op and op not in _OPS:
         raise ValueError(f"Unknown operation '{node.get('op')}' on '{node_def.model}'")
 
     node_id = node.get('id')
+
+    if not op:
+        # An untouched row: nothing to write, but the descent continues, because
+        # a node carries an `op` only where the user acted. That is what lets the
+        # buffer and the payload keep one shape — the client prunes what it did
+        # not touch, and what it keeps is what it holds.
+        real_id = _passthrough_id(app, session, node_def, node_id, inherited)
+        _save_children(app, session, node_def, node, real_id, id_map, deletes, depth)
+        return real_id
 
     if op == 'delete':
         _require_saved_id(node_def.model, node_id, 'delete')
@@ -353,6 +396,11 @@ def save_tree(data: Dict[str, Any]) -> Dict[str, Any]:
     temporary id for `create`. The client sends the operations it performed, not
     a before/after pair: a row deleted and re-inserted is indistinguishable from
     a modified one once it has been reduced to a difference.
+
+    A node with no `op` is a pass-through: an untouched row on the way to a
+    descendant that did change. The root normally carries `update` even when its
+    own fields did not move — the optimistic lock will want that touch (see
+    `relations.md §8`) — but an intermediate row has no such reason to be written.
 
     Returns:
         { status, data: {id, id_map, root}, code }
