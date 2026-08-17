@@ -159,14 +159,20 @@ pages:
         model: Book
         id: $props.id
       layout:
+        # Every container carries an `id`: it is what lets another plugin refine
+        # *this* section instead of appending a second one — a list whose items have
+        # no identity can only be extended (`merge-unkeyed-list`).
+        #
         # A column lays its fields left to right and wraps when they no longer
         # fit: a field with no width takes an equal share of what is left, so
         # five of them end up on one line. `width` pins a size and `filler` is a
         # zero-height item that fills the line, pushing what follows onto the
         # next one — the line break of this layout.
-        - type: section
+        - id: identity
+          type: section
           columns:
-            - fields:
+            - id: left
+              fields:
                 - name: title
                   width: 55%
                 - name: isbn
@@ -190,9 +196,11 @@ pages:
         #    A button opens what belongs to the record being edited, and never
         #    another record — the FK combobox already carries that gesture
         #    (relations.md §19.1). Three shapes, side by side.
-        - type: row
+        - id: actions
+          type: row
           children:
-            - type: col
+            - id: loans_col
+              type: col
               layout:
                 # The loans are an annex: a book is a book without them, so they
                 # sit behind a button instead of taking vertical space. `count`
@@ -218,7 +226,8 @@ pages:
                         - field: library_user_id.name
                           title: Member
 
-            - type: col
+            - id: description_col
+              type: col
               layout:
                 # The same record with other fields, by reference: the long text
                 # would eat the form, and it is read far less often than the rest.
@@ -229,7 +238,8 @@ pages:
                     type: form
                     page: book_description_form
 
-            - type: col
+            - id: stats_col
+              type: col
               layout:
                 # The other family: no frame, no buffer — it calls and reports.
                 - type: button
@@ -242,9 +252,11 @@ pages:
         # Two collections, one under the other, become two tabs by moving the
         # nodes inside a `tabs`: the node does not change, only where it sits.
         # `count` on the page answers what an empty tab costs to discover.
-        - type: tabs
+        - id: relations
+          type: tabs
           pages:
-            - label: Authors
+            - id: authors_tab
+              label: Authors
               count: authors
               layout:
                 - type: collection
@@ -269,7 +281,8 @@ pages:
             # not parts of the book — `Review.book_id` says `owned: false`, so
             # deleting a book leaves them. Editing surface and lifetime are
             # separate axes.
-            - label: Reviews
+            - id: reviews_tab
+              label: Reviews
               count: reviews
               layout:
                 - type: collection
@@ -303,9 +316,11 @@ pages:
       source:
         model: Book
       layout:
-        - type: section
+        - id: publishing
+          type: section
           columns:
-            - fields:
+            - id: left
+              fields:
                 - name: language
                   width: 20%
                 - name: pages
