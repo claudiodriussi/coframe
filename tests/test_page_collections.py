@@ -229,6 +229,97 @@ def test_recursion_stops_where_the_path_repeats():
     assert contacts.collections == {}
 
 
+# ── Faces: what a button opens ──────────────────────────────────────────────
+#
+# A button opens a face of the *same* record (relations.md §19.1). An inline
+# collection needs nothing new — the walk finds it wherever it sits — but a face
+# named by page id is a second descriptor, and its collections belong to this
+# record, at this level. Without the descent the client would draw a grid whose
+# rows the save refuses by name.
+
+def button(page=None, **overrides):
+    node = {'type': 'button', 'label': 'More'}
+    if page:
+        node['opens'] = {'type': 'form', 'page': page}
+    node.update(overrides)
+    return node
+
+
+def test_a_collection_behind_a_button_is_a_collection_of_this_page():
+    """Inline: the node sits inside the button, and the walk goes everywhere."""
+    app = make_app({'book_form': form_page(button(opens=authors_node()))})
+
+    assert page_aggregate(app, 'book_form').collections['authors'].model == 'BookAuthor'
+
+
+def test_the_collections_of_a_face_merge_at_this_level():
+    """A face is the same record with other fields — not a child of it."""
+    app = make_app({
+        'book_form': form_page(button(page='book_more')),
+        'book_more': form_page(authors_node()),
+    })
+
+    aggregate = page_aggregate(app, 'book_form')
+    assert aggregate.collections['authors'].model == 'BookAuthor'
+    assert aggregate.collections['authors'].fk == 'book_id'
+
+
+def test_a_face_of_a_face_merges_too():
+    app = make_app({
+        'book_form': form_page(button(page='book_more')),
+        'book_more': form_page(button(page='book_even_more')),
+        'book_even_more': form_page(authors_node()),
+    })
+
+    assert 'authors' in page_aggregate(app, 'book_form').collections
+
+
+def test_the_row_forms_of_a_face_still_descend():
+    """A collection reached through a face is a collection like any other."""
+    app = make_app({
+        'book_form': form_page(button(page='book_more')),
+        'book_more': form_page(authors_node(form='ba_row')),
+        'ba_row': form_page({'type': 'collection', 'id': 'remarks',
+                             'model': 'Remark', 'fk': 'ba_id'}, model='BookAuthor'),
+    })
+
+    authors = page_aggregate(app, 'book_form').collections['authors']
+    assert authors.collections['remarks'].model == 'Remark'
+
+
+def test_a_face_that_repeats_an_id_is_refused_naming_both():
+    """One id, one collection: the payload names them, so two would be ambiguous."""
+    app = make_app({
+        'book_form': form_page(authors_node(), button(page='book_more')),
+        'book_more': form_page(authors_node()),
+    })
+
+    with pytest.raises(ValueError) as exc:
+        page_aggregate(app, 'book_form')
+
+    assert 'authors' in str(exc.value) and 'book_more' in str(exc.value)
+
+
+def test_a_face_nobody_wrote_stops_the_descent_quietly():
+    app = make_app({'book_form': form_page(button(page='not_written_yet'))})
+
+    assert page_aggregate(app, 'book_form').collections == {}
+
+
+def test_a_face_that_points_back_does_not_loop():
+    app = make_app({'book_form': form_page(button(page='book_form'))})
+
+    assert page_aggregate(app, 'book_form').collections == {}
+
+
+def test_a_button_that_calls_an_endpoint_declares_no_tree():
+    app = make_app({'book_form': form_page(
+        {'type': 'button', 'label': 'Statistics', 'endpoint': 'book_stats',
+         'pass': {'id': '$record.id'}})})
+
+    assert page_aggregate(app, 'book_form').collections == {}
+
+
 # ── The other consumer ──────────────────────────────────────────────────────
 
 def test_get_page_hands_the_client_the_completed_descriptor(monkeypatch):

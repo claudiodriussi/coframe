@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 _JSON_SCALARS = (str, int, float, bool, type(None))
 
 COLLECTION = 'collection'
+BUTTON = 'button'
 
 
 def strip_meta(obj: Any) -> Any:
@@ -94,6 +95,32 @@ def _collect_nodes(obj: Any, found: List[Dict[str, Any]]) -> None:
         return
     for value in obj.values():
         _collect_nodes(value, found)
+
+
+def _face_pages(obj: Any, found: List[str]) -> None:
+    """Gather the pages a button opens as another face of the *same* record.
+
+    A button either opens something of this record or calls an endpoint
+    (relations.md §19.1). When what it opens is a form named by id, that form may
+    declare collections of its own — and they belong to this record, at this level,
+    not one step down. The walk stops inside a collection node for the same reason
+    `_collect_nodes` does: what hangs under a collection is the row form's business.
+    """
+    if isinstance(obj, list):
+        for item in obj:
+            _face_pages(item, found)
+        return
+    if not isinstance(obj, dict):
+        return
+    if obj.get('type') == COLLECTION:
+        return
+    if obj.get('type') == BUTTON:
+        opens = obj.get('opens')
+        if isinstance(opens, dict) and opens.get('type') == 'form' and opens.get('page'):
+            found.append(opens['page'])
+        return
+    for value in obj.values():
+        _face_pages(value, found)
 
 
 def resolve_collections(page: Dict[str, Any], page_id: str) -> Dict[str, Collection]:
@@ -316,14 +343,49 @@ def page_aggregate(app: Any, page_id: str, _seen: frozenset = frozenset()) -> Ag
     if not model:
         raise ValueError(f"Page '{page_id}' names no model to write")
 
+    seen = _seen | {page_id}
+    collections = _with_faces(app, content, collections, page_id, seen)
     aggregate = Aggregate(page=page_id, model=model, collections=collections)
 
-    seen = _seen | {page_id}
     for coll in aggregate.collections.values():
         if coll.form not in seen:
             coll.collections = _collections_below(app, coll.form, seen)
 
     return aggregate
+
+
+def _with_faces(app: Any, content: Dict[str, Any], collections: Dict[str, Collection],
+                page_id: str, seen: frozenset) -> Dict[str, Collection]:
+    """Add the collections declared by the faces this page opens behind a button.
+
+    They merge at **this** level because a face is the same record seen with other
+    fields — not a child. A face that names a collection this page already declares
+    is refused: two nodes with one id would make the write contract ambiguous, and
+    the payload names collections by id.
+    """
+    result = dict(collections)
+    faces: List[str] = []
+    _face_pages(content, faces)
+
+    for ref in faces:
+        if ref in seen:
+            continue
+        for cid, coll in _face_collections(app, ref, seen).items():
+            if cid in result:
+                raise ValueError(
+                    f"Duplicate collection id '{cid}': page '{page_id}' and the face "
+                    f"'{ref}' it opens both declare it")
+            result[cid] = coll
+    return result
+
+
+def _face_collections(app: Any, page_id: str, seen: frozenset) -> Dict[str, Collection]:
+    """The collections of a face, including those of the faces *it* opens."""
+    page, collections = _resolve(app, page_id)
+    if page is None:
+        return {}
+    return _with_faces(app, page.get('content') or {}, collections,
+                       page_id, seen | {page_id})
 
 
 def _collections_below(app: Any, page_id: str, seen: frozenset) -> Dict[str, Collection]:
