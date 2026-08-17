@@ -3,7 +3,7 @@
 *This manual describes how plugins define, extend, and override data models in Coframe.
 It is written for application developers building on top of the framework.*
 
-*Last revised: 2026-07-12. Living document — sections marked* (planned) *or* (future) *are not yet implemented.*
+*Last revised: 2026-08-17. Living document — sections marked* (planned) *or* (future) *are not yet implemented.*
 
 Coframe is designed around a single workflow: **configure, build, deploy**.
 An application developer starts from a skeleton project, writes plugins that declare
@@ -20,7 +20,7 @@ framework merges them into a coherent whole at startup.
 ## Table of Contents
 
 1. [How the Plugin System Works](#1-how-the-plugin-system-works)
-2. [The Merge Algorithm](#2-the-merge-algorithm) — identity keys, smart merge, the `$` metadata convention
+2. [The Merge Algorithm](#2-the-merge-algorithm) — identity keys, smart merge, leaving a hook, the `$` metadata convention
 3. [Types](#3-types) — primitive, inheritance, case, composite/mixin, virtual columns, secret columns, query behaviors
 4. [Tables](#4-tables)
 5. [Pages and Panels](#5-pages-and-panels)
@@ -92,6 +92,34 @@ files inside plugins can use plain `import` statements. Listing paths explicitly
 gives you a precise, readable map of which directories are active for both plugin
 discovery and Python imports — no implicit recursion, no surprises.
 
+#### Choosing what a root contributes (`include`)
+
+A root written as a bare path contributes every plugin it holds. A shared root —
+a commons repository several applications draw from — is usually not wanted
+whole, so an entry may instead name the plugins to take:
+
+```yaml
+plugins:
+  - path: ../../commons/plugins
+    include: [common, users, partners]   # these, plus whatever they depend on
+  - plugins                              # short form: the whole root
+```
+
+Inclusion is **positive** on purpose. What a shared root gains over time stays
+inert until an application asks for it by name; an exclusion list would do the
+opposite — pulling the updated repository would hand every consumer the new
+plugin, and its tables, unasked. Dependencies are *followed*, not declared:
+`include: [partners]` also brings `common`, and the list survives `partners`
+growing a new dependency tomorrow.
+
+Discovery still scans every root; selection happens afterwards over the complete
+picture, so an included plugin may depend on one provided by a different root.
+A name found in two roots is a conflict only when both are asked for — naming
+the one you want in `include` is how you pick between alternative
+implementations of the same plugin, and the other stays inert. A name reached as
+a *dependency* and provided by more than one root is refused: include it
+explicitly from the root you mean.
+
 ### 1.3 Plugin Identity and Dependencies
 
 Each plugin has a unique **name** (defaults to the directory name, overridable in
@@ -151,27 +179,29 @@ Two consequences follow, and they are the backbone of the whole system:
   (identity key, § 2.2), whether it registers a custom merge handler, and how
   its resolved tree is interpreted by its consumer. `tables` are keyed by column
   `name`; `menu_items` are a flat collection assembled into a tree by `parent`;
-  `pages`/`views` are namespace-wrapped by plugin. Same engine, different rules
-  per root.
+  `pages`/`views` are flat dicts whose ids are global, addressed by a `$ref` as
+  `section.id`. Same engine, different rules per root.
 
 Sections currently defined:
 
-| Section | Role | Merge model | Namespace-wrapped |
-|---------|------|-------------|-------------------|
-| `types` | reusable column types | dict merge | no |
-| `tables` | database tables | dict merge | no |
-| `schemas` | non-DB typed schemas | dict merge | no |
-| `pages` | page descriptors | dict merge | **yes** (by plugin name) |
-| `views` | view descriptors | dict merge | **yes** (by plugin name) |
-| `menus` | menu roots (Chapter 9) | dict merge | no |
-| `menu_items` | menu entries, flat (Chapter 9) | dict merge | no |
+| Section | Role | Merge model |
+|---------|------|-------------|
+| `types` | reusable column types | dict merge |
+| `tables` | database tables | dict merge |
+| `schemas` | non-DB typed schemas | dict merge |
+| `pages` | page descriptors | dict merge |
+| `views` | view descriptors | dict merge |
+| `menus` | menu roots (Chapter 9) | dict merge |
+| `menu_items` | menu entries, flat (Chapter 9) | dict merge |
+
+Every section is a **flat dict keyed by id**: there is no per-plugin namespace,
+which is what lets a plugin extend a page, a type or a table declared by another
+one (§ 5.2), and what makes the naming convention of § 1.3 matter.
 
 The framework's generic tooling makes exactly **one** distinction: DB/type
 sections (`types`, `tables`, `schemas`) feed model generation, everything else
 is a **descriptor** consumed by the UI. Beyond that split, all sections are
 treated the same.
-
-**Namespace-wrapped sections** are explained in Chapter 5.
 
 ---
 
@@ -210,6 +240,17 @@ The identity key is the first recognised key found among the items:
 If no identity key is found (pure scalar lists or unrecognised dicts),
 the list falls back to **plain append without duplicates**.
 
+Append is right for a list of values and almost never what the author meant for
+a list of *nodes*: with no identity there is no way to say which one this
+contribution refines, so the second plugin gets its item appended beside the
+first. Where two plugins actually meet on such a list the merge says so —
+`merge-unkeyed-list`, a warning, because the configuration is legitimate and
+only means "nobody can extend this from outside".
+
+The remedy is an `id`. It is why the layout containers of a form — `section`,
+`tabs`, a tab page, `row`, `col`, a column of a section — accept one: without it
+a derived plugin can append a second section but never refine the first.
+
 ### 2.3 Smart Merge Operations
 
 Given that an identity key is present, the following operations are available:
@@ -234,15 +275,66 @@ columns:
 
 Result: `{name: price, type: Money, label: "Sale Price"}`
 
+A list property of a matched item goes back through the same door rather than
+being overwritten, so the merge does not stop at the first list. It matters
+because a form layout is lists all the way down — `layout → section.columns →
+column.fields` — and stopping meant that refining a section lost the fields it
+already had:
+
+```yaml
+# base plugin
+layout:
+  - id: identity
+    type: section
+    columns:
+      - id: left
+        fields: [{name: title}, {name: isbn}]
+
+# derived plugin — renames one field and adds another
+layout:
+  - id: identity
+    columns:
+      - id: left
+        fields: [{name: title, label: Titolo}, {name: price}]
+```
+
+Result: `title` keeps its type and gains the label, `isbn` stays, `price` is
+appended.
+
 #### Remove
 
-Set `$remove: true` to delete an item from the resolved list.
+Set `$remove: true` to delete an item from the resolved list, **or a dict entry
+from a keyed section**:
 
 ```yaml
 columns:
   - name: internal_code
     $remove: true
+
+menu_items:
+  books:
+    $remove: true          # the derived application drops the entry
 ```
+
+On a menu the usual gesture is not removal but **re-pointing** — a menu item is
+a dict keyed by id, so `menu_items: {books: {panel: my_book_form}}` sends the
+same entry, with its label, icon and position, somewhere else.
+
+#### Replace an entire value (`$replace`)
+
+Merging and starting over are both legitimate, and without a word for the second
+they are indistinguishable: whatever the author meant, the machinery merged.
+`$replace` lists the keys of *this* dict that the contribution supersedes.
+
+```yaml
+book_form:
+  content:
+    $replace: [layout]     # this layout supersedes the base's, it does not merge
+    layout: [ … ]
+```
+
+It works on any value, which is why it is also the answer for a scalar list:
+`order_by: [price]` in a derived plugin means `[title, price]` without it.
 
 #### Positional insert (`$after` / `$before`)
 
@@ -259,17 +351,50 @@ columns:
 If the anchor is not found at merge time, the item is appended and a warning
 is logged.
 
-> **Note:** `$remove`, `$after`, and `$before` are merge-time directives.
-> They are consumed by the merge algorithm and never appear in the resolved
-> descriptor delivered to the frontend.
+> **Note:** `$remove`, `$after`, `$before` and `$replace` are merge-time
+> directives. They are consumed by the merge algorithm and never appear in the
+> resolved descriptor delivered to the frontend.
 
 ### 2.4 Scalar Lists (Plain Append)
 
 Lists whose items have no identity key — such as `toolbar`, `order_by`,
 `joins`, `pass` — are merged by appending new items without duplicating
-existing ones. There is currently no removal mechanism for scalar list items.
+existing ones. There is no per-item removal for them; `$replace` on the
+containing key supersedes the whole list.
 
-### 2.5 Metadata Keys and the `$` Convention
+### 2.5 Leaving a Hook: Where a Derived Plugin Can Reach
+
+Merging composes two descriptions of the **same shape**. It cannot move a node
+under a new parent — that is a tree edit, and no merge directive should try to
+be one. Which means a shared plugin decides, when it writes a form, how far a
+derived application can go without redeclaring it.
+
+Two rules cover the cases that actually occur:
+
+- **Give an `id` to any container a derived plugin might refine.** Without it,
+  its list can only be appended to.
+- **An inline collection goes inside a `tabs`, even when it is the only one.**
+  A collection is precisely the thing a derived application wants to put a
+  sibling next to — the contacts of a partner and its delivery addresses — and
+  adding a page to a container that exists is a plain merge, while wrapping an
+  existing node in a container that does not exist is a restructure. A
+  collection reached through a **button** needs no such wrapper: the button is
+  already an identified node of the layout, and a second one is appended beside
+  it.
+
+Restructuring anyway, when the hook is missing and the base plugin cannot be
+changed, means republishing the piece under a name and referencing it — a
+`$ref` works anywhere, including inside a layout, and sibling keys override the
+resolved value. This is deliberately **not** a convention of the plugin model
+today: a node declared inside a list is not addressable by path, so only
+something published under a key of its own can be reused, and no case has yet
+asked for it. The rules above are what keeps it unnecessary.
+
+> **Asymmetry worth knowing:** the sibling keys of a `$ref` overwrite the
+> resolved value *shallowly*, and the merge directives above do not apply there.
+> `$ref` plus `columns:` therefore means "that node, with these columns".
+
+### 2.6 Metadata Keys and the `$` Convention
 
 Any dict key beginning with `$` is **framework metadata**, not user data.
 The prefix marks a key that the framework injects or interprets, and guarantees
@@ -278,7 +403,7 @@ convention is applied consistently: wherever the framework iterates the keys of
 a merged section it skips `$`-prefixed keys (`startswith('$')`); wherever it
 serialises a descriptor for the frontend it strips them.
 
-`$` tokens fall into two families that share only the sigil.
+`$` tokens fall into three families that share only the sigil.
 
 **A. Merge-time metadata** — injected or consumed while plugin data is merged.
 These are part of the plugin model:
@@ -287,7 +412,8 @@ These are part of the plugin model:
 |-----|---------|
 | `$plugin` | Attribution: which plugin last contributed this node. Injected by the merge (§ 2.1); drives default cascades and diagnostics, enables fail-loud conflict detection; stripped before the frontend. |
 | `$ref` | Reference: replace this node with the object at the given path, merging sibling keys on top. Resolved server-side — define once, place many (Chapter 5). |
-| `$remove` / `$after` / `$before` | Smart-merge list directives (§ 2.3): delete an item, or insert a new one at a position. Consumed by the merge; never delivered. |
+| `$remove` / `$after` / `$before` | Smart-merge directives (§ 2.3): delete an item — or, on a keyed section, an entry — and insert a new item at a position. Consumed by the merge; never delivered. |
+| `$replace` | On a dict: the listed keys supersede the base's instead of merging with them (§ 2.3). Consumed by the merge; never delivered. |
 
 **B. Request-time placeholders** — written in descriptors but resolved *per
 request* against runtime state, not during the merge:
@@ -298,10 +424,30 @@ request* against runtime state, not during the merge:
 | `$trigger.*` | Bind to the payload of the event that fired the load (§ 5.5, § 6.4). |
 | `$or` / `$and` | Logical operators in the `db` endpoint's filter DSL — an API-request concept, not plugin YAML. AND is the implicit default (sibling conditions are AND-ed); `$or`/`$and` are needed only to build explicit groups, e.g. `(A OR B) AND (C OR D)`. |
 
-Family A shapes the descriptor tree at startup; Family B is interpreted when a
-request arrives. Neither ever reaches the frontend as a literal `$` key:
-attribution is stripped, refs are expanded, directives are consumed,
-placeholders are substituted.
+**C. System defaults** — a `default:` (or `onupdate:`) on a *column* whose value
+is a `$` token names a callable registered in the core registry
+`coframe.defaults`. The generator emits a reference to it into the model, so
+SQLAlchemy calls it on every insert:
+
+| Token | Meaning |
+|-------|---------|
+| `$op_date` | The operator's working date, taken from the request context at insert time (today's date when the context carries none). Built in, because the core is also its producer — `auth` puts it in the context at login. |
+
+An unknown token is refused at generation time, naming the ones that are
+registered. Applications add their own with `register_default()`, in the same
+spirit as `add_query_behavior` (§ 3.7).
+
+```yaml
+- name: review_date
+  type: Date
+  default: $op_date        # not `date.today` — the operator's date, per request
+```
+
+Family A shapes the descriptor tree at startup, family B is interpreted when a
+request arrives, family C is resolved when a row is inserted. None of them ever
+reaches the frontend as a literal `$` key: attribution is stripped, refs are
+expanded, directives are consumed, placeholders are substituted, defaults are
+compiled into the generated model.
 
 ---
 
@@ -324,7 +470,10 @@ Types serve two goals:
 
 ### 3.2 Primitive Base Types
 
-The `base` property maps to a SQLAlchemy column type. Recognised base types:
+The `base` property maps to a SQLAlchemy column type. Every class in
+`sqlalchemy.types` that exposes a `python_type` is registered under its own
+name, so `Float`, `Time`, `LargeBinary` and the rest are available too — the
+list is not the framework's to close. The ones a data model reaches for:
 
 | Base | SQLAlchemy type |
 |------|----------------|
@@ -795,15 +944,20 @@ hybrid carries an SQL expression. A table that declares nothing searchable
 | `name` | string | Column name (identity key for merge) |
 | `type` | string | Type name from `types` section, or base type |
 | `nullable` | bool | Whether the column allows NULL (default: true) |
-| `default` | any | Default value or Python expression |
+| `default` | any | Default value, Python expression, or a `$` system default (§ 2.5) |
 | `unique` | bool | Unique constraint |
 | `index` | bool | Single-column index |
+| `case` | string | `upper` / `lower` / `neutral` — case fixed by the column type (§ 3.3.1) |
+| `virtual` | bool | Not mapped to the database — a hybrid property in `model.py` (§ 3.5) |
+| `secret` | bool | Never leaves the server, on any read path (§ 3.6) |
+| `on_write` | string | Registered transform applied before the value is stored (§ 3.6) |
+| `editable` | bool | Client hint: the column is not writable in generated forms |
 | `label` | string | UI label (overrides type-level label) |
 | `help` | string | UI tooltip |
 | `widget` | string | UI widget override |
 | `searchable` | bool | Adds the column to what a text search matches (§ 4.3) |
 | `prefix` | string | Column name prefix when expanding a composite type |
-| `foreign_key` | dict | FK definition: `target`, `relation`, `backref`, `ondelete`, `onupdate`, `constraint` (hard/soft — see § 4.5) |
+| `foreign_key` | dict | FK definition: `target`, `relation`, `backref`, `ondelete`, `onupdate`, `constraint` (hard/soft), `owned` (§ 4.5) |
 | `length` | int | String length (for String-based types) |
 | `precision` / `scale` | int | Numeric precision |
 
@@ -1405,8 +1559,16 @@ Resolution order in `get_page`:
 1. Exact id match in the `pages` dict
 2. Auto-generate from table schema
 
-Auto-generated pages exclude primary keys (shown as read-only) and map
-foreign keys to combobox widgets.
+An auto-generated page is built from `effective_columns` and nothing else.
+**Secret** columns are left out of both (§ 3.6); a form also skips **virtual**
+ones, shows the key read-only, marks a column `required` when it is
+`nullable: false` with no default, and forwards every other column attribute
+to the client, which applies the ones it knows (widget, label, `foreign_key`).
+
+Collections (§ 4.5) are never derived: a collection is not a column, and asking
+which tables hold a foreign key to this one would pull `BookAuthor`, `Loan` and
+`Review` into `Book` with equal right, while only the first belongs inside it.
+An aggregate is declared, or it does not exist.
 
 ### 5.8 Lookup Mode *(planned)*
 
