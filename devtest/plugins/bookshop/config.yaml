@@ -1,0 +1,4 @@
+name: bookshop
+version: 0.0.1
+description: A derived application — what an app adds to a form it did not write
+depends_on: [panels]

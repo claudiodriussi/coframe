@@ -1215,13 +1215,19 @@
           "width": "20%"
          },
          {
+          "name": "language",
+          "width": "15%",
+          "$plugin": "bookshop"
+         },
+         {
           "name": "price",
           "width": "15%"
          }
-        ]
+        ],
+        "$plugin": "bookshop"
        }
       ],
-      "$plugin": "panels"
+      "$plugin": "bookshop"
      },
      {
       "id": "actions",
@@ -1356,16 +1362,21 @@
              "title": "Rating"
             },
             {
+             "field": "library_user_id.name",
+             "title": "Member"
+            },
+            {
              "field": "comment",
              "title": "Comment"
             }
            ]
           }
          }
-        ]
+        ],
+        "$plugin": "bookshop"
        }
       ],
-      "$plugin": "panels"
+      "$plugin": "bookshop"
      }
     ],
     "actions": {

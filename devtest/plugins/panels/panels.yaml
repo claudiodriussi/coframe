@@ -249,9 +249,12 @@ pages:
                   pass:
                     id: $record.id
 
-        # Two collections, one under the other, become two tabs by moving the
-        # nodes inside a `tabs`: the node does not change, only where it sits.
-        # `count` on the page answers what an empty tab costs to discover.
+        # An inline collection lives in a `tabs` even when it is the only one:
+        # it is the hook a derived application needs to put a sibling next to it
+        # (PLUGIN_MODEL § 2.5), and `bookshop` uses exactly this one to add its
+        # Reviews tab. Alone, the strip would read as a mistake, so a single page
+        # wears the label of a band — the same call `TabView` makes for a panel
+        # area. `count` answers what an empty tab costs to discover: a click.
         - id: relations
           type: tabs
           pages:
@@ -277,27 +280,6 @@ pages:
                       - field: notes
                         title: Notes
 
-            # The other family, on the same form: reviews are edited here and are
-            # not parts of the book — `Review.book_id` says `owned: false`, so
-            # deleting a book leaves them. Editing surface and lifetime are
-            # separate axes.
-            - id: reviews_tab
-              label: Reviews
-              count: reviews
-              layout:
-                - type: collection
-                  id: reviews
-                  model: Review
-                  fk: book_id
-                  view:
-                    type: table
-                    columns:
-                      - field: review_date
-                        title: Date
-                      - field: rating
-                        title: Rating
-                      - field: comment
-                        title: Comment
       actions:
         toolbar: [save, cancel]
       policy:

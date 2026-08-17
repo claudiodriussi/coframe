@@ -1,0 +1,49 @@
+# What a derived application does to a form somebody else wrote.
+#
+# Everything here is a *merge*: `panels` declares `book_form`, this plugin names
+# the containers it wants to reach into and adds to them. Nothing is redeclared,
+# so the day the base form changes this file still applies — which is the whole
+# point of the identity keys it leans on (PLUGIN_MODEL § 2.2, § 2.5).
+
+pages:
+
+  book_form:
+    content:
+      layout:
+        # Reaching *inside* a section: the ids name the section and the column,
+        # and the field list merges by `name`. Before the merge learned to
+        # recurse into nested lists this appended a second section instead.
+        - id: identity
+          columns:
+            - id: left
+              fields:
+                - name: language
+                  width: 15%
+                  $after: publication_date
+
+        # A second collection beside the one the base declared. The base put its
+        # authors in a `tabs` even though it was alone — the hook this needs —
+        # so adding a sibling is one node, and the tab bar appears now that
+        # there are two pages to choose between.
+        - id: relations
+          pages:
+            - id: reviews_tab
+              label: Reviews
+              count: reviews
+              $after: authors_tab
+              layout:
+                - type: collection
+                  id: reviews
+                  model: Review
+                  fk: book_id
+                  view:
+                    type: table
+                    columns:
+                      - field: review_date
+                        title: Date
+                      - field: rating
+                        title: Rating
+                      - field: library_user_id.name
+                        title: Member
+                      - field: comment
+                        title: Comment
