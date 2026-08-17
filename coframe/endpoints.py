@@ -89,6 +89,10 @@ class CommandResult:
 
         if self.status == "success":
             result["data"] = self.data
+            # A success may have something to say — an endpoint called from a
+            # button reports what it did, and the envelope already has the field.
+            if self.message:
+                result["message"] = self.message
         else:
             result["message"] = self.message or "Unknown error"
             if self.error_type:

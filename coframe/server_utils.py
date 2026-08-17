@@ -436,7 +436,12 @@ def handle_generic_endpoint(
         result = command_processor.send(command)
 
         if result.get('status') == 'success':
-            return {'status': 'success', 'data': result.get('data'), 'status_code': 200}
+            response = {'status': 'success', 'data': result.get('data'), 'status_code': 200}
+            # What the endpoint had to say about what it did: an operation called
+            # from a button reports in one line, and the envelope carries it.
+            if result.get('message'):
+                response['message'] = result['message']
+            return response
         else:
             return _error_from_result(result, 'Operation failed')
 
