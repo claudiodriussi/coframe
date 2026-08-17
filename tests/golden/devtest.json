@@ -930,6 +930,15 @@
    "panel": "book_list",
    "$plugin": "books"
   },
+  "members": {
+   "label": "Members",
+   "icon": "users",
+   "parent": "library",
+   "order": 5,
+   "action": "stack_push",
+   "panel": "libraryuser_list",
+   "$plugin": "library"
+  },
   "loans": {
    "label": "Loans",
    "icon": "repeat",
