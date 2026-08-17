@@ -182,3 +182,121 @@ def test_wildcard_merge_handler_matches(pm):
     pm.merge_dicts({"tables": {"Book": {"columns": [{"id": "a"}]}}}, "p1")
     data = pm.merge_dicts({"tables": {"Book": {"columns": [{"id": "b"}]}}}, "p2")
     assert data["tables"]["Book"]["columns"] == ["W"]
+
+
+# --------------------------------------------------------------------------- #
+# unkeyed lists — the contribution that cannot target anything
+# --------------------------------------------------------------------------- #
+
+def codes(pm, code):
+    return [i for i in pm.issues if i['code'] == code]
+
+
+def test_a_second_plugin_on_an_unkeyed_list_is_warned(pm):
+    """Appending is what happens; saying so is what was missing."""
+    pm.merge_dicts({"layout": [{"type": "section", "fields": ["a"]}]}, "base")
+    pm.merge_dicts({"layout": [{"type": "section", "fields": ["b"]}]}, "ext")
+
+    warnings = codes(pm, 'merge-unkeyed-list')
+    assert len(warnings) == 1
+    assert warnings[0]['path'] == 'layout' and warnings[0]['plugin'] == 'ext'
+
+
+def test_declaring_an_unkeyed_list_alone_is_not_a_warning(pm):
+    """One plugin, one list: there is nothing to target and nothing to say."""
+    pm.merge_dicts({"layout": [{"type": "section"}]}, "base")
+
+    assert codes(pm, 'merge-unkeyed-list') == []
+
+
+def test_an_identified_list_is_not_warned(pm):
+    pm.merge_dicts({"layout": [{"id": "main", "type": "section"}]}, "base")
+    pm.merge_dicts({"layout": [{"id": "main", "label": "Main"}]}, "ext")
+
+    assert codes(pm, 'merge-unkeyed-list') == []
+
+
+# --------------------------------------------------------------------------- #
+# nested lists — the merge no longer stops at the first one
+# --------------------------------------------------------------------------- #
+
+def test_a_list_inside_an_identified_item_is_merged_not_replaced(pm):
+    """A form layout is lists all the way down; stopping at the first lost them."""
+    pm.merge_dicts({"layout": [
+        {"id": "main", "columns": [{"id": "left",
+                                    "fields": [{"name": "title"}, {"name": "isbn"}]}]}]}, "base")
+    data = pm.merge_dicts({"layout": [
+        {"id": "main", "columns": [{"id": "left",
+                                    "fields": [{"name": "title", "label": "Titolo"},
+                                               {"name": "price"}]}]}]}, "ext")
+
+    fields = data["layout"][0]["columns"][0]["fields"]
+    assert [f["name"] for f in fields] == ["title", "isbn", "price"]
+    assert fields[0]["label"] == "Titolo"
+
+
+def test_a_nested_unkeyed_list_is_warned_with_its_full_path(pm):
+    pm.merge_dicts({"layout": [{"id": "main", "rows": [{"a": 1}]}]}, "base")
+    pm.merge_dicts({"layout": [{"id": "main", "rows": [{"b": 2}]}]}, "ext")
+
+    paths = [i['path'] for i in pm.issues if i['code'] == 'merge-unkeyed-list']
+    assert paths == ['layout[main].rows']
+
+
+# --------------------------------------------------------------------------- #
+# $replace — starting over, said out loud
+# --------------------------------------------------------------------------- #
+
+def test_replace_supersedes_a_list_instead_of_merging_it(pm):
+    pm.merge_dicts({"form": {"layout": [{"id": "a"}, {"id": "b"}]}}, "base")
+    data = pm.merge_dicts({"form": {"$replace": ["layout"], "layout": [{"id": "c"}]}}, "ext")
+
+    assert data["form"]["layout"] == [{"id": "c"}]
+
+
+def test_replace_works_on_a_scalar_list_too(pm):
+    """`order_by: [price]` in a derived plugin used to mean `[title, price]`."""
+    pm.merge_dicts({"source": {"order_by": ["title"]}}, "base")
+    data = pm.merge_dicts({"source": {"$replace": ["order_by"], "order_by": ["price"]}}, "ext")
+
+    assert data["source"]["order_by"] == ["price"]
+
+
+def test_replace_never_reaches_the_consumer(pm):
+    pm.merge_dicts({"form": {"layout": [{"id": "a"}]}}, "base")
+    data = pm.merge_dicts({"form": {"$replace": ["layout"], "layout": []}}, "ext")
+
+    assert "$replace" not in data["form"]
+
+
+def test_replace_wants_a_list_of_names(pm):
+    with pytest.raises(TypeError, match=r'\$replace'):
+        pm.merge_dicts({"form": {"$replace": "layout", "layout": []}}, "ext")
+
+
+# --------------------------------------------------------------------------- #
+# $remove on a dict value — the menu entry a derived app drops
+# --------------------------------------------------------------------------- #
+
+def test_remove_drops_a_dict_entry(pm):
+    pm.merge_dicts({"menu_items": {"books": {"label": "Books"},
+                                   "authors": {"label": "Authors"}}}, "base")
+    data = pm.merge_dicts({"menu_items": {"books": {"$remove": True}}}, "ext")
+
+    assert [k for k in data["menu_items"] if not k.startswith('$')] == ["authors"]
+
+
+def test_remove_does_not_travel_as_data(pm):
+    """It used to be an ordinary key: shipped to the client, and inert."""
+    data = pm.merge_dicts({"menu_items": {"ghost": {"$remove": True}}}, "ext")
+
+    assert "ghost" not in data["menu_items"]
+    assert not any(k.startswith('$remove') for k in data["menu_items"])
+
+
+def test_redefining_an_entry_still_merges(pm):
+    pm.merge_dicts({"menu_items": {"books": {"label": "Books", "panel": "book_list"}}}, "base")
+    data = pm.merge_dicts({"menu_items": {"books": {"panel": "book_form_myapp"}}}, "ext")
+
+    assert data["menu_items"]["books"]["label"] == "Books"
+    assert data["menu_items"]["books"]["panel"] == "book_form_myapp"

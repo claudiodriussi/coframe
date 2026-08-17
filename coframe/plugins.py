@@ -8,6 +8,13 @@ from typing import Dict, List, Optional, Tuple, Union, Any
 import yaml
 from coframe.utils import get_logger, set_formatter, logging_to_file, deep_merge
 
+# Merge directives. They belong to the YAML protocol, not to a single function:
+# every one of them is consumed while merging and never reaches a consumer.
+REPLACE = '$replace'   # on a dict: the listed keys supersede, they do not merge
+REMOVE = '$remove'     # on a list item, or on a dict value: drop it
+AFTER = '$after'
+BEFORE = '$before'
+
 _CORE_TIMESTAMP: Optional[float] = None
 
 
@@ -401,10 +408,36 @@ class PluginsManager:
         for key in base:
             result[key] = base[key]
 
+        # Keys this contribution supersedes instead of refining. Merging and
+        # starting over are both legitimate, and until this existed they were
+        # indistinguishable: whatever the author meant, the machinery appended.
+        replaced = new.get(REPLACE)
+        if replaced is not None and not isinstance(replaced, list):
+            raise TypeError(
+                f"'{REPLACE}' takes a list of key names, got {type(replaced).__name__}"
+                f" at '{self._build_key_path(current_path, REPLACE)}'")
+        replaced = set(replaced or ())
+
         # Process new dictionary
         for key in new:
+            if key == REPLACE:
+                continue          # a directive, never data
+
             key_path = self._build_key_path(current_path, key)
             self._add_to_history(key_path, plugin)
+
+            # `$remove` on a dict value: the list form has existed since smart
+            # merge, and its absence here meant a section keyed by id — a menu
+            # item, a page — could be redefined but never dropped, while the
+            # directive itself travelled to the client as data.
+            if isinstance(new[key], dict) and new[key].get(REMOVE) is True:
+                result.pop(key, None)
+                continue
+
+            if key in replaced:
+                self.logger.debug(f"[{plugin}] Replacing '{key_path}' wholesale")
+                result[key] = new[key]
+                continue
 
             if key in base:
                 v1, v2 = base[key], new[key]
@@ -455,6 +488,7 @@ class PluginsManager:
     # Identity keys checked in priority order to find how a list item is identified.
     _IDENTITY_KEYS = ('id', 'name', 'field', 'group')
 
+
     def _detect_identity_key(self, items: list) -> Optional[str]:
         """
         Return the identity key for a list of dicts, or None for scalar/unkeyed lists.
@@ -490,7 +524,21 @@ class PluginsManager:
         id_key = self._detect_identity_key(base) or self._detect_identity_key(new)
 
         if id_key is None:
-            # Plain sequence: extend without duplicates (original behaviour)
+            # Plain sequence: extend without duplicates (original behaviour).
+            #
+            # Appending is right for a list of values and almost never what the
+            # author meant for a list of *nodes*: without an identity there is no
+            # way to say which one this contribution refines, so a second plugin
+            # gets its section appended instead of merged — and nothing says so.
+            # The warning fires only where two plugins actually meet on the same
+            # list, which is the only place the ambiguity exists.
+            if base and new:
+                self.add_issue(
+                    'warning', 'merge-unkeyed-list', key_path,
+                    f"'{plugin}' contributes to a list whose items carry no identity "
+                    f"({', '.join(self._IDENTITY_KEYS)}): the items are appended and cannot "
+                    f"refine the ones already there. Give them an 'id' to make them addressable.",
+                    plugin)
             self.logger.debug(f"[{plugin}] Extending plain list at '{key_path}'")
             merged = base + [item for item in new if item not in base]
             return merged
@@ -539,11 +587,20 @@ class PluginsManager:
             if identity in index:
                 # Deep-merge properties into existing item
                 existing = index[identity]
+                item_path = f'{key_path}[{identity}]'
                 for k, v in clean.items():
                     if k == id_key:
                         continue
                     if isinstance(v, dict) and isinstance(existing.get(k), dict):
-                        existing[k] = self._recursive_merge(existing[k], v, plugin, [])
+                        existing[k] = self._recursive_merge(existing[k], v, plugin, [item_path, k])
+                    elif isinstance(v, list) and isinstance(existing.get(k), list):
+                        # A list property goes back through the same door instead
+                        # of being overwritten. Without this the merge stopped at
+                        # the first list, which in a form layout is immediately:
+                        # `layout → section.columns → column.fields` are lists all
+                        # the way down, so refining a section meant losing the
+                        # fields it already had.
+                        existing[k] = self._merge_lists(existing[k], v, plugin, f'{item_path}.{k}')
                     else:
                         existing[k] = v
                 existing['$plugin'] = plugin
