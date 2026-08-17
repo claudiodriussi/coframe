@@ -172,19 +172,80 @@ pages:
                 - name: isbn
                   width: 25%
                 - filler:
+                # A hand-written field carries no column attributes, so the FK is
+                # declared here: without a target the widget has nothing to look
+                # up, and `combobox` alone drew an empty picklist.
                 - name: publisher_id
-                  widget: combobox
+                  widget: fk
+                  foreign_key:
+                    target: Publisher
+                    field: id
                   width: 35%
                 - name: publication_date
                   width: 20%
                 - name: price
                   width: 15%
 
+        # ── Buttons: a face of this buffer, or something to do ──────────────
+        #    A button opens what belongs to the record being edited, and never
+        #    another record — the FK combobox already carries that gesture
+        #    (relations.md §19.1). Three shapes, side by side.
+        - type: row
+          children:
+            - type: col
+              layout:
+                # The loans are an annex: a book is a book without them, so they
+                # sit behind a button instead of taking vertical space. `count`
+                # reads the buffer, so the label says whether it is worth opening.
+                - type: button
+                  label: Loans
+                  icon: book-open-check
+                  count: true
+                  opens:
+                    type: collection
+                    id: loans
+                    model: Loan
+                    fk: book_id
+                    view:
+                      type: table
+                      columns:
+                        - field: borrowed_at
+                          title: Borrowed
+                        - field: due_date
+                          title: Due
+                        - field: returned_at
+                          title: Returned
+                        - field: library_user_id.name
+                          title: Member
+
+            - type: col
+              layout:
+                # The same record with other fields, by reference: the long text
+                # would eat the form, and it is read far less often than the rest.
+                - type: button
+                  label: Description & tags
+                  icon: text
+                  opens:
+                    type: form
+                    page: book_description_form
+
+            - type: col
+              layout:
+                # The other family: no frame, no buffer — it calls and reports.
+                - type: button
+                  label: Statistics
+                  icon: chart-column
+                  endpoint: book_stats
+                  pass:
+                    id: $record.id
+
         # Two collections, one under the other, become two tabs by moving the
         # nodes inside a `tabs`: the node does not change, only where it sits.
+        # `count` on the page answers what an empty tab costs to discover.
         - type: tabs
           pages:
             - label: Authors
+              count: authors
               layout:
                 - type: collection
                   id: authors
@@ -209,6 +270,7 @@ pages:
             # deleting a book leaves them. Editing surface and lifetime are
             # separate axes.
             - label: Reviews
+              count: reviews
               layout:
                 - type: collection
                   id: reviews
@@ -227,6 +289,34 @@ pages:
         toolbar: [save, cancel]
       policy:
         editable: true
+
+  # ── A face of `book_form`, opened by a button ────────────────────────────
+  #    Same record, other fields. It declares `source.model` like any form, but
+  #    the frame hands it the parent's live draft and never reads the database:
+  #    a value typed upstairs and not yet saved is what must appear here. On
+  #    confirm the values go back into that draft, so a field drawn in both
+  #    places refreshes without a round-trip.
+  book_description_form:
+    title: Description & tags
+    content:
+      type: form
+      source:
+        model: Book
+      layout:
+        - type: section
+          columns:
+            - fields:
+                - name: language
+                  width: 20%
+                - name: pages
+                  width: 20%
+                - filler:
+                - name: tags
+                - filler:
+                - name: description
+                  widget: textarea
+      policy:
+        button_style: label
 
   # ── Panel cascade: content → lines → line_detail ─────────────────────────
   loan_manager:

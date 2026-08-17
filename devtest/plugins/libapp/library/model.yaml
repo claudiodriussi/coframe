@@ -130,7 +130,10 @@ tables:
         foreign_key:
           target: LibraryUser.id
 
+      # A loan is a journal entry, edited inside the book's form behind a button
+      # and not a part of the book: deleting a book leaves its history standing.
       - name: book_id
         nullable: false
         foreign_key:
           target: Book.id
+          owned: false
