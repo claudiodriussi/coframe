@@ -300,3 +300,20 @@ def test_redefining_an_entry_still_merges(pm):
 
     assert data["menu_items"]["books"]["label"] == "Books"
     assert data["menu_items"]["books"]["panel"] == "book_form_myapp"
+
+
+def test_an_unkeyed_item_survives_a_merge_into_its_list(pm):
+    """`- filler:` belongs to nobody and is positional: it used to be dropped.
+
+    A dict with no identity inside an otherwise-identified list was skipped when
+    building the merge index, so the first contribution from a second plugin
+    silently removed it — a form column losing its line break, with no warning.
+    """
+    pm.merge_dicts({"fields": [{"name": "title"}, {"filler": None}, {"name": "price"}]}, "base")
+    data = pm.merge_dicts({"fields": [{"name": "price", "label": "Prezzo"}]}, "ext")
+
+    assert data["fields"] == [
+        {"name": "title", "$plugin": "base"},
+        {"filler": None, "$plugin": "base"},
+        {"name": "price", "label": "Prezzo", "$plugin": "ext"},
+    ]

@@ -556,6 +556,13 @@ class PluginsManager:
                 if identity is not None:
                     index[identity] = dict(item)
                     order.append(identity)
+                else:
+                    # A dict with no identity in an otherwise-identified list is
+                    # positional and belongs to nobody — `- filler:` in a form
+                    # column. It used to be dropped the moment a second plugin
+                    # merged into the list: the layout lost a line break, and
+                    # nothing said so.
+                    order.append(item)
             else:
                 # Scalar mixed into an otherwise-identified list — keep as-is
                 order.append(item)
