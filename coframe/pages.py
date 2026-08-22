@@ -175,7 +175,12 @@ def resolve_collections(page: Dict[str, Any], page_id: str) -> Dict[str, Collect
             id=cid,
             model=model,
             fk=fk,
-            form=node.get('form') or f'{model}_form',
+            # Lowercased, because that is how the convention is spelled on the
+            # other side (a list asks for `{model}_form` in lower case) and a
+            # declared page is looked up by exact id: spelling it two ways means
+            # a declared `partner_form` is found from a list and missed from a
+            # collection, which falls back to the auto-form without a word.
+            form=node.get('form') or f'{model.lower()}_form',
             domain=node.get('domain'),
             defaults=node.get('defaults') or {},
             order_by=order_by,

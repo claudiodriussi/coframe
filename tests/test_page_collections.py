@@ -132,8 +132,10 @@ def test_the_view_of_a_node_is_not_searched_for_more_nodes():
 
 
 def test_the_row_form_defaults_to_the_model_form():
+    # Lower case: the same convention is spelled that way by the list that opens
+    # a form, and a declared page is matched by exact id.
     collections = resolve_collections(form_page(authors_node()), 'book_form')
-    assert collections['authors'].form == 'BookAuthor_form'
+    assert collections['authors'].form == 'bookauthor_form'
 
     declared = resolve_collections(form_page(authors_node(form='ba_row')), 'book_form')
     assert declared['authors'].form == 'ba_row'
