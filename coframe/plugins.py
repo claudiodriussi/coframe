@@ -18,6 +18,35 @@ BEFORE = '$before'
 _CORE_TIMESTAMP: Optional[float] = None
 
 
+def expand_shorthand(node: Any) -> Any:
+    """
+    Expand the shorthand forms of a plugin's YAML, in place.
+
+    Today there is one: inside a `fields:` list, a bare string is the field of
+    that name, so the common case — a field with nothing to say about itself —
+    costs one token instead of a nested mapping.
+
+    Expanded **as the file is read**, before the merge, and that is the whole
+    point: the merge indexes a list by the identity of its items (`name` among
+    them), so a field written short is still addressable by a derived plugin
+    (`$after: name`). Left to the client, the shorthand would have bought
+    brevity by making a form unmergeable — and a list of bare strings would fall
+    back to append semantics without anyone asking for it.
+
+    `- filler:` stays a mapping: a bare `filler` could not be told apart from a
+    field so named.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == 'fields' and isinstance(value, list):
+                node[key] = [{'name': i} if isinstance(i, str) else i for i in value]
+            expand_shorthand(node[key])
+    elif isinstance(node, list):
+        for item in node:
+            expand_shorthand(item)
+    return node
+
+
 def _core_timestamp() -> float:
     """
     Newest modification time among the core modules, computed once.
@@ -947,7 +976,7 @@ class Plugin:
                     self.sources.append(file)
                 elif file.suffix.lower() == '.yaml' and file.stem != 'config':
                     with open(file) as f:
-                        self.data.append(yaml.safe_load(f))
+                        self.data.append(expand_shorthand(yaml.safe_load(f)))
                     self.data_files.append(file)
                 else:
                     self.files.append(file)

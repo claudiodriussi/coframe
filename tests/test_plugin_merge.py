@@ -317,3 +317,44 @@ def test_an_unkeyed_item_survives_a_merge_into_its_list(pm):
         {"filler": None, "$plugin": "base"},
         {"name": "price", "label": "Prezzo", "$plugin": "ext"},
     ]
+
+
+# --------------------------------------------------------------------------- #
+# expand_shorthand — applied as a plugin's YAML is read, before any merge
+# --------------------------------------------------------------------------- #
+
+def test_a_bare_string_in_a_fields_list_is_the_field_of_that_name():
+    from coframe.plugins import expand_shorthand
+
+    data = expand_shorthand({"fields": ["kind", {"name": "roles", "width": "25%"}]})
+
+    assert data["fields"] == [{"name": "kind"}, {"name": "roles", "width": "25%"}]
+
+
+def test_the_shorthand_reaches_every_depth_and_leaves_other_lists_alone():
+    from coframe.plugins import expand_shorthand
+
+    data = expand_shorthand({
+        "pages": {"p": {"layout": [{"columns": [{"fields": ["a", {"filler": None}]}]}]}},
+        "order_by": ["name"],
+        "columns": ["not a field list"],
+    })
+
+    column = data["pages"]["p"]["layout"][0]["columns"][0]
+    assert column["fields"] == [{"name": "a"}, {"filler": None}]
+    assert data["order_by"] == ["name"]
+    assert data["columns"] == ["not a field list"]
+
+
+def test_a_field_written_short_is_still_addressable_by_the_merge(pm):
+    """The reason the expansion happens before the merge and not on the client.
+
+    The merge indexes a list by the identity of its items; a bare string carries
+    none, so a form written short would be appended to instead of refined.
+    """
+    from coframe.plugins import expand_shorthand
+
+    pm.merge_dicts(expand_shorthand({"fields": ["title", "price"]}), "base")
+    data = pm.merge_dicts({"fields": [{"name": "language", "$after": "title"}]}, "ext")
+
+    assert [f["name"] for f in data["fields"]] == ["title", "language", "price"]
