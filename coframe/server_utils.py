@@ -625,3 +625,205 @@ def get_app_info(plugins_config: Dict[str, Any], api_prefix: str) -> Dict[str, A
         },
         'status_code': 200
     }
+
+
+# ============================================
+# Route registration
+# ============================================
+#
+# The canonical routes — login, context refresh, the dispatcher that carries
+# every other operation, and info — registered on whatever the caller hands
+# over. `app.route` and `Blueprint.route` (and `after_request`) share a
+# signature, so one function serves both cases and the caller's choice of
+# target is what decides the scope:
+#
+#     srv.register_flask(app, coframe_app, plugins, SECRET_KEY)
+#
+#         coframe owns the process: the routes and the after_request hook are
+#         the application's, which is what a standalone server wants.
+#
+#     bp = Blueprint('coframe', __name__)
+#     srv.register_flask(bp, coframe_app, plugins, SECRET_KEY)
+#     host_app.register_blueprint(bp)
+#
+#         coframe is a guest: everything registered here lives inside the
+#         blueprint, and the host's own routes and hooks are untouched.
+#
+# Neither form touches anything outside its target — no CORS, no static
+# catch-all, no route at the root, and no replacement of the application's
+# JSON provider: coframe's own responses are serialized here, with the ISO
+# 8601 dates its endpoints accept back on write.
+
+def _prefixes(plugins_config: Dict[str, Any],
+              prefix: Optional[str],
+              endpoint_prefix: Optional[str]) -> Tuple[str, str]:
+    """Resolve the API prefixes, falling back to config.yaml."""
+    api = plugins_config.get('api', {})
+    if prefix is None:
+        prefix = '/' + api.get('prefix', 'coframe').strip('/')
+    if endpoint_prefix is None:
+        endpoint_prefix = api.get('endpoint_prefix', 'endpoint').strip('/')
+    return prefix.rstrip('/'), endpoint_prefix.strip('/')
+
+
+def register_flask(target, coframe_app, plugins, secret_key: str, *,
+                   prefix: Optional[str] = None,
+                   endpoint_prefix: Optional[str] = None,
+                   auth: Optional['AuthMiddleware'] = None) -> 'AuthMiddleware':
+    """
+    Register coframe's routes on a Flask application or Blueprint.
+
+    Args:
+        target:          a Flask app or a Blueprint — anything with .route()
+                         and .after_request()
+        coframe_app:     the coframe application (BaseApp)
+        plugins:         the PluginsManager
+        secret_key:      key the JWT is signed with
+        prefix:          path the routes hang from, config.yaml's `api.prefix`
+                         by default. Pass '' when the Blueprint carries its own
+                         url_prefix and the host decides where it is mounted.
+        endpoint_prefix: dispatcher segment, `api.endpoint_prefix` by default
+        auth:            an AuthMiddleware to share with the rest of the
+                         process — a server-rendered page that logs a person in
+                         through the same identity passes the one it has
+
+    Returns:
+        The AuthMiddleware in use, so the caller can authenticate by other
+        doors without building a second one.
+    """
+    import json
+    from functools import wraps
+    from flask import Response, g, request
+
+    from coframe.i18n import set_locale
+    from coframe.querybuilder import JSONEncoder
+
+    config = plugins.config
+    prefix, endpoint_prefix = _prefixes(config, prefix, endpoint_prefix)
+    auth = auth or AuthMiddleware(config, secret_key)
+    command_processor = coframe_app.cp
+
+    def reply(result: Dict[str, Any], status_code: Optional[int] = None) -> Any:
+        """Send a handler result with the status code it carries.
+
+        Deliberately not `jsonify`: that goes through the application's JSON
+        provider — the host's, in a mounted deployment — and inherits both its
+        date format and its key sorting, which raises on the mixed-type keys
+        some descriptors carry.
+        """
+        if status_code is None:
+            status_code = result.get('status_code', result.get('code', 200))
+        return Response(json.dumps(result, cls=JSONEncoder, sort_keys=False),
+                        status=status_code, mimetype='application/json')
+
+    @target.after_request
+    def coframe_token_refresh(response):
+        """Hand a refreshed token back in X-New-Token whenever one was issued."""
+        if hasattr(g, 'coframe_new_token'):
+            response.headers['X-New-Token'] = g.coframe_new_token
+        return response
+
+    def authenticated(view):
+        """Validate the bearer token, refresh it when due, set the locale."""
+
+        @wraps(view)
+        def wrapper(*args, **kwargs):
+            token, error = auth.extract_token(request.headers.get('Authorization'))
+            if error:
+                return reply({'status': 'error', 'message': error}, 401)
+
+            payload, new_token, error = auth.decode_and_refresh(token)
+            if error:
+                return reply({'status': 'error', 'message': error}, 401)
+            if new_token:
+                g.coframe_new_token = new_token
+
+            g.user_context = payload
+            set_locale(payload.get('locale') or config.get('locale', 'en'))
+            return view(*args, **kwargs)
+
+        return wrapper
+
+    @target.route(f'{prefix}/info', methods=['GET'])
+    def coframe_info():
+        return reply(get_app_info(config, prefix))
+
+    @target.route(f'{prefix}/auth/login', methods=['POST'])
+    def coframe_login():
+        try:
+            return reply(auth.login(command_processor, request.json))
+        except Exception as e:
+            return reply({'status': 'error', 'message': str(e)}, 500)
+
+    @target.route(f'{prefix}/auth/update_context', methods=['POST'])
+    @authenticated
+    def coframe_update_context():
+        return reply(auth.update_context(g.user_context, request.json))
+
+    @target.route(f'{prefix}/{endpoint_prefix}/<operation>', methods=['POST'])
+    @authenticated
+    def coframe_dispatch(operation: str):
+        """Everything that is not authentication: db, query, get_page, get_menu…"""
+        return reply(handle_generic_endpoint(
+            command_processor, operation, request.json, context=g.user_context))
+
+    return auth
+
+
+def register_fastapi(target, coframe_app, plugins, secret_key: str, *,
+                     prefix: Optional[str] = None,
+                     endpoint_prefix: Optional[str] = None,
+                     auth: Optional['AuthMiddleware'] = None) -> 'AuthMiddleware':
+    """
+    Register coframe's routes on a FastAPI application or APIRouter.
+
+    Same arguments and same four routes as `register_flask`. The refreshed
+    token is written on the response the dependency is handed, so no
+    application-wide middleware is needed to carry it out — which is what lets
+    an APIRouter be a valid target.
+    """
+    from fastapi import Depends, HTTPException, Request, Response
+
+    from coframe.i18n import set_locale
+
+    config = plugins.config
+    prefix, endpoint_prefix = _prefixes(config, prefix, endpoint_prefix)
+    auth = auth or AuthMiddleware(config, secret_key)
+    command_processor = coframe_app.cp
+
+    async def current_user(request: Request, response: Response) -> dict:
+        """Validate the bearer token, refresh it when due, set the locale."""
+        token, error = auth.extract_token(request.headers.get('authorization'))
+        if error:
+            raise HTTPException(status_code=401, detail=error)
+
+        payload, new_token, error = auth.decode_and_refresh(token)
+        if error:
+            raise HTTPException(status_code=401, detail=error)
+        if new_token:
+            response.headers['X-New-Token'] = new_token
+
+        set_locale(payload.get('locale') or config.get('locale', 'en'))
+        return payload
+
+    @target.get(f'{prefix}/info')
+    def coframe_info():
+        return get_app_info(config, prefix)
+
+    @target.post(f'{prefix}/auth/login')
+    def coframe_login(data: dict):
+        try:
+            return auth.login(command_processor, data)
+        except Exception as e:
+            return {'status': 'error', 'message': str(e), 'status_code': 500}
+
+    @target.post(f'{prefix}/auth/update_context')
+    def coframe_update_context(data: dict, user: dict = Depends(current_user)):
+        return auth.update_context(user, data)
+
+    @target.post(f'{prefix}/{endpoint_prefix}/{{operation}}')
+    def coframe_dispatch(operation: str, data: dict, user: dict = Depends(current_user)):
+        """Everything that is not authentication: db, query, get_page, get_menu…"""
+        return handle_generic_endpoint(command_processor, operation, data, context=user)
+
+    return auth

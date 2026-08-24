@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 """FastAPI server for the devtest app.
 
-Three routes and nothing else: login, context refresh, and the dispatcher that
-carries every other operation. Plugin loading, model generation and the seed
-data come from devtest.py, so the test harness and the server always run the
-same application — importing it also registers the endpoints it declares.
+Four routes and nothing else: login, context refresh, the dispatcher that
+carries every other operation, and info — registered by `srv.register_fastapi`
+on the application itself, because this file *is* the application. Plugin
+loading, model generation and the seed data come from devtest.py, so the test
+harness and the server always run the same application — importing it also
+registers the endpoints it declares.
 
 Run from this directory:  python fastapi-server.py
 """
 import os
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import devtest  # also puts the coframe package on sys.path  # noqa: E402
 import coframe.server_utils as srv  # noqa: E402
-from coframe.i18n import set_locale  # noqa: E402
 
 # ── Application ─────────────────────────────────────────────────────────────
 
@@ -28,13 +29,7 @@ coframe_app.initialize_db(plugins.config["db_engine"], model)
 plugins.load_all_locales()
 devtest.seed(coframe_app, model)
 
-command_processor = coframe_app.cp
-
 SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key")
-api_prefix = f"/{plugins.config.get('api', {}).get('prefix', 'coframe')}"
-endpoint_prefix = plugins.config.get("api", {}).get("endpoint_prefix", "endpoint")
-
-auth = srv.AuthMiddleware(plugins.config, SECRET_KEY)
 
 app = FastAPI(
     title="Coframe devtest",
@@ -50,57 +45,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-@app.middleware("http")
-async def token_refresh(request: Request, call_next):
-    """Hand a refreshed token back in X-New-Token whenever one was issued."""
-    response = await call_next(request)
-    if hasattr(request.state, "new_token"):
-        response.headers["X-New-Token"] = request.state.new_token
-    return response
-
-
-async def current_user(request: Request) -> dict:
-    """Validate the bearer token, refresh it when due, set the request locale."""
-    token, error = auth.extract_token(request.headers.get("authorization"))
-    if error:
-        raise HTTPException(status_code=401, detail=error)
-
-    payload, new_token, error = auth.decode_and_refresh(token)
-    if error:
-        raise HTTPException(status_code=401, detail=error)
-    if new_token:
-        request.state.new_token = new_token
-
-    set_locale(payload.get("locale") or plugins.config.get("locale", "en"))
-    return payload
-
-
 # ── Routes ──────────────────────────────────────────────────────────────────
 
-
-@app.get("/info")
-def app_info():
-    return srv.get_app_info(plugins.config, api_prefix)
-
-
-@app.post(f"{api_prefix}/auth/login")
-def login(data: dict):
-    try:
-        return auth.login(command_processor, data)
-    except Exception as e:
-        return {"status": "error", "message": str(e), "status_code": 500}
-
-
-@app.post(f"{api_prefix}/auth/update_context")
-def update_context(data: dict, user: dict = Depends(current_user)):
-    return auth.update_context(user, data)
-
-
-@app.post(f"{api_prefix}/{endpoint_prefix}/{{operation}}")
-def dispatch(operation: str, data: dict, user: dict = Depends(current_user)):
-    """Everything that is not authentication: db, query, get_page, get_menu…"""
-    return srv.handle_generic_endpoint(command_processor, operation, data, context=user)
+srv.register_fastapi(app, coframe_app, plugins, SECRET_KEY)
 
 
 # A built client, when there is one — mounted last so the API routes win.

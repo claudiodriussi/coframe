@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 """Flask server for the devtest app.
 
-The same three routes as the FastAPI server, over the same framework-agnostic
-server_utils: login, context refresh, and the dispatcher that carries every
-other operation. Plugin loading, model generation and the seed data come from
+The same four routes as the FastAPI server, registered by the same call:
+`srv.register_flask` puts login, context refresh, the dispatcher and info on
+whatever it is given — here the application itself, because this file *is* the
+application. Plugin loading, model generation and the seed data come from
 devtest.py, so both servers and the test harness run the same application.
 
 Run from this directory:  python flask-server.py
 """
 import os
-from functools import wraps
 
-from flask import Flask, g, jsonify, request, send_from_directory
+from flask import Flask, send_from_directory
 from flask_cors import CORS
 
 import devtest  # also puts the coframe package on sys.path  # noqa: E402
 import coframe.server_utils as srv  # noqa: E402
-from coframe.i18n import set_locale  # noqa: E402
 
 # ── Application ─────────────────────────────────────────────────────────────
 
@@ -28,87 +27,15 @@ coframe_app.initialize_db(plugins.config["db_engine"], model)
 plugins.load_all_locales()
 devtest.seed(coframe_app, model)
 
-command_processor = coframe_app.cp
-
 SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key")
-api_prefix = f"/{plugins.config.get('api', {}).get('prefix', 'coframe')}"
-endpoint_prefix = plugins.config.get("api", {}).get("endpoint_prefix", "endpoint")
-
-auth = srv.AuthMiddleware(plugins.config, SECRET_KEY)
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
-# Dates as ISO 8601, the form the endpoints accept back on write. Both calls
-# replace the JSON provider of the whole application, which is fine while this
-# file *is* the application.
-srv.configure_flask_json_dates(app)
-app.json.sort_keys = False   # prevent TypeError on dicts with mixed-type keys
 CORS(app)
-
-
-@app.after_request
-def token_refresh(response):
-    """Hand a refreshed token back in X-New-Token whenever one was issued."""
-    if hasattr(g, "new_token"):
-        response.headers["X-New-Token"] = g.new_token
-    return response
-
-
-def current_user(view):
-    """Validate the bearer token, refresh it when due, set the request locale."""
-
-    @wraps(view)
-    def wrapper(*args, **kwargs):
-        token, error = auth.extract_token(request.headers.get("Authorization"))
-        if error:
-            return jsonify({"status": "error", "message": error}), 401
-
-        payload, new_token, error = auth.decode_and_refresh(token)
-        if error:
-            return jsonify({"status": "error", "message": error}), 401
-        if new_token:
-            g.new_token = new_token
-
-        g.user_context = payload
-        set_locale(payload.get("locale") or plugins.config.get("locale", "en"))
-        return view(*args, **kwargs)
-
-    return wrapper
-
-
-def reply(result):
-    """Send a handler result with the status code it carries."""
-    return jsonify(result), result.get("status_code", result.get("code", 200))
-
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 
-
-@app.route("/info", methods=["GET"])
-def app_info():
-    return reply(srv.get_app_info(plugins.config, api_prefix))
-
-
-@app.route(f"{api_prefix}/auth/login", methods=["POST"])
-def login():
-    try:
-        return reply(auth.login(command_processor, request.json))
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@app.route(f"{api_prefix}/auth/update_context", methods=["POST"])
-@current_user
-def update_context():
-    return reply(auth.update_context(g.user_context, request.json))
-
-
-@app.route(f"{api_prefix}/{endpoint_prefix}/<operation>", methods=["POST"])
-@current_user
-def dispatch(operation):
-    """Everything that is not authentication: db, query, get_page, get_menu…"""
-    return reply(srv.handle_generic_endpoint(
-        command_processor, operation, request.json, context=g.user_context))
+srv.register_flask(app, coframe_app, plugins, SECRET_KEY)
 
 
 # A built client, when there is one — registered last so the API routes win.
