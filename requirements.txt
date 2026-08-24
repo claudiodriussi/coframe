@@ -3,5 +3,6 @@ pyyaml
 flask
 flask-cors
 pyjwt
+bcrypt
 jupyterlab
 pandas

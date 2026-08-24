@@ -20,6 +20,7 @@ import jwt
 import pytest
 
 import coframe.server_utils as srv
+from coframe.db import BaseApp
 from coframe.endpoints import CommandProcessor, _ENDPOINTS
 
 SECRET = 'test-secret-key'
@@ -47,6 +48,7 @@ def coframe_app():
     # Keys of mixed type: a descriptor carries them, and sorting them raises.
     register('mixed_keys', lambda params: {1: 'one', 'two': 2})
     register('boom', _raise)
+    register('who', lambda params: BaseApp.get_context())
 
     cp = CommandProcessor()
     cp.endpoints = dict(_ENDPOINTS)
@@ -54,6 +56,7 @@ def coframe_app():
 
     for name in registered:
         _ENDPOINTS.pop(name, None)
+    BaseApp.set_context(None)
 
 
 def _raise(params):
@@ -159,6 +162,26 @@ def test_keys_of_mixed_type_do_not_raise(flask_client):
 
     assert res.status_code == 200
     assert res.get_json()['data'] == {'1': 'one', 'two': 2}
+
+
+def test_the_context_is_set_for_the_operation(flask_client):
+    """The dispatcher runs the command as the user the token names."""
+    res = flask_client.post('/coframe/endpoint/who', json={}, headers=bearer())
+
+    assert res.get_json()['data']['username'] == 'tester'
+
+
+def test_the_thread_is_left_as_it_was_found(flask_client):
+    """A worker goes back to the pool with no identity on it.
+
+    Inside coframe's own surface a leftover context is harmless: every dispatch
+    sets its own. It is a guest that pays for it — the host's next page on that
+    thread would inherit a user nobody chose.
+    """
+    BaseApp.set_context(None)
+    flask_client.post('/coframe/endpoint/who', json={}, headers=bearer())
+
+    assert not BaseApp.get_context()
 
 
 # ── Flask, as a guest ─────────────────────────────────────────────────────────
@@ -308,6 +331,24 @@ def test_fastapi_as_a_guest_on_a_router(coframe_app, plugins):
     assert client.get('/api/v1/status').json() == {'ok': True}
     assert client.post('/coframe/endpoint/echo', json={'a': 1},
                        headers=bearer()).json()['data'] == {'seen': {'a': 1}}
+
+
+def test_fastapi_leaves_the_thread_as_it_was_found(fastapi_client):
+    BaseApp.set_context(None)
+    fastapi_client.post('/coframe/endpoint/who', json={}, headers=bearer())
+
+    assert not BaseApp.get_context()
+
+
+def test_the_host_route_after_a_coframe_one_has_no_identity(host_app):
+    """The scenario the cleanup exists for, end to end: an API request, then a
+    page of the host on the same worker."""
+    client = host_app.test_client()
+
+    client.post('/coframe/endpoint/who', json={}, headers=bearer())
+
+    assert not BaseApp.get_context()
+    assert client.get('/api/v1/status').get_json()['ok'] is True
 
 
 def test_both_frameworks_answer_the_same(flask_client, fastapi_client):

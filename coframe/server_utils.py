@@ -695,6 +695,7 @@ def register_flask(target, coframe_app, plugins, secret_key: str, *,
     from functools import wraps
     from flask import Response, g, request
 
+    from coframe.db import BaseApp
     from coframe.i18n import set_locale
     from coframe.querybuilder import JSONEncoder
 
@@ -715,6 +716,19 @@ def register_flask(target, coframe_app, plugins, secret_key: str, *,
             status_code = result.get('status_code', result.get('code', 200))
         return Response(json.dumps(result, cls=JSONEncoder, sort_keys=False),
                         status=status_code, mimetype='application/json')
+
+    @target.teardown_request
+    def coframe_clear_context(exception=None):
+        """Leave the thread as it was found.
+
+        Every dispatch sets the context of the user it serves, so within
+        coframe's own surface a leftover is overwritten. It is a guest that
+        pays for it: the worker goes back to the pool carrying an identity, and
+        whatever the host serves next on that thread — a page, another API —
+        inherits a user nobody chose, with the query behaviors filtering
+        accordingly.
+        """
+        BaseApp.set_context(None)
 
     @target.after_request
     def coframe_token_refresh(response):
@@ -784,12 +798,20 @@ def register_fastapi(target, coframe_app, plugins, secret_key: str, *,
     """
     from fastapi import Depends, HTTPException, Request, Response
 
+    from coframe.db import BaseApp
     from coframe.i18n import set_locale
 
     config = plugins.config
     prefix, endpoint_prefix = _prefixes(config, prefix, endpoint_prefix)
     auth = auth or AuthMiddleware(config, secret_key)
     command_processor = coframe_app.cp
+
+    async def clear_context():
+        """Leave the worker as it was found — see register_flask's teardown."""
+        yield
+        BaseApp.set_context(None)
+
+    cleanup = [Depends(clear_context)]
 
     async def current_user(request: Request, response: Response) -> dict:
         """Validate the bearer token, refresh it when due, set the locale."""
@@ -806,22 +828,22 @@ def register_fastapi(target, coframe_app, plugins, secret_key: str, *,
         set_locale(payload.get('locale') or config.get('locale', 'en'))
         return payload
 
-    @target.get(f'{prefix}/info')
+    @target.get(f'{prefix}/info', dependencies=cleanup)
     def coframe_info():
         return get_app_info(config, prefix)
 
-    @target.post(f'{prefix}/auth/login')
+    @target.post(f'{prefix}/auth/login', dependencies=cleanup)
     def coframe_login(data: dict):
         try:
             return auth.login(command_processor, data)
         except Exception as e:
             return {'status': 'error', 'message': str(e), 'status_code': 500}
 
-    @target.post(f'{prefix}/auth/update_context')
+    @target.post(f'{prefix}/auth/update_context', dependencies=cleanup)
     def coframe_update_context(data: dict, user: dict = Depends(current_user)):
         return auth.update_context(user, data)
 
-    @target.post(f'{prefix}/{endpoint_prefix}/{{operation}}')
+    @target.post(f'{prefix}/{endpoint_prefix}/{{operation}}', dependencies=cleanup)
     def coframe_dispatch(operation: str, data: dict, user: dict = Depends(current_user)):
         """Everything that is not authentication: db, query, get_page, get_menu…"""
         return handle_generic_endpoint(command_processor, operation, data, context=user)
