@@ -4,5 +4,6 @@ flask
 flask-cors
 pyjwt
 bcrypt
+alembic
 jupyterlab
 pandas

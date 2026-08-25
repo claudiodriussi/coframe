@@ -48,6 +48,10 @@ dependencies = [
     "pyyaml",
     "pyjwt",
     "bcrypt",
+    # Schema comparison: db-check, db-sync, and the startup guard, which is on
+    # by default. Only the comparison is borrowed — no revision files, no
+    # migration history: the YAML is the truth (see coframe/schema_sync.py).
+    "alembic",
 ]
 
 # The web frameworks are imported inside the registration functions, never at
