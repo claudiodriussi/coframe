@@ -360,3 +360,87 @@ def test_both_frameworks_answer_the_same(flask_client, fastapi_client):
                                       headers=bearer())
 
     assert flask_res.get_json() == fastapi_res.json()
+
+
+def test_both_frameworks_refuse_the_same(flask_client, fastapi_client):
+    """Parity on the unhappy path too. FastAPI used to raise an HTTPException
+    here, which came back in FastAPI's shape (`{"detail": …}`) and not in
+    coframe's — and, in a mounted deployment, in whatever shape the host's
+    exception handlers give it."""
+    flask_res = flask_client.post('/coframe/endpoint/echo', json={})
+    fastapi_res = fastapi_client.post('/coframe/endpoint/echo', json={})
+
+    assert flask_res.status_code == fastapi_res.status_code == 401
+    assert flask_res.get_json() == fastapi_res.json()
+    assert flask_res.get_json()['status'] == 'error'
+
+
+def test_both_frameworks_report_a_failure_the_same(flask_client, fastapi_client):
+    flask_res = flask_client.post('/coframe/endpoint/boom', json={}, headers=bearer())
+    fastapi_res = fastapi_client.post('/coframe/endpoint/boom', json={},
+                                      headers=bearer())
+
+    assert flask_res.status_code == fastapi_res.status_code
+    assert flask_res.get_json()['message'] == fastapi_res.json()['message']
+
+
+def test_fastapi_keys_of_mixed_type_do_not_raise(fastapi_client):
+    """A descriptor carries them; sorting them raises. Flask has had this
+    covered since it stopped using jsonify — FastAPI needed its own answer."""
+    res = fastapi_client.post('/coframe/endpoint/mixed_keys', json={},
+                              headers=bearer())
+
+    assert res.status_code == 200
+    assert res.json()['data'] == {'1': 'one', 'two': 2}
+
+
+def test_fastapi_ignores_the_hosts_exception_handler(coframe_app, plugins):
+    """An application that reshapes its own errors must not reshape coframe's:
+    the refusal is returned, so it never reaches a handler."""
+    from fastapi import FastAPI, Request
+    from fastapi.exceptions import HTTPException
+    from fastapi.responses import JSONResponse
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+
+    @app.exception_handler(HTTPException)
+    async def host_errors(request: Request, exc: HTTPException):
+        return JSONResponse({'host_says': 'mine'}, status_code=exc.status_code)
+
+    srv.register_fastapi(app, coframe_app, plugins, SECRET)
+
+    res = TestClient(app).post('/coframe/endpoint/echo', json={})
+
+    assert res.status_code == 401
+    assert res.json()['status'] == 'error'
+
+
+def test_fastapi_ignores_the_hosts_default_response_class(coframe_app, plugins):
+    """The FastAPI counterpart of Flask's JSON provider: an application-wide
+    encoder coframe's routes would otherwise inherit."""
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+    from fastapi.testclient import TestClient
+
+    class ShoutingResponse(JSONResponse):
+        def render(self, content) -> bytes:
+            return b'{"host": "took over"}'
+
+    app = FastAPI(default_response_class=ShoutingResponse)
+    srv.register_fastapi(app, coframe_app, plugins, SECRET)
+
+    res = TestClient(app).post('/coframe/endpoint/a_date', json={},
+                               headers=bearer())
+
+    assert res.json()['data'] == {'when': '2026-08-24', 'at': '2026-08-24T10:30:00'}
+
+
+def test_fastapi_still_refreshes_a_token_on_a_response_it_builds(fastapi_client):
+    """The trap the refusal fix could have sprung: a Response returned by a
+    handler replaces the injected one, headers and all, so the refreshed token
+    has to be written on the response that is actually returned."""
+    res = fastapi_client.post('/coframe/endpoint/echo', json={},
+                              headers=bearer(last_refresh=0))
+
+    assert 'X-New-Token' in res.headers

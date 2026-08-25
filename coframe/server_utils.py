@@ -557,42 +557,6 @@ class AuthMiddleware:
 
 
 # ============================================
-# Flask JSON date/time serialization fix
-# ============================================
-
-def configure_flask_json_dates(app) -> None:
-    """
-    Make Flask serialize date/datetime/time as ISO 8601 (Flask only).
-
-    Flask's DefaultJSONProvider serializes date/datetime via http_date()
-    (RFC 1123, e.g. "Thu, 16 Jul 2026 13:21:19 GMT") instead of ISO — but the
-    `db`/`query` endpoints only accept ISO 8601 back on write
-    (datetime.fromisoformat in endpoint_db.py/utils.py). Round-tripping an
-    unmodified date field through a form (GET -> display -> save unmodified)
-    then crashes SQLAlchemy. Use ISO on the way out too, matching
-    querybuilder.JSONEncoder's convention already used elsewhere.
-
-    FastAPI's default encoder (jsonable_encoder) already emits ISO 8601, so
-    it needs no equivalent call.
-
-    Usage:
-        >>> app = Flask(__name__)
-        >>> configure_flask_json_dates(app)
-    """
-    from datetime import date, datetime, time
-    from flask.json.provider import DefaultJSONProvider
-
-    class ISOJSONProvider(DefaultJSONProvider):
-        @staticmethod
-        def default(o):
-            if isinstance(o, (datetime, date, time)):
-                return o.isoformat()
-            return DefaultJSONProvider.default(o)
-
-    app.json = ISOJSONProvider(app)
-
-
-# ============================================
 # App Info Handler
 # ============================================
 
@@ -652,9 +616,12 @@ def get_app_info(plugins_config: Dict[str, Any], api_prefix: str) -> Dict[str, A
 #         blueprint, and the host's own routes and hooks are untouched.
 #
 # Neither form touches anything outside its target — no CORS, no static
-# catch-all, no route at the root, and no replacement of the application's
-# JSON provider: coframe's own responses are serialized here, with the ISO
-# 8601 dates its endpoints accept back on write.
+# catch-all, no route at the root. Nor does either *depend* on anything
+# outside it: both adapters serialize their own responses, with the ISO 8601
+# dates their endpoints accept back on write, and both return a refusal rather
+# than raising it. A host is free to keep its own JSON provider, its own
+# default response class and its own exception handlers, and coframe answers
+# the same either way.
 
 def _prefixes(plugins_config: Dict[str, Any],
               prefix: Optional[str],
@@ -793,20 +760,47 @@ def register_fastapi(target, coframe_app, plugins, secret_key: str, *,
     """
     Register coframe's routes on a FastAPI application or APIRouter.
 
-    Same arguments and same four routes as `register_flask`. The refreshed
-    token is written on the response the dependency is handed, so no
-    application-wide middleware is needed to carry it out — which is what lets
-    an APIRouter be a valid target.
+    Same arguments and same four routes as `register_flask`, answering byte for
+    byte the same — which is the property the pair exists to hold.
+
+    Nothing here is application-wide, and that is what lets an APIRouter be a
+    valid target: the refreshed token rides on the response the handler builds
+    rather than on a middleware, and the responses are serialized here rather
+    than through the application's encoder. A refusal is *returned* and not
+    raised for the same reason — an HTTPException would go through the host's
+    exception handlers and come back in the host's error shape.
     """
-    from fastapi import Depends, HTTPException, Request, Response
+    import json
+
+    from fastapi import Depends, Request, Response
 
     from coframe.db import BaseApp
     from coframe.i18n import set_locale
+    from coframe.querybuilder import JSONEncoder
 
     config = plugins.config
     prefix, endpoint_prefix = _prefixes(config, prefix, endpoint_prefix)
     auth = auth or AuthMiddleware(config, secret_key)
     command_processor = coframe_app.cp
+
+    def reply(result: Dict[str, Any], status_code: Optional[int] = None,
+              new_token: Optional[str] = None) -> Response:
+        """Send a handler result with the status code it carries.
+
+        A plain Response and not a returned dict: FastAPI would serialize the
+        dict with the application's default response class and encoder — the
+        host's, in a mounted deployment. coframe's ISO 8601 dates are the
+        format its own endpoints accept back on write, so they travel with the
+        route rather than depending on the process they are in.
+        """
+        if status_code is None:
+            status_code = result.get('status_code', result.get('code', 200))
+        return Response(
+            content=json.dumps(result, cls=JSONEncoder, sort_keys=False),
+            status_code=status_code,
+            media_type='application/json',
+            headers={'X-New-Token': new_token} if new_token else None,
+        )
 
     async def clear_context():
         """Leave the worker as it was found — see register_flask's teardown."""
@@ -815,39 +809,52 @@ def register_fastapi(target, coframe_app, plugins, secret_key: str, *,
 
     cleanup = [Depends(clear_context)]
 
-    async def current_user(request: Request, response: Response) -> dict:
-        """Validate the bearer token, refresh it when due, set the locale."""
+    def identify(request: Request) -> Tuple[Optional[Dict[str, Any]],
+                                            Optional[Response], Optional[str]]:
+        """Validate the bearer token, refresh it when due, set the locale.
+
+        Returns (context, refusal, new_token): exactly one of the first two is
+        set. The caller carries the token to the response it builds, because a
+        Response returned by a handler replaces the injected one, headers and
+        all — writing it anywhere else would lose it in silence.
+        """
         token, error = auth.extract_token(request.headers.get('authorization'))
         if error:
-            raise HTTPException(status_code=401, detail=error)
+            return None, reply({'status': 'error', 'message': error}, 401), None
 
         payload, new_token, error = auth.decode_and_refresh(token)
         if error:
-            raise HTTPException(status_code=401, detail=error)
-        if new_token:
-            response.headers['X-New-Token'] = new_token
+            return None, reply({'status': 'error', 'message': error}, 401), None
 
         set_locale(payload.get('locale') or config.get('locale', 'en'))
-        return payload
+        return payload, None, new_token
 
     @target.get(f'{prefix}/info', dependencies=cleanup)
     def coframe_info():
-        return get_app_info(config, prefix)
+        return reply(get_app_info(config, prefix))
 
     @target.post(f'{prefix}/auth/login', dependencies=cleanup)
     def coframe_login(data: dict):
         try:
-            return auth.login(command_processor, data)
+            return reply(auth.login(command_processor, data))
         except Exception as e:
-            return {'status': 'error', 'message': str(e), 'status_code': 500}
+            return reply({'status': 'error', 'message': str(e)}, 500)
 
     @target.post(f'{prefix}/auth/update_context', dependencies=cleanup)
-    def coframe_update_context(data: dict, user: dict = Depends(current_user)):
-        return auth.update_context(user, data)
+    def coframe_update_context(data: dict, request: Request):
+        user, refused, new_token = identify(request)
+        if refused is not None:
+            return refused
+        return reply(auth.update_context(user, data), new_token=new_token)
 
     @target.post(f'{prefix}/{endpoint_prefix}/{{operation}}', dependencies=cleanup)
-    def coframe_dispatch(operation: str, data: dict, user: dict = Depends(current_user)):
+    def coframe_dispatch(operation: str, data: dict, request: Request):
         """Everything that is not authentication: db, query, get_page, get_menu…"""
-        return handle_generic_endpoint(command_processor, operation, data, context=user)
+        user, refused, new_token = identify(request)
+        if refused is not None:
+            return refused
+        return reply(
+            handle_generic_endpoint(command_processor, operation, data, context=user),
+            new_token=new_token)
 
     return auth
