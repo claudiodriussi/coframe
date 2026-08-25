@@ -24,19 +24,43 @@
 
 ### Prerequisites
 
-- Python 3.7 or higher
+- Python 3.11 or higher
 - Required dependencies (see requirements.txt)
 
-### Setup
+### As a dependency
 
-Clone the repository and set up a virtual environment:
+Coframe is installed, not copied. An application declares it and pins a
+version, so what is running is something the application states rather than
+whatever happened to be on the machine:
 
 ```bash
-git clone https://github.com/your-username/coframe.git
+uv add "coframe[flask] @ git+https://github.com/claudiodriussi/coframe@v0.5.0"
+# or: pip install "coframe[flask] @ git+https://github.com/claudiodriussi/coframe@v0.5.0"
+```
+
+The web framework is an extra — `[flask]` or `[fastapi]` — because coframe
+imports neither at module level: you install the one you serve with.
+
+Each application gets its own virtual environment. Starting one from nothing:
+
+```bash
+coframe new myapp      # config.yaml, a plugin, the entry points
+cd myapp && uv sync
+python app.py db-sync  # create the database from the YAML schema
+python server.py       # http://localhost:8300 — admin/admin
+```
+
+### For working on coframe itself
+
+Clone it and install in editable mode, so the sources stay live:
+
+```bash
+git clone https://github.com/claudiodriussi/coframe.git
 cd coframe
-python -m venv venv # or python3 or py depends on your system
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+python -m venv .venv               # or python3 / py, depending on your system
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+pytest
 ```
 
 ## Usage

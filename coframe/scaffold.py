@@ -1,0 +1,573 @@
+"""
+coframe.scaffold — write a new application that runs.
+
+`coframe new myapp` produces a directory that starts, logs in and serves its
+API before a single table of the domain exists. What it writes is the shape
+validated in the applications already in service, reduced to the minimum:
+
+    myapp/
+      config.yaml          plugin roots, database, api, authentication
+      app.py               loads the application, and carries the commands
+      server.py            the Flask process — `app` at module level
+      pyproject.toml       dependencies, and its own virtual environment
+      plugins/myapp/       where the domain goes
+      plugins/users/       the seed: a User table, so there is a way in
+
+The `users` plugin is **not** a copy of the shared `commons` plugins: it uses
+only core types and core transforms, so it tracks nothing and cannot drift
+from anything. It exists to be replaced — an application that grows adds the
+`commons` root and drops this directory.
+
+No Svelte is written: an application does not own a client. It contributes UI
+through the `.svelte` files of its plugins, and the generic shell builds it.
+"""
+
+import sys
+from pathlib import Path
+from typing import Optional
+
+# ── Templates ─────────────────────────────────────────────────────────────────
+#
+# Placeholders are {{name}} and {{sources}}, replaced literally: the content is
+# YAML, TOML and Python, all of which use braces for their own purposes.
+
+CONFIG_YAML = '''# {{name}} — app-instance coframe.
+#
+# Every relative path below hangs from THIS file's directory, so the
+# application starts from anywhere: a service, a cron job, a command run from
+# somewhere else.
+name: {{name}}
+version: 0.1.0
+description: ""
+log_file: "data/{{name}}.log"
+
+# Plugin roots, in order. Each entry is a directory holding plugin directories.
+# Add the shared plugins here when you want them:
+#
+#   plugins:
+#     - path: ../commons/plugins
+#       include: [common, users, partners]
+#     - plugins
+plugins: [plugins]
+
+db_engine: "sqlite:///data/{{name}}.sqlite"
+
+# The server only ever looks: if the schema the plugins describe differs from
+# the database, it stops. Changing the database is an explicit command:
+#   python app.py db-check     what differs (read-only)
+#   python app.py db-sync      apply it (additions only, never a drop)
+migrations:
+  on_startup: error
+
+# Who logs in, and what the token carries into the context of every write.
+authentication:
+  user_table: User
+  username_field: username
+  password_field: password
+  context_fields: [id, username, email, is_active, is_admin]
+
+api:
+  prefix: "coframe"
+  port: 8300
+'''
+
+APP_PY = '''"""{{name}} — loads the application, and carries the commands.
+
+Two files, and the division is not cosmetic: the commands must be able to look
+at the database **without** starting a server, and in service the process is
+taken by a WSGI server without going through a `main()`.
+
+    python app.py db-check      what differs between schema and database
+    python app.py db-sync       apply it (additions only, never a drop)
+    python app.py check         validate the plugin descriptors
+    python app.py dump-table    the schema as it comes out of the merge
+    python server.py            start the process (development)
+
+`model.py` is GENERATED from the YAML schema: do not edit it. Inside a plugin,
+`model.py` is real code — the behaviour mixins — and is versioned.
+"""
+import sys
+from pathlib import Path
+
+import coframe
+import coframe.plugins
+import coframe.source
+import coframe.utils
+
+# Everything hangs from here, never from the current directory.
+APP_DIR = Path(__file__).resolve().parent
+CONFIG = APP_DIR / "config.yaml"
+
+
+def setup_schema():
+    """Plugins and schema — no engine, no model.py.
+
+    Enough for the introspection commands, which look at what the application
+    declares rather than at what the database holds.
+    """
+    plugins = coframe.plugins.PluginsManager()
+    plugins.load_config(CONFIG)
+    coframe.utils.register_standard_handlers(plugins)
+    plugins.load_plugins()
+
+    app = coframe.utils.get_app()
+    app.calc_db(plugins)
+
+    # Query behaviours of the application go here, e.g. with the shared plugins:
+    #   from common.model import Archivable
+    #   app.add_query_behavior(Archivable)
+
+    return app
+
+
+def setup(generate: bool = True):
+    """The schema plus model.py, regenerated when the YAML or the generator moved."""
+    app = setup_schema()
+
+    if generate and app.pm.should_regenerate("model.py"):
+        print("Generating model.py ...")
+        coframe.source.Generator(app).generate(filename="model.py")
+
+    return app, app.pm
+
+
+def setup_db(create_all: bool = True, check_schema: bool = True):
+    """The application with the database open. Returns (app, plugins, model).
+
+    The entry point of the server and of any batch work: whatever runs in this
+    process uses the generated models directly, never its own HTTP endpoints.
+    """
+    app, plugins = setup()
+
+    if str(APP_DIR) not in sys.path:
+        sys.path.insert(0, str(APP_DIR))
+    import model  # type: ignore  # generated by setup()
+
+    app.initialize_db(plugins.config["db_engine"], model,
+                      create_all=create_all, check_schema=check_schema)
+    plugins.load_all_locales()
+
+    return app, plugins, model
+
+
+def seed_admin(app, model, username: str = "admin", password: str = "admin") -> None:
+    """An administrator, if the table is empty.
+
+    Development data, not a mechanism: it exists so there is a way in the first
+    time. In production the first account is created by hand and this does
+    nothing, because the table is not empty.
+    """
+    with app.get_session() as session:
+        if session.query(model.User).first():
+            return
+        session.add(model.User(
+            name="Administrator",
+            username=username,
+            password=password,      # stored hashed: the column says so
+            email="admin@example.com",
+            is_active=True,
+            is_admin=True,
+        ))
+        session.commit()
+        print(f"Created the initial user: {username}/{password}")
+
+
+if __name__ == "__main__":
+    from coframe.cli import DB_COMMANDS, make_parser, run_cli
+
+    parser = make_parser()
+    args = parser.parse_args()
+
+    if args.command in DB_COMMANDS:
+        # These look at the database as it is: no create_all, no startup check
+        # — reporting the difference is the whole point.
+        app, plugins, model = setup_db(create_all=False, check_schema=False)
+        run_cli(app, args, output_dir=APP_DIR / "data")
+    elif args.command:
+        run_cli(setup_schema(), args, output_dir=APP_DIR / "data")
+    else:
+        parser.print_help()
+        sys.exit(1)
+'''
+
+SERVER_PY = '''"""{{name}} — the Flask process.
+
+    waitress-serve --port=8300 server:app     (service)
+    python server.py                          (development)
+
+`app` is at module level, so a WSGI server takes it as it is. A WSGI server
+rather than `app.run()` is about HTTP hardening, not load: `app.run()` is
+Werkzeug's development server and says so itself.
+
+Coframe is mounted as a **blueprint** even though the house is ours here. It
+costs nothing today, and the day this process also serves something else —
+another API, server-rendered pages — that line does not change.
+"""
+import os
+
+from flask import Blueprint, Flask, jsonify, send_from_directory
+
+import coframe.server_utils as srv
+
+import app as application
+
+# ── Application ──────────────────────────────────────────────────────────────
+
+coframe_app, plugins, model = application.setup_db()
+application.seed_admin(coframe_app, model)
+
+APP_DIR = application.APP_DIR
+STATIC = APP_DIR / "static"
+
+# From the environment in production: changing it invalidates the tokens
+# already issued, which is exactly what a key is for.
+SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key")
+
+# `static_folder=None`: this application's `static/` is the compiled client,
+# served below, not Flask's own static route.
+flask_app = Flask(__name__, static_folder=None)
+flask_app.config["SECRET_KEY"] = SECRET_KEY
+
+# ── Coframe — /coframe/* ─────────────────────────────────────────────────────
+#
+# `register_flask` touches nothing outside the blueprint: no CORS, no catch-all,
+# and the application's JSON provider stays as it is. It hands back the
+# AuthMiddleware, for whatever else in this process lets the same person in.
+
+coframe_bp = Blueprint("coframe", __name__)
+auth = srv.register_flask(coframe_bp, coframe_app, plugins, SECRET_KEY)
+flask_app.register_blueprint(coframe_bp)
+
+# ── The compiled client ──────────────────────────────────────────────────────
+#
+# Build it from the coframe workspace, pointed at this application:
+#   tools/build-client.sh /path/to/{{name}}
+
+if STATIC.is_dir():
+
+    @flask_app.route("/", defaults={"path": ""})
+    @flask_app.route("/<path:path>")
+    def client(path):
+        if path and (STATIC / path).is_file():
+            return send_from_directory(STATIC, path)
+        return send_from_directory(STATIC, "index.html")
+
+else:
+
+    @flask_app.route("/")
+    def no_client():
+        return jsonify({
+            "application": plugins.config.get("name"),
+            "api": f"{plugins.config.get('api', {}).get('prefix', 'coframe')}/",
+            "client": "not built — see tools/build-client.sh in the coframe workspace",
+        })
+
+
+app = flask_app
+
+if __name__ == "__main__":
+    port = plugins.config.get("api", {}).get("port", 8300)
+    print(f"\\n🚀 {plugins.config.get('name')} on http://localhost:{port}\\n")
+    app.run(host="0.0.0.0", port=port)
+'''
+
+PYPROJECT = '''# {{name}} — third-party dependencies, and its own virtual environment.
+#
+#   uv sync            create .venv and install
+#   uv run app.py ...  run inside it
+#
+# coframe is a dependency like any other: pinned, so what runs is something
+# this file states rather than whatever happens to be on the machine.
+
+[project]
+name = "{{name}}"
+version = "0.1.0"
+description = ""
+requires-python = ">=3.11"
+
+dependencies = [
+    "coframe[flask]",
+    # The WSGI server used in service. Not for throughput: `app.run()` is
+    # Werkzeug's development server.
+    "waitress",
+]
+
+[tool.uv]
+package = false
+{{sources}}'''
+
+GITIGNORE = '''# State: database, logs, exchanged files. Not versioned — and in production
+# the only thing worth backing up.
+data/*
+!data/.gitkeep
+
+# The compiled client: an artifact, rebuilt from the coframe workspace.
+static/
+
+# Generated by coframe from the plugin schema — ONLY the one at the root.
+# Inside a plugin, model.py is real code (behaviour mixins) and is versioned.
+/model.py
+
+# Environment
+.venv/
+__pycache__/
+*.pyc
+'''
+
+PLUGIN_CONFIG = '''# The plugin of this application: its schema, and its domain operations.
+#
+# Coframe imports every .py in this directory and registers what it finds
+# decorated with `@endpoint`. That is where the operations of the domain go —
+# never in app.py, never in a page — because from here the same function is
+# reachable from the dispatcher, from another module in this process, and from
+# a command, without a line of wiring.
+name: {{name}}
+version: 0.1.0
+description: ""
+depends_on: [users]
+'''
+
+PLUGIN_MODEL = '''# The schema of {{name}}, declared once and only here.
+#
+# A table generates its SQLAlchemy model, its CRUD endpoints and — with no
+# further declaration — an auto-generated list and form. Uncomment to start:
+#
+# tables:
+#
+#   Item:
+#     name: items
+#     label: "Item"
+#     columns:
+#       - name: id
+#         type: Integer
+#         primary_key: true
+#         autoincrement: true
+#
+#       - name: code
+#         type: String
+#         length: 20
+#         unique: true
+#         nullable: false
+#         label: "Code"
+#         searchable: true
+#
+#       - name: description
+#         type: String
+#         length: 200
+#         label: "Description"
+#
+#       - name: quantity
+#         type: Integer
+#         default: 0
+#         label: "Quantity"
+
+tables: {}
+'''
+
+USERS_CONFIG = '''# The seed: enough of a user table to have a way in.
+#
+# NOT a copy of the shared `commons` plugins — it uses only core types and core
+# transforms, so it tracks nothing and cannot drift from anything. It exists to
+# be replaced: an application that grows declares the `commons` root in
+# config.yaml, takes `users` from there, and deletes this directory.
+name: users
+version: 0.1.0
+description: "Minimal user table for authentication"
+'''
+
+USERS_MODEL = '''# Who operates the application — the table `authentication:` points at.
+#
+# `secret: true` keeps the column out of every response, out of `select *`, and
+# makes a query that names it an error rather than a silent drop. `on_write`
+# names the transform applied before writing: `password_hash` is built into the
+# core, because the `auth` endpoint has to know how credentials are kept.
+
+tables:
+
+  User:
+    name: users
+    label: "User"
+    tags: [anag]
+    columns:
+      - name: id
+        type: Integer
+        primary_key: true
+        autoincrement: true
+
+      - name: name
+        type: String
+        length: 60
+        label: "Name"
+        searchable: true
+
+      - name: username
+        type: String
+        length: 30
+        unique: true
+        nullable: false
+        label: "Username"
+
+      - name: password
+        type: String
+        length: 128
+        label: "Password"
+        widget: password
+        secret: true
+        on_write: password_hash
+
+      - name: email
+        type: String
+        length: 120
+        label: "Email"
+
+      - name: is_active
+        type: Boolean
+        default: true
+        nullable: false
+        label: "Active"
+
+      - name: is_admin
+        type: Boolean
+        default: false
+        nullable: false
+        label: "Administrator"
+'''
+
+README = '''# {{name}}
+
+Application built on [coframe](https://github.com/claudiodriussi/coframe).
+
+## Running it
+
+    uv sync                     create .venv and install the dependencies
+    uv run app.py db-sync       create the database from the YAML schema
+    uv run server.py            http://localhost:8300 — admin/admin
+
+## Where things go
+
+| where | what |
+|---|---|
+| `plugins/{{name}}/model.yaml` | the schema — the only definition there is |
+| `plugins/{{name}}/*.py` | the domain operations, as `@endpoint` |
+| `app.py` | loads the application, carries the commands |
+| `server.py` | composes the process |
+| `model.py` | GENERATED — do not edit |
+
+The operations of the domain belong in the plugin, not in `app.py` and not in a
+page: coframe imports every `.py` of a plugin directory and registers what it
+finds decorated with `@endpoint`, and from there the same function is reachable
+from the dispatcher, from anything else in this process, and from a command.
+
+## The admin client
+
+An application does not own a client: it contributes UI through the `.svelte`
+files of its plugins, and the generic shell of the coframe workspace builds it.
+
+    tools/build-client.sh /path/to/{{name}}
+
+The result lands in `static/`, which `server.py` serves at the root.
+'''
+
+FILES = [
+    ("config.yaml", CONFIG_YAML),
+    ("app.py", APP_PY),
+    ("server.py", SERVER_PY),
+    ("pyproject.toml", PYPROJECT),
+    (".gitignore", GITIGNORE),
+    ("README.md", README),
+    ("plugins/{{name}}/config.yaml", PLUGIN_CONFIG),
+    ("plugins/{{name}}/model.yaml", PLUGIN_MODEL),
+    ("plugins/users/config.yaml", USERS_CONFIG),
+    ("plugins/users/model.yaml", USERS_MODEL),
+    ("data/.gitkeep", ""),
+]
+
+
+# ── Writing it out ────────────────────────────────────────────────────────────
+
+def _coframe_source() -> str:
+    """A `[tool.uv.sources]` block when coframe is running from a checkout.
+
+    `coframe new` knows where the coframe it ran from lives. If that is a source
+    tree rather than an installed package, the generated project points at it in
+    editable mode: the sources stay live, which is what a workstation developing
+    both wants. Installed from a package, nothing is written and the dependency
+    resolves normally.
+    """
+    import coframe
+
+    repo = Path(coframe.__file__).resolve().parent.parent
+    if not (repo / "pyproject.toml").is_file():
+        return ""
+
+    return (
+        "\n# `coframe new` ran from a source checkout, so this points at it in\n"
+        "# editable mode: edit the library and the application sees it at once.\n"
+        "# Delete this block — or run `uv sync --no-sources` — to resolve the\n"
+        "# dependency the way a machine without that checkout would.\n"
+        "[tool.uv.sources]\n"
+        f'coframe = {{ path = "{repo}", editable = true }}\n'
+    )
+
+
+def create_app(name: str, directory: Optional[Path] = None,
+               force: bool = False) -> Path:
+    """
+    Write a new application.
+
+    Args:
+        name:      application name — also the name of its plugin
+        directory: where to write it (default: ./<name>)
+        force:     write into a directory that already has files
+
+    Returns:
+        The directory written to
+
+    Raises:
+        ValueError: if the name is not usable as a Python package name
+        FileExistsError: if the directory holds files and force is False
+    """
+    if not name.isidentifier() or name != name.lower():
+        raise ValueError(
+            f"'{name}' cannot be an application name: it must be a lowercase "
+            f"Python identifier (letters, digits, underscore; no leading digit) "
+            f"— it names a plugin directory that gets imported.")
+
+    target = Path(directory) if directory else Path.cwd() / name
+    target = target.resolve()
+
+    if target.exists() and any(target.iterdir()) and not force:
+        raise FileExistsError(
+            f"{target} is not empty. Use --force to write into it anyway.")
+
+    substitutions = {"{{name}}": name, "{{sources}}": _coframe_source()}
+
+    for relative, template in FILES:
+        path = target / _fill(relative, substitutions)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_fill(template, substitutions), encoding="utf-8")
+
+    return target
+
+
+def _fill(text: str, substitutions: dict) -> str:
+    for placeholder, value in substitutions.items():
+        text = text.replace(placeholder, value)
+    return text
+
+
+def print_next_steps(target: Path, name: str) -> None:
+    """What to type next, in the order that works."""
+    where = target if not str(target).startswith(str(Path.cwd())) else \
+        Path(target).relative_to(Path.cwd())
+    print(f"""
+Written: {target}
+
+    cd {where}
+    uv sync                  create .venv and install
+    uv run app.py db-sync    create the database from the YAML schema
+    uv run server.py         http://localhost:8300 — admin/admin
+
+The schema goes in plugins/{name}/model.yaml, the domain operations in
+plugins/{name}/*.py as @endpoint. See README.md.
+""", file=sys.stderr)

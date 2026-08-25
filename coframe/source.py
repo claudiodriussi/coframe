@@ -708,20 +708,17 @@ class Generator:
         """
         Generate SQLAlchemy model code and write to file.
 
-        Args:
-            filename: Output filename
-        """        """
-        Process a single source file to find relevant classes.
+        A relative filename is written beside the application's config.yaml,
+        not in whatever directory the process happens to run from.
 
         Args:
-            source_file: Path to the source file
-            plugin: Plugin object that owns the source file
+            filename: Output filename, absolute or relative to the app
         """
-
         self._process_tables()
         self._generate_source()
 
-        with open(filename, 'w') as f:
+        path = self.db.pm.resolve_path(filename) if self.db.pm else Path(filename)
+        with open(path, 'w') as f:
             f.write(self.source)
 
     def _process_tables(self) -> None:

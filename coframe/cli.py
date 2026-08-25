@@ -475,6 +475,19 @@ examples:
     p.add_argument('--dry-run', action='store_true',
                    help='Print the DDL that would run, without touching the database')
 
+    # ── new ────────────────────────────────────────────────────────────────────
+    # The one command that runs without an application, hence from the `coframe`
+    # console script rather than from an application's entry point.
+    p = sub.add_parser(
+        'new',
+        help='Write a new application that runs (use the `coframe` command)',
+    )
+    p.add_argument('name', help='Application name — also the name of its plugin')
+    p.add_argument('--directory', metavar='PATH',
+                   help='Where to write it (default: ./<name>)')
+    p.add_argument('--force', action='store_true',
+                   help='Write into a directory that already holds files')
+
     return parser
 
 
@@ -587,6 +600,47 @@ def run_cli(app: Any, args: argparse.Namespace, output_dir: Path = Path('.')) ->
         if not aligned:
             sys.exit(1)
 
+    elif args.command == 'new':
+        print('`new` writes a fresh application, so it does not run from one: '
+              'use the `coframe` command.', file=sys.stderr)
+        sys.exit(1)
+
     else:
         make_parser().print_help()
         sys.exit(1)
+
+
+# ── Console script ─────────────────────────────────────────────────────────────
+
+def main(argv: Optional[List[str]] = None) -> None:
+    """
+    Entry point of the `coframe` command.
+
+    It carries what can be done **without** an application — today `new`. Every
+    other command needs the application loaded, and loading it is the
+    application's own business: its `app.py` composes the sequence, registers
+    its query behaviours and then calls `run_cli`. Two sequences for the same
+    job would answer differently the day one of them forgot a step.
+    """
+    parser = make_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == 'new':
+        from coframe.scaffold import create_app, print_next_steps
+        try:
+            target = create_app(args.name,
+                                Path(args.directory) if args.directory else None,
+                                force=args.force)
+        except (ValueError, FileExistsError) as e:
+            print(f'Error: {e}', file=sys.stderr)
+            sys.exit(1)
+        print_next_steps(target, args.name)
+        return
+
+    if args.command:
+        print(f'`{args.command}` needs the application loaded: run it from the '
+              f'application directory, e.g. `python app.py {args.command}`.',
+              file=sys.stderr)
+        sys.exit(1)
+
+    parser.print_help()

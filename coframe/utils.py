@@ -19,7 +19,9 @@ def autoimport(file: str, package: str) -> None:
     package_dir = Path(file).resolve().parent
 
     for file in package_dir.glob("*.py"):
-        if file.name == "__init__.py":
+        # __main__ is what `python -m coframe` executes, not a module of the
+        # package: importing it here would load it twice under two names.
+        if file.name in ("__init__.py", "__main__.py"):
             continue
         module_name = file.stem
         module = importlib.import_module(f".{module_name}", package=package)

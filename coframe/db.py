@@ -2,6 +2,7 @@ import copy
 import inspect
 import threading
 import contextvars
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Union, Iterator
 from types import ModuleType
 from contextlib import contextmanager, ExitStack
@@ -286,9 +287,11 @@ class DB:
         Resolve all endpoints coming from plugins and the ones defined in package
         """
         self.cp = CommandProcessor()
-        sources = self.pm.get_sources()
-        self.cp.resolve_endpoints(sources)
-        self.cp.resolve_endpoints('endpoint_db.py')
+        # The package's own endpoints come with the processor; this loads what
+        # the plugins declare. (The previous line here passed the bare string
+        # 'endpoint_db.py', which iterates as its characters and loaded
+        # nothing — the built-ins were arriving by accident.)
+        self.cp.resolve_endpoints(self.pm.get_sources())
 
     def _load_multi_tenant_config(self) -> None:
         """
@@ -479,7 +482,7 @@ class DB:
         self.models = {name: cls for name, cls in vars(self.model).items()
                        if isinstance(cls, type) and not name.startswith('_')}
         from sqlalchemy import create_engine
-        engine = create_engine(db_url)
+        engine = create_engine(self._resolve_db_url(db_url))
         if create_all:
             Base.metadata.create_all(engine)
         self.engine = engine
@@ -491,6 +494,31 @@ class DB:
             check_on_startup(engine, Base.metadata, policy, logger=self.pm.logger)
 
         return engine
+
+    def _resolve_db_url(self, db_url: str) -> str:
+        """
+        Anchor a file-backed database to the application directory.
+
+        `sqlite:///data/app.sqlite` names a file, and a relative one would open
+        — or silently create — a different database depending on where the
+        process was started. Absolute URLs (`sqlite:////var/lib/...`), in-memory
+        ones and every server-based dialect pass through untouched.
+
+        Args:
+            db_url: the URL as config.yaml declares it
+
+        Returns:
+            The URL with a relative sqlite path made absolute
+        """
+        prefix = 'sqlite:///'
+        if not db_url.startswith(prefix) or self.pm is None:
+            return db_url
+
+        target = db_url[len(prefix):]
+        if not target or target == ':memory:' or Path(target).is_absolute():
+            return db_url
+
+        return prefix + str(self.pm.resolve_path(target))
 
     def get_database_type(self) -> str:
         """

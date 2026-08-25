@@ -89,6 +89,13 @@ class PluginsManager:
         self.original_handlers = None
         self.merge_handlers: Dict[str, Any] = {}
 
+        # Everything an application declares by a relative path — plugin roots,
+        # the sqlite file, the log, the generated model — hangs from the
+        # directory of its config.yaml, not from the current one. An app is
+        # then startable from anywhere: a service, a cron job, a command run
+        # from somewhere else. Set for real by load_config().
+        self.app_root: Path = Path.cwd()
+
         # Initialize logging
         self.logger = get_logger(logger_name)
         set_formatter(self.logger, '%(name)s|%(levelname)s|%(message)s')
@@ -163,13 +170,33 @@ class PluginsManager:
             "db_engine": "",
             "log_file": "",
         }
+        self.app_root = Path(config).resolve().parent
+
         with open(config) as f:
             data = yaml.safe_load(f)
         deep_merge(self.config, data)
 
         # Redirect logging to file if specified in config
         if self.config['log_file']:
-            self.original_handlers, _ = logging_to_file(self.logger, self.config['log_file'])
+            self.original_handlers, _ = logging_to_file(
+                self.logger, str(self.resolve_path(self.config['log_file'])))
+
+    def resolve_path(self, path: Union[str, Path]) -> Path:
+        """
+        Resolve a path the application declared, against its own directory.
+
+        An absolute path is left alone; a relative one hangs from the directory
+        holding config.yaml. resolve() also normalises out-of-tree roots
+        ('../plugins') to a single canonical form, so sys.path never holds the
+        same directory twice under two spellings.
+
+        Args:
+            path: absolute or relative to the app directory
+
+        Returns:
+            The absolute, normalised path
+        """
+        return (self.app_root / Path(path)).resolve()
 
     def load_plugins(self) -> None:
         """
@@ -187,15 +214,17 @@ class PluginsManager:
         # one notion of "what depends on what" rather than one per root.
         found: Dict[str, List[Plugin]] = {}
         chosen: Dict[str, Plugin] = {}
-        for plugins_dir, include in self._plugin_roots():
+        for declared, include in self._plugin_roots():
+            plugins_dir = self.resolve_path(declared)
             if not plugins_dir.exists():
-                raise ValueError(f"The plugins folder: {plugins_dir} does not exist")
+                raise ValueError(
+                    f"The plugins folder: {declared} does not exist "
+                    f"(looked in {plugins_dir})")
 
-            # Add plugin directory to Python path for imports.
-            # resolve() normalises out-of-tree roots (e.g. '../plugins') so sys.path
-            # holds a single canonical absolute path — avoids '..' and duplicate
-            # entries that would import the same module twice under different names.
-            sys.path.append(str((Path.cwd() / str(plugins_dir)).resolve()))
+            # Add plugin directory to Python path for imports, in the single
+            # canonical spelling resolve_path() produces: '..' and duplicate
+            # entries would import the same module twice under two names.
+            sys.path.append(str(plugins_dir))
 
             # Scan for plugin directories
             in_root: Dict[str, Plugin] = {}
@@ -711,9 +740,7 @@ class PluginsManager:
         """
         env = ""
         for plugins_dir, _include in self._plugin_roots():
-            # resolve() normalises out-of-tree roots ('../plugins') to a canonical
-            # absolute path, matching what load_plugins() puts on sys.path.
-            abs_dir = str((Path.cwd() / str(plugins_dir)).resolve())
+            abs_dir = str(self.resolve_path(plugins_dir))
             if windows:
                 s = f'set PYTHONPATH="{abs_dir}";%PYTHONPATH%\n'
                 env += s.replace("/", "\\")
@@ -767,11 +794,12 @@ class PluginsManager:
             bool: True if the file must be regenerated
         """
         # If file doesn't exist, it needs to be generated
-        if not os.path.exists(filename):
+        path = self.resolve_path(filename)
+        if not path.exists():
             return True
 
         # Compare timestamps
-        file_timestamp = os.path.getmtime(filename)
+        file_timestamp = path.stat().st_mtime
         plugins_timestamp = self.get_timestamp()
         return file_timestamp < plugins_timestamp
 

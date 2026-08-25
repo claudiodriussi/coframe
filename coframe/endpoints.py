@@ -243,8 +243,15 @@ class CommandProcessor:
     def __init__(self) -> None:
         """
         Initialize the command processor.
+
+        Starts from what the package itself registered — `auth`, `db`, `query`,
+        `get_page` and the rest are decorated at import time — and plugin files
+        add to it as they are loaded. They used to arrive only as a side effect
+        of `resolve_endpoints` having loaded at least one plugin file, which
+        copies the whole registry: an application whose plugins are pure YAML
+        therefore had no endpoints at all, not even the built-in ones.
         """
-        self.endpoints: Dict[str, Callable] = {}
+        self.endpoints: Dict[str, Callable] = dict(_ENDPOINTS)
 
     def resolve_endpoints(self, file_paths: List[Union[str, Path]]) -> None:
         """
