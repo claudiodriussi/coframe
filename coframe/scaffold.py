@@ -468,6 +468,28 @@ files of its plugins, and the generic shell of the coframe workspace builds it.
 The result lands in `static/`, which `server.py` serves at the root.
 '''
 
+PLUGIN_MENU = '''# The menu of the admin client, and the pages it opens.
+#
+# A page id like `user_list` is auto-generated from the table: declaring a list
+# or a form only becomes necessary when the generated one is not what you want.
+# Every plugin can add its own items to a group declared elsewhere, by naming
+# its parent — which is how a menu grows without anyone editing this file.
+
+menus:
+  main:
+    label: {{name}}
+
+menu_items:
+
+  # A top-level group: no action of its own, it only holds things.
+  masters: { label: Masters, icon: database, order: 10 }
+
+  users: { label: Users, icon: users, parent: masters, order: 10, action: stack_push, panel: user_list }
+
+  # Your own tables go here, e.g.:
+  # items: { label: Items, icon: package, parent: masters, order: 20, action: stack_push, panel: item_list }
+'''
+
 FILES = [
     ("config.yaml", CONFIG_YAML),
     ("app.py", APP_PY),
@@ -477,6 +499,7 @@ FILES = [
     ("README.md", README),
     ("plugins/{{name}}/config.yaml", PLUGIN_CONFIG),
     ("plugins/{{name}}/model.yaml", PLUGIN_MODEL),
+    ("plugins/{{name}}/menu.yaml", PLUGIN_MENU),
     ("plugins/users/config.yaml", USERS_CONFIG),
     ("plugins/users/model.yaml", USERS_MODEL),
     ("data/.gitkeep", ""),
