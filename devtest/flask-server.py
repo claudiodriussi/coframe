@@ -31,7 +31,11 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
-CORS(app)
+# expose_headers: the refresh token travels in a response header, and a
+# browser hides those from JS across origins — which is what dev is, with
+# the Vite server on a port of its own. Without it the client never sees a
+# refreshed token in development, silently.
+CORS(app, expose_headers=["X-New-Token"])
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 
