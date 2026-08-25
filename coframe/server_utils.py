@@ -10,10 +10,12 @@ All handlers return plain dict with:
 This allows the same logic to be used with Flask, FastAPI, Django, or any other framework.
 """
 
-from datetime import datetime, timezone, timedelta, date
+from datetime import datetime, timezone, timedelta
 import traceback as _traceback
 import jwt
 from typing import Dict, Any, Optional, Tuple
+
+from coframe import apptime
 
 
 def _error_response(message: str, status_code: int = 500,
@@ -204,9 +206,9 @@ def handle_auth(
                 # present, so every endpoint can read it via the context (default
                 # date for new records, accounting period selection, ...). The user
                 # can override it via update_context; the merged value survives
-                # auto-refresh. Default = server system date.
-                # Seam: default source/timezone configurable later via env.config.
-                'op_date': date.today().isoformat(),
+                # auto-refresh. Default = today in the organisation's timezone,
+                # which is the machine's only when the app declares none.
+                'op_date': apptime.today().isoformat(),
             }
 
             # Add context fields to payload

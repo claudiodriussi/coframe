@@ -111,20 +111,21 @@ types:
   TimeStamp:
     label: "Timestamp"
     columns:
-      # `datetime.now` and not `datetime.now()`: the parentheses would call it
-      # once, when the generated model is imported, and every row of every table
-      # would be stamped with the instant the server started.
+      # `$now` and not `datetime.now`: the same instant, read through the
+      # timezone the app declares rather than the one the process happens to
+      # run in (coframe.apptime). It is also the single place that answers
+      # "when is now", so moving the storage to UTC one day is one function.
       - name: created_at
         type: DateTime
         granularity: second
-        default: datetime.now
+        default: $now
         deferred: true          # audit: filled at save, not prefilled in the form
         nullable: False
       - name: updated_at
         type: DateTime
         granularity: second
-        default: datetime.now
-        onupdate: datetime.now
+        default: $now
+        onupdate: $now
         deferred: true          # audit: filled at save, not prefilled in the form
         nullable: False
 

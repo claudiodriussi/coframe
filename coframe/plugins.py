@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any
 import yaml
+from coframe import apptime
 from coframe.utils import get_logger, set_formatter, logging_to_file, deep_merge
 
 # Merge directives. They belong to the YAML protocol, not to a single function:
@@ -169,12 +170,20 @@ class PluginsManager:
             "plugins": ['plugins'],
             "db_engine": "",
             "log_file": "",
+            "timezone": "",
         }
         self.app_root = Path(config).resolve().parent
 
         with open(config) as f:
             data = yaml.safe_load(f)
         deep_merge(self.config, data)
+
+        # The timezone the stored naive datetimes are written in. Declaring it
+        # is what asks for the guarantee: from here on the clock is read
+        # through it, and a process whose own clock disagrees does not start.
+        # See coframe.apptime for why an ambient timezone is the dangerous one.
+        apptime.set_app_timezone(self.config['timezone'])
+        apptime.check_process_timezone()
 
         # Redirect logging to file if specified in config
         if self.config['log_file']:

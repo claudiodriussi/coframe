@@ -130,7 +130,7 @@
      "name": "created_at",
      "type": "DateTime",
      "granularity": "second",
-     "default": "datetime.now",
+     "default": "$now",
      "deferred": true,
      "nullable": false,
      "$plugin": "common"
@@ -139,8 +139,8 @@
      "name": "updated_at",
      "type": "DateTime",
      "granularity": "second",
-     "default": "datetime.now",
-     "onupdate": "datetime.now",
+     "default": "$now",
+     "onupdate": "$now",
      "deferred": true,
      "nullable": false,
      "$plugin": "common"
@@ -760,7 +760,7 @@
     {
      "name": "borrowed_at",
      "type": "DateTime",
-     "default": "datetime.now",
+     "default": "$now",
      "nullable": false,
      "$plugin": "library"
     },

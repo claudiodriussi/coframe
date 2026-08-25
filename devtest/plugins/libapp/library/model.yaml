@@ -114,7 +114,7 @@ tables:
 
       - name: borrowed_at
         type: DateTime
-        default: datetime.now
+        default: $now
         nullable: false
 
       - name: due_date

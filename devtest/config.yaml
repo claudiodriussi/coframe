@@ -47,6 +47,14 @@ dataview:
 # Application locale (default 'en' = no translation)
 locale: it
 
+# The timezone the stored naive datetimes are written in — the organisation's,
+# not the machine's. Declaring it is what asks for the guarantee: `$now` and
+# op_date are read through it, and a process whose own clock disagrees refuses
+# to start rather than write timestamps that are silently off by an offset.
+# Declare nothing and the process clock is used, unchecked, as before.
+# In Docker: `environment: TZ=Europe/Rome` on the service.
+timezone: Europe/Rome
+
 # Menu — default placement (cascade: item → plugin config → app config).
 # Items without an explicit `root` surface in this root. See docs/pending/menu.md §4.
 menu:

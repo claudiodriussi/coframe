@@ -19,14 +19,20 @@ it is a framework value, not app policy, so it belongs here rather than in a
 commons plugin. Apps may register their own system defaults via
 register_default() (same spirit as add_query_behavior).
 """
-from datetime import date
+from datetime import date, datetime
 from typing import Callable, Optional, Set
 
+from coframe import apptime
 from coframe.db import BaseApp
 
 
 def op_date() -> date:
-    """Operational ("working") date from the request context; today if unset."""
+    """Operational ("working") date from the request context; today if unset.
+
+    "Today" is the organisation's, not the machine's — see coframe.apptime.
+    On a server running in UTC the two differ for the first hours after
+    midnight, and an op_date a day out produces documents that look right.
+    """
     ctx = BaseApp.get_context() or {}
     raw = ctx.get('op_date')
     if raw:
@@ -34,13 +40,26 @@ def op_date() -> date:
             return date.fromisoformat(raw)
         except (ValueError, TypeError):
             pass
-    return date.today()
+    return apptime.today()
+
+
+def now() -> datetime:
+    """Current wall-clock time in the application's timezone.
+
+    `default: $now` rather than `default: datetime.now`: the same value, read
+    through the timezone the app declares instead of the one the process
+    happens to run in. It also puts the answer to "when is now" in one place,
+    so a system that later moves its storage to UTC changes this function and
+    not every model.yaml.
+    """
+    return apptime.now()
 
 
 # Registry: token name (without the leading '$') -> callable used as a
 # SQLAlchemy column default.
 _DEFAULTS: dict = {
     'op_date': op_date,
+    'now': now,
 }
 
 
