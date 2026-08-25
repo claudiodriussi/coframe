@@ -52,6 +52,12 @@ plugins: [plugins]
 
 db_engine: "sqlite:///data/{{name}}.sqlite"
 
+# The timezone the stored naive datetimes are written in. Uncomment to state
+# it: from then on the clock is read through it and a process whose own clock
+# disagrees refuses to start. Left out, the process timezone applies and
+# nothing checks it — which is fine until a container is rebuilt somewhere else.
+# timezone: Europe/Rome
+
 # The server only ever looks: if the schema the plugins describe differs from
 # the database, it stops. Changing the database is an explicit command:
 #   python app.py db-check     what differs (read-only)
@@ -221,7 +227,7 @@ STATIC = APP_DIR / "static"
 
 # From the environment in production: changing it invalidates the tokens
 # already issued, which is exactly what a key is for.
-SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key")
+SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key-not-for-service")
 
 # `static_folder=None`: this application's `static/` is the compiled client,
 # served below, not Flask's own static route.

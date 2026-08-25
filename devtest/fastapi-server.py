@@ -29,7 +29,9 @@ coframe_app.initialize_db(plugins.config["db_engine"], model)
 plugins.load_all_locales()
 devtest.seed(coframe_app, model)
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key")
+# 32 bytes at least: below that PyJWT warns that the key is weak for
+# HS256, and a warning nobody can act on is a warning people learn to skip.
+SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key-not-for-service")
 
 app = FastAPI(
     title="Coframe devtest",
