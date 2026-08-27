@@ -490,6 +490,8 @@ examples:
                    help='Where to write it (default: ./<name>)')
     p.add_argument('--force', action='store_true',
                    help='Write into a directory that already holds files')
+    p.add_argument('--server', choices=('flask', 'fastapi', 'both'), default='both',
+                   help='Which server to write (default: both — they answer the same)')
 
     # ── dev ────────────────────────────────────────────────────────────────────
     # Also without an application loaded: it starts processes, it does not
@@ -665,11 +667,11 @@ def main(argv: Optional[List[str]] = None) -> None:
         try:
             target = create_app(args.name,
                                 Path(args.directory) if args.directory else None,
-                                force=args.force)
+                                force=args.force, server=args.server)
         except (ValueError, FileExistsError) as e:
             print(f'Error: {e}', file=sys.stderr)
             sys.exit(1)
-        print_next_steps(target, args.name)
+        print_next_steps(target, args.name, args.server)
         return
 
     if args.command in ('dev', 'build-client'):

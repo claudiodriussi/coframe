@@ -9,9 +9,14 @@ validated in the applications already in service, reduced to the minimum:
       config.yaml          plugin roots, database, api, authentication
       app.py               loads the application, and carries the commands
       server.py            the Flask process — `app` at module level
+      fastapi-server.py    its FastAPI twin — same routes, other framework
       pyproject.toml       dependencies, and its own virtual environment
       plugins/myapp/       where the domain goes
       plugins/users/       the seed: a User table, so there is a way in
+
+Both servers are written unless one is asked for (`--server flask|fastapi`):
+they answer the same, and having the pair is what keeps double support a
+property that is checked rather than an intention.
 
 The `users` plugin is **not** a copy of the shared `commons` plugins: it uses
 only core types and core transforms, so it tracks nothing and cannot drift
@@ -251,7 +256,7 @@ flask_app.register_blueprint(coframe_bp)
 # client is served by this very process, same origin, and nobody needs it.
 #
 #   COFRAME_DEV=1 python server.py
-#   (in the coframe workspace) COFRAME_APP_ROOT=<this dir> pnpm --filter shell dev
+#   coframe dev                    (both processes, from the app directory)
 #
 # The alternative is Vite's proxy, already configured in the shared config: set
 # VITE_API_BASE_URL= (empty) and the calls go to the dev server's own origin.
@@ -266,8 +271,7 @@ if os.environ.get("COFRAME_DEV"):
 
 # ── The compiled client ──────────────────────────────────────────────────────
 #
-# Build it from the coframe workspace, pointed at this application:
-#   tools/build-client.sh /path/to/{{name}}
+# Build it into static/, pointed at this application:  coframe build-client
 
 if STATIC.is_dir():
 
@@ -285,7 +289,7 @@ else:
         return jsonify({
             "application": plugins.config.get("name"),
             "api": f"{plugins.config.get('api', {}).get('prefix', 'coframe')}/",
-            "client": "not built — see tools/build-client.sh in the coframe workspace",
+            "client": "not built — run `coframe build-client`",
         })
 
 
@@ -297,13 +301,118 @@ if __name__ == "__main__":
     app.run(host="0.0.0.0", port=port)
 '''
 
+FASTAPI_SERVER_PY = '''"""{{name}} — the FastAPI process.
+
+    uvicorn fastapi-server:app --port 8300     (service)
+    python fastapi-server.py                   (development)
+
+`app` is at module level, so an ASGI server takes it as it is. The twin of
+`server.py`: same four routes, registered by the same call on the other
+framework, and answering byte for byte the same. Keeping the pair is what makes
+double support a property that is checked rather than an intention — delete the
+one you do not serve with, and drop its extra from pyproject.toml.
+
+The bootstrap is not here: `app.py` composes the application, so a server, a
+command and a test all load the same thing.
+"""
+import os
+
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+import coframe.server_utils as srv
+
+import app as application
+
+# ── Application ──────────────────────────────────────────────────────────────
+
+coframe_app, plugins, model = application.setup_db()
+application.seed_admin(coframe_app, model)
+
+STATIC = application.APP_DIR / "static"
+
+# From the environment in production: changing it invalidates the tokens
+# already issued, which is exactly what a key is for.
+SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key-not-for-service")
+
+fastapi_app = FastAPI(
+    title=plugins.config.get("name", "{{name}}"),
+    description=plugins.config.get("description", ""),
+    version=plugins.config.get("version", "0.0.0"),
+)
+
+# ── Coframe — /coframe/* ─────────────────────────────────────────────────────
+#
+# `register_fastapi` registers four routes and nothing application-wide: no
+# CORS, no exception handler, no encoder of its own. An APIRouter would do as
+# a target just as well, the day this process also serves something else.
+
+srv.register_fastapi(fastapi_app, coframe_app, plugins, SECRET_KEY)
+
+# ── The client in development ────────────────────────────────────────────────
+#
+# The Vite dev server runs on a port of its own, so the browser calls this one
+# cross-origin and the request needs CORS. Off unless asked: in service the
+# client is served by this very process, same origin, and nobody needs it.
+#
+#   COFRAME_DEV=1 python fastapi-server.py
+#   coframe dev                    (both processes, from the app directory)
+
+if os.environ.get("COFRAME_DEV"):
+    from fastapi.middleware.cors import CORSMiddleware
+
+    prefix = plugins.config.get("api", {}).get("prefix", "coframe")
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["X-New-Token"],
+    )
+    print("CORS enabled for development — do not do this in service")
+
+# ── The compiled client ──────────────────────────────────────────────────────
+#
+# Build it into static/, pointed at this application:  coframe build-client
+# Mounted last, so the API routes win.
+
+if STATIC.is_dir():
+    fastapi_app.mount("/", StaticFiles(directory=str(STATIC), html=True),
+                      name="client")
+
+else:
+
+    @fastapi_app.get("/")
+    def no_client():
+        return JSONResponse({
+            "application": plugins.config.get("name"),
+            "api": f"{plugins.config.get('api', {}).get('prefix', 'coframe')}/",
+            "client": "not built — run `coframe build-client`",
+        })
+
+
+app = fastapi_app
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = plugins.config.get("api", {}).get("port", 8300)
+    print(f"\\n🚀 {plugins.config.get('name')} on http://localhost:{port}")
+    print(f"📖 OpenAPI docs: http://localhost:{port}/docs\\n")
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+'''
+
 PYPROJECT = '''# {{name}} — third-party dependencies, and its own virtual environment.
 #
 #   uv sync            create .venv and install
 #   uv run app.py ...  run inside it
 #
-# coframe is a dependency like any other: pinned, so what runs is something
-# this file states rather than whatever happens to be on the machine.
+# coframe is a dependency like any other, taken from its repository — there is
+# no index to publish to yet, so the repository is where it comes from. `main`
+# follows the library; replace it with a tag or a commit the day an application
+# in service needs to stop moving.
 
 [project]
 name = "{{name}}"
@@ -312,11 +421,7 @@ description = ""
 requires-python = ">=3.11"
 
 dependencies = [
-    "coframe[flask]",
-    # The WSGI server used in service. Not for throughput: `app.run()` is
-    # Werkzeug's development server.
-    "waitress",
-]
+{{dependencies}}]
 
 [tool.uv]
 package = false
@@ -467,7 +572,7 @@ Application built on [coframe](https://github.com/claudiodriussi/coframe).
 
     uv sync                     create .venv and install the dependencies
     uv run app.py db-sync       create the database from the YAML schema
-    uv run server.py            http://localhost:8300 — admin/admin
+{{run}}
 
 ## Where things go
 
@@ -487,11 +592,16 @@ from the dispatcher, from anything else in this process, and from a command.
 ## The admin client
 
 An application does not own a client: it contributes UI through the `.svelte`
-files of its plugins, and the generic shell of the coframe workspace builds it.
+files of its plugins, and the generic shell — the only re-pointable client —
+builds them.
 
-    tools/build-client.sh /path/to/{{name}}
+    coframe dev              this server and the client, together, hot-reloaded
+    coframe build-client     the compiled client, into static/
 
-The result lands in `static/`, which `server.py` serves at the root.
+Both need a checkout of the client repository: they look beside the coframe
+checkout, and take `$COFRAME_UI` when it is somewhere else.
+
+The result lands in `static/`, which the server serves at the root.
 '''
 
 PLUGIN_MENU = '''# The menu of the admin client, and the pages it opens.
@@ -516,10 +626,28 @@ menu_items:
   # items: { label: Items, icon: package, parent: masters, order: 20, action: stack_push, panel: item_list }
 '''
 
+# What each choice writes, and what it costs in dependencies. `both` is the
+# default because the pair is what keeps the two paths honest: a divergence
+# shows up on the machine that wrote them, not on the one that switches later.
+SERVERS = {
+    "flask": [("server.py", SERVER_PY)],
+    "fastapi": [("fastapi-server.py", FASTAPI_SERVER_PY)],
+    "both": [("server.py", SERVER_PY),
+             ("fastapi-server.py", FASTAPI_SERVER_PY)],
+}
+
+EXTRAS = {"flask": "flask", "fastapi": "fastapi", "both": "flask,fastapi"}
+
+RUN = {
+    "flask": "    uv run server.py            http://localhost:8300 — admin/admin",
+    "fastapi": "    uv run fastapi-server.py    http://localhost:8300 — admin/admin",
+    "both": ("    uv run server.py            Flask   — http://localhost:8300, admin/admin\n"
+             "    uv run fastapi-server.py    FastAPI — the same four routes, /docs too"),
+}
+
 FILES = [
     ("config.yaml", CONFIG_YAML),
     ("app.py", APP_PY),
-    ("server.py", SERVER_PY),
     ("pyproject.toml", PYPROJECT),
     (".gitignore", GITIGNORE),
     ("README.md", README),
@@ -559,8 +687,27 @@ def _coframe_source() -> str:
     )
 
 
+def _dependencies(server: str) -> str:
+    """The dependency list of a generated application.
+
+    coframe comes from its repository: there is no index to publish to yet, so
+    naming the repository is the only way this file can state where the library
+    comes from. The extras follow the servers written — an application installs
+    the framework it serves with, and not the other one.
+    """
+    lines = [f'    "coframe[{EXTRAS[server]}] @ '
+             f'git+https://github.com/claudiodriussi/coframe@main",']
+    if server in ("flask", "both"):
+        lines += [
+            "    # The WSGI server used in service. Not for throughput: `app.run()` is",
+            "    # Werkzeug's development server.",
+            '    "waitress",',
+        ]
+    return "\n".join(lines) + "\n"
+
+
 def create_app(name: str, directory: Optional[Path] = None,
-               force: bool = False) -> Path:
+               force: bool = False, server: str = "both") -> Path:
     """
     Write a new application.
 
@@ -568,6 +715,7 @@ def create_app(name: str, directory: Optional[Path] = None,
         name:      application name — also the name of its plugin
         directory: where to write it (default: ./<name>)
         force:     write into a directory that already has files
+        server:    which server to write — 'flask', 'fastapi' or 'both'
 
     Returns:
         The directory written to
@@ -589,9 +737,18 @@ def create_app(name: str, directory: Optional[Path] = None,
         raise FileExistsError(
             f"{target} is not empty. Use --force to write into it anyway.")
 
-    substitutions = {"{{name}}": name, "{{sources}}": _coframe_source()}
+    if server not in SERVERS:
+        raise ValueError(f"'{server}' is not a server: "
+                         f"{', '.join(SERVERS)}")
 
-    for relative, template in FILES:
+    substitutions = {
+        "{{name}}": name,
+        "{{sources}}": _coframe_source(),
+        "{{dependencies}}": _dependencies(server),
+        "{{run}}": RUN[server],
+    }
+
+    for relative, template in FILES + SERVERS[server]:
         path = target / _fill(relative, substitutions)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(_fill(template, substitutions), encoding="utf-8")
@@ -605,18 +762,22 @@ def _fill(text: str, substitutions: dict) -> str:
     return text
 
 
-def print_next_steps(target: Path, name: str) -> None:
+def print_next_steps(target: Path, name: str, server: str = "both") -> None:
     """What to type next, in the order that works."""
     where = target if not str(target).startswith(str(Path.cwd())) else \
         Path(target).relative_to(Path.cwd())
+    run = RUN[server]
     print(f"""
 Written: {target}
 
     cd {where}
-    uv sync                  create .venv and install
-    uv run app.py db-sync    create the database from the YAML schema
-    uv run server.py         http://localhost:8300 — admin/admin
+    uv sync                     create .venv and install
+    uv run app.py db-sync       create the database from the YAML schema
+{run}
 
 The schema goes in plugins/{name}/model.yaml, the domain operations in
 plugins/{name}/*.py as @endpoint. See README.md.
+
+`coframe dev` runs this server and the admin client together; `coframe
+build-client` compiles the client into static/.
 """, file=sys.stderr)
