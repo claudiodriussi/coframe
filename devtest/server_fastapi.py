@@ -8,7 +8,7 @@ loading, model generation and the seed data come from devtest.py, so the test
 harness and the server always run the same application — importing it also
 registers the endpoints it declares.
 
-Run from this directory:  python fastapi-server.py
+Run from this directory:  python server_fastapi.py
 """
 import os
 

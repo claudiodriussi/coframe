@@ -16,7 +16,7 @@ import yaml
 from coframe import dev
 
 
-def write_app(directory: Path, port: int = 8300, servers=("fastapi-server.py",),
+def write_app(directory: Path, port: int = 8300, servers=("server_fastapi.py",),
               standalone: bool = False) -> Path:
     """An application directory, reduced to what `dev` looks at."""
     directory.mkdir(parents=True, exist_ok=True)
@@ -151,23 +151,23 @@ def test_a_directory_that_is_not_a_client_is_refused(tmp_path):
 
 def test_an_app_with_its_own_environment_runs_through_uv(tmp_path):
     app = write_app(tmp_path / "a", standalone=True)
-    command = dev.backend_command(app, app / "fastapi-server.py")
-    assert command[1:] == ["run", "fastapi-server.py"]
+    command = dev.backend_command(app, app / "server_fastapi.py")
+    assert command[1:] == ["run", "server_fastapi.py"]
     assert command[0].endswith("uv")
 
 
 def test_the_library_checkout_is_layered_on_for_the_run(tmp_path):
     app = write_app(tmp_path / "a", standalone=True)
     src = tmp_path / "coframe"
-    command = dev.backend_command(app, app / "fastapi-server.py", src)
+    command = dev.backend_command(app, app / "server_fastapi.py", src)
     assert command[2:4] == ["--with-editable", str(src)]
 
 
 def test_a_bench_inside_the_checkout_runs_with_this_interpreter(tmp_path):
     """No pyproject.toml: no environment of its own to step into."""
     app = write_app(tmp_path / "devtest")
-    command = dev.backend_command(app, app / "fastapi-server.py", tmp_path / "coframe")
-    assert command == [sys.executable, "fastapi-server.py"]
+    command = dev.backend_command(app, app / "server_fastapi.py", tmp_path / "coframe")
+    assert command == [sys.executable, "server_fastapi.py"]
 
 
 def test_running_nothing_is_refused(tmp_path, monkeypatch):

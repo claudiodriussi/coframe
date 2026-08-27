@@ -39,12 +39,14 @@ UI_MARKER = Path("apps") / "shell" / "package.json"
 # from the library checkout and from the application.
 UI_CANDIDATES = ["client/svelte", "coframe-ui"]
 
-# Preferred entry point per framework. `server.py` is what `coframe new`
-# writes, and it is taken when neither twin is present.
+# Entry points per framework, best name first. `coframe new` writes
+# `server_*.py`; the rest are what applications generated earlier have, and
+# they keep working because a name changing is not a reason to rewrite an app.
 SERVERS = {
-    "fastapi": ["fastapi-server.py", "server.py"],
-    "flask": ["flask-server.py", "server.py"],
-    None: ["fastapi-server.py", "server.py", "flask-server.py"],
+    "fastapi": ["server_fastapi.py", "fastapi-server.py"],
+    "flask": ["server_flask.py", "flask-server.py", "server.py"],
+    None: ["server_fastapi.py", "server_flask.py",
+           "fastapi-server.py", "flask-server.py", "server.py"],
 }
 
 

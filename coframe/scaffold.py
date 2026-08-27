@@ -8,8 +8,8 @@ validated in the applications already in service, reduced to the minimum:
     myapp/
       config.yaml          plugin roots, database, api, authentication
       app.py               loads the application, and carries the commands
-      server.py            the Flask process — `app` at module level
-      fastapi-server.py    its FastAPI twin — same routes, other framework
+      server_flask.py      the Flask process — `app` at module level
+      server_fastapi.py    its twin — same routes, the other framework
       pyproject.toml       dependencies, and its own virtual environment
       plugins/myapp/       where the domain goes
       plugins/users/       the seed: a User table, so there is a way in
@@ -92,7 +92,7 @@ taken by a WSGI server without going through a `main()`.
     python app.py db-sync       apply it (additions only, never a drop)
     python app.py check         validate the plugin descriptors
     python app.py dump-table    the schema as it comes out of the merge
-    python server.py            start the process (development)
+    python server_flask.py      start the process (development)
 
 `model.py` is GENERATED from the YAML schema: do not edit it. Inside a plugin,
 `model.py` is real code — the behaviour mixins — and is versioned.
@@ -203,8 +203,8 @@ if __name__ == "__main__":
 
 SERVER_PY = '''"""{{name}} — the Flask process.
 
-    waitress-serve --port=8300 server:app     (service)
-    python server.py                          (development)
+    waitress-serve --port=8300 server_flask:app     (service)
+    python server_flask.py                          (development)
 
 `app` is at module level, so a WSGI server takes it as it is. A WSGI server
 rather than `app.run()` is about HTTP hardening, not load: `app.run()` is
@@ -255,7 +255,7 @@ flask_app.register_blueprint(coframe_bp)
 # cross-origin and the request needs CORS. Off unless asked: in service the
 # client is served by this very process, same origin, and nobody needs it.
 #
-#   COFRAME_DEV=1 python server.py
+#   COFRAME_DEV=1 python server_flask.py
 #   coframe dev                    (both processes, from the app directory)
 #
 # The alternative is Vite's proxy, already configured in the shared config: set
@@ -303,11 +303,11 @@ if __name__ == "__main__":
 
 FASTAPI_SERVER_PY = '''"""{{name}} — the FastAPI process.
 
-    uvicorn fastapi-server:app --port 8300     (service)
-    python fastapi-server.py                   (development)
+    uvicorn server_fastapi:app --port 8300     (service)
+    python server_fastapi.py                   (development)
 
 `app` is at module level, so an ASGI server takes it as it is. The twin of
-`server.py`: same four routes, registered by the same call on the other
+`server_flask.py`: same four routes, registered by the same call on the other
 framework, and answering byte for byte the same. Keeping the pair is what makes
 double support a property that is checked rather than an intention — delete the
 one you do not serve with, and drop its extra from pyproject.toml.
@@ -356,7 +356,7 @@ srv.register_fastapi(fastapi_app, coframe_app, plugins, SECRET_KEY)
 # cross-origin and the request needs CORS. Off unless asked: in service the
 # client is served by this very process, same origin, and nobody needs it.
 #
-#   COFRAME_DEV=1 python fastapi-server.py
+#   COFRAME_DEV=1 python server_fastapi.py
 #   coframe dev                    (both processes, from the app directory)
 
 if os.environ.get("COFRAME_DEV"):
@@ -581,7 +581,7 @@ Application built on [coframe](https://github.com/claudiodriussi/coframe).
 | `plugins/{{name}}/model.yaml` | the schema — the only definition there is |
 | `plugins/{{name}}/*.py` | the domain operations, as `@endpoint` |
 | `app.py` | loads the application, carries the commands |
-| `server.py` | composes the process |
+| `server_flask.py`, `server_fastapi.py` | compose the process — keep the one you serve with |
 | `model.py` | GENERATED — do not edit |
 
 The operations of the domain belong in the plugin, not in `app.py` and not in a
@@ -629,20 +629,23 @@ menu_items:
 # What each choice writes, and what it costs in dependencies. `both` is the
 # default because the pair is what keeps the two paths honest: a divergence
 # shows up on the machine that wrote them, not on the one that switches later.
+# Underscores, not hyphens: `waitress-serve server_flask:app` needs a module
+# name it can import, and a hyphen is not one. Symmetric names also mean
+# neither framework reads as the default and the other as an afterthought.
 SERVERS = {
-    "flask": [("server.py", SERVER_PY)],
-    "fastapi": [("fastapi-server.py", FASTAPI_SERVER_PY)],
-    "both": [("server.py", SERVER_PY),
-             ("fastapi-server.py", FASTAPI_SERVER_PY)],
+    "flask": [("server_flask.py", SERVER_PY)],
+    "fastapi": [("server_fastapi.py", FASTAPI_SERVER_PY)],
+    "both": [("server_flask.py", SERVER_PY),
+             ("server_fastapi.py", FASTAPI_SERVER_PY)],
 }
 
 EXTRAS = {"flask": "flask", "fastapi": "fastapi", "both": "flask,fastapi"}
 
 RUN = {
-    "flask": "    uv run server.py            http://localhost:8300 — admin/admin",
-    "fastapi": "    uv run fastapi-server.py    http://localhost:8300 — admin/admin",
-    "both": ("    uv run server.py            Flask   — http://localhost:8300, admin/admin\n"
-             "    uv run fastapi-server.py    FastAPI — the same four routes, /docs too"),
+    "flask": "    uv run server_flask.py      http://localhost:8300 — admin/admin",
+    "fastapi": "    uv run server_fastapi.py    http://localhost:8300 — admin/admin",
+    "both": ("    uv run server_flask.py      Flask   — http://localhost:8300, admin/admin\n"
+             "    uv run server_fastapi.py    FastAPI — the same four routes, /docs too"),
 }
 
 FILES = [

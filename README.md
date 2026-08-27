@@ -78,7 +78,7 @@ The `devtest` directory contains examples to help you understand the framework:
 
 2. Start the Flask server:
    ```bash
-   python flask-server.py
+   python server_flask.py
    ```
 
 3. Open the Jupyter notebook to test API functionality:

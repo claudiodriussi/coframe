@@ -785,7 +785,7 @@ to every query on a matching model. Behaviors are registered at startup via
 `app.add_query_behavior()` and are completely decoupled from the querybuilder itself.
 
 ```python
-# fastapi-server.py
+# server_fastapi.py
 from plugins.common.model import Archivable
 coframe_app.add_query_behavior(Archivable)
 ```

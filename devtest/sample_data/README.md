@@ -12,7 +12,7 @@ This directory contains sample data to populate the Coframe library database wit
    python devtest.py  # Regenerates model.py with Publisher and new Book fields
    ```
 
-2. Make sure the database is initialized (run flask-server.py or devtest.py once)
+2. Make sure the database is initialized (run server_flask.py or devtest.py once)
 
 ### Import Data
 

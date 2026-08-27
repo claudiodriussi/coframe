@@ -7,7 +7,7 @@ whatever it is given — here the application itself, because this file *is* the
 application. Plugin loading, model generation and the seed data come from
 devtest.py, so both servers and the test harness run the same application.
 
-Run from this directory:  python flask-server.py
+Run from this directory:  python server_flask.py
 """
 import os
 

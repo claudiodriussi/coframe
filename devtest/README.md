@@ -18,7 +18,7 @@ python devtest.py
 
 ## Flask Server
 
-The `flask-server.py` script provides a Flask-based API server for interacting
+The `server_flask.py` script provides a Flask-based API server for interacting
 with Coframe.
 
 Please read the main README.md file.

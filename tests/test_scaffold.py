@@ -26,13 +26,19 @@ def app(tmp_path):
 
 def test_both_servers_by_default(app):
     target = app()
-    assert (target / "server.py").is_file()
-    assert (target / "fastapi-server.py").is_file()
+    assert (target / "server_flask.py").is_file()
+    assert (target / "server_fastapi.py").is_file()
+
+
+def test_the_names_are_importable(app):
+    """`waitress-serve server_flask:app` needs a module name, not a filename."""
+    for path in app().glob("server_*.py"):
+        assert path.stem.isidentifier(), path
 
 
 @pytest.mark.parametrize("server,written,absent", [
-    ("flask", "server.py", "fastapi-server.py"),
-    ("fastapi", "fastapi-server.py", "server.py"),
+    ("flask", "server_flask.py", "server_fastapi.py"),
+    ("fastapi", "server_fastapi.py", "server_flask.py"),
 ])
 def test_asking_for_one_writes_only_that_one(app, server, written, absent):
     target = app(server)
@@ -71,8 +77,8 @@ def test_the_wsgi_server_comes_only_with_flask(app):
 
 def test_the_readme_names_the_entry_points_that_exist(app):
     readme = (app("fastapi") / "README.md").read_text()
-    assert "uv run fastapi-server.py" in readme
-    assert "uv run server.py" not in readme
+    assert "uv run server_fastapi.py" in readme
+    assert "uv run server_flask.py" not in readme
 
 
 # ── Coherence ────────────────────────────────────────────────────────────────
