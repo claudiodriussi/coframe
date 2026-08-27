@@ -1,0 +1,288 @@
+"""coframe dev — the processes a development session needs, started together.
+
+A session is two processes that must agree on three things: which application
+is being served, that the browser may talk to it from another port, and which
+copy of the library is running. Started by hand they agree only as long as
+nobody mistypes; started here they cannot disagree, because each fact is read
+from one place.
+
+What the command knows by itself, and what has to be told:
+
+  the application    the directory given, or the current one, when it holds a
+                     `config.yaml` — and the API port is read from it
+  the library        the package this command belongs to; when that is a source
+                     checkout, the application runs against it instead of the
+                     version it declares (`--src`, `$COFRAME_SRC` to say which)
+  the client         the only thing nobody can derive: `--ui`, `$COFRAME_UI`,
+                     or the workspace layout, where it sits beside the library
+
+Nothing here belongs in production: `COFRAME_DEV=1` opens CORS, and a server
+started this way is the development server of its framework. What does belong
+there is the artifact — `build_client` compiles the same client into the
+application's `static/`, which its own server serves at the root.
+"""
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import List, Optional
+
+import yaml
+
+# The client repository, recognised by the one client every checkout has.
+UI_MARKER = Path("apps") / "shell" / "package.json"
+
+# Where a client checkout sits when nobody says: the workspace layout, seen
+# from the library checkout and from the application.
+UI_CANDIDATES = ["client/svelte", "coframe-ui"]
+
+# Preferred entry point per framework. `server.py` is what `coframe new`
+# writes, and it is taken when neither twin is present.
+SERVERS = {
+    "fastapi": ["fastapi-server.py", "server.py"],
+    "flask": ["flask-server.py", "server.py"],
+    None: ["fastapi-server.py", "server.py", "flask-server.py"],
+}
+
+
+class DevError(Exception):
+    """Something the session needs is missing, and the message says which."""
+
+
+class _Finished(Exception):
+    """One of the processes ended: stop the others and return its status."""
+
+
+# ── What is where ────────────────────────────────────────────────────────────
+
+def find_app(given: Optional[str] = None) -> Path:
+    """The application directory: the one given, or the current one."""
+    app = Path(given).resolve() if given else Path.cwd()
+    if not (app / "config.yaml").is_file():
+        raise DevError(
+            f"{app} holds no config.yaml — an application directory does.\n"
+            f"Give one: coframe dev /path/to/app")
+    return app
+
+
+def read_api_port(app: Path, default: int = 8300) -> int:
+    """The port the application serves on, as its own config declares it."""
+    config = yaml.safe_load((app / "config.yaml").read_text(encoding="utf-8")) or {}
+    return (config.get("api") or {}).get("port", default)
+
+
+def find_source_checkout(given: Optional[str] = None) -> Optional[Path]:
+    """The library sources to run against, if there are any.
+
+    Explicit first, then `$COFRAME_SRC`, then the checkout this very command
+    was imported from — which is the case that matters on a workstation
+    developing the library and an application at the same time. Installed as a
+    package, nothing is returned and the application runs with what it declares.
+    """
+    for candidate in (given, os.environ.get("COFRAME_SRC")):
+        if candidate:
+            path = Path(candidate).resolve()
+            if not (path / "pyproject.toml").is_file():
+                raise DevError(f"{path} is not a coframe checkout (no pyproject.toml).")
+            return path
+
+    import coframe
+    repo = Path(coframe.__file__).resolve().parent.parent
+    return repo if (repo / "pyproject.toml").is_file() else None
+
+
+def find_ui(given: Optional[str] = None, app: Optional[Path] = None,
+            src: Optional[Path] = None) -> Path:
+    """The client checkout — the one thing that cannot be derived.
+
+    Asked for explicitly, named by `$COFRAME_UI`, or found where the workspace
+    layout puts it: beside the library checkout, or one or two levels above the
+    application. When none of that holds, the error lists what was tried, so
+    the answer is to point at it rather than to move it.
+    """
+    for candidate in (given, os.environ.get("COFRAME_UI")):
+        if candidate:
+            path = Path(candidate).resolve()
+            if not (path / UI_MARKER).is_file():
+                raise DevError(f"{path} is not a coframe-ui checkout (no {UI_MARKER}).")
+            return path
+
+    tried: List[Path] = []
+    for base in [p for p in (src.parent if src else None,
+                             app.parent if app else None,
+                             app.parent.parent if app else None) if p]:
+        for relative in UI_CANDIDATES:
+            path = (base / relative).resolve()
+            if path not in tried:
+                tried.append(path)
+            if (path / UI_MARKER).is_file():
+                return path
+
+    listed = "\n  ".join(str(p) for p in tried) or "(nowhere to look)"
+    raise DevError(
+        "No coframe-ui checkout found. Looked in:\n  " + listed +
+        "\nSay where it is: coframe dev --ui /path/to/coframe-ui, or set "
+        "COFRAME_UI.\nOr start the server alone: coframe dev --no-client")
+
+
+def pick_server(app: Path, framework: Optional[str] = None) -> Path:
+    """The entry point to run, given the framework asked for (or any)."""
+    for name in SERVERS[framework]:
+        if (app / name).is_file():
+            return app / name
+
+    wanted = SERVERS[framework]
+    raise DevError(
+        f"{app} holds none of: {', '.join(wanted)}"
+        + (f" — it has no {framework} server." if framework else ""))
+
+
+# ── What to run ──────────────────────────────────────────────────────────────
+
+def backend_command(app: Path, server: Path, src: Optional[Path] = None) -> List[str]:
+    """How this application starts.
+
+    An application with a `pyproject.toml` has an environment of its own, and
+    `uv` is what puts it there; the library checkout, when there is one, is
+    layered on top for the run only — nothing is left installed afterwards.
+    An application without one (the benches inside the library checkout) runs
+    with the interpreter that is already here.
+    """
+    if not (app / "pyproject.toml").is_file():
+        return [sys.executable, server.name]
+
+    uv = shutil.which("uv")
+    if not uv:
+        raise DevError(
+            f"{app} declares its own environment but uv is not installed.\n"
+            f"Install uv, or run it yourself: .venv/bin/python {server.name}")
+
+    editable = ["--with-editable", str(src)] if src else []
+    return [uv, "run", *editable, server.name]
+
+
+def client_command() -> List[str]:
+    """How the generic shell starts. It is told which app by the environment."""
+    pnpm = shutil.which("pnpm")
+    if not pnpm:
+        raise DevError("pnpm is not installed — needed for the client.\n"
+                       "Start the server alone: coframe dev --no-client")
+    return [pnpm, "--filter", "shell", "dev"]
+
+
+def build_command(app: Path) -> List[str]:
+    """How the client is compiled for one application.
+
+    The build itself belongs to the client repository — this only says which
+    application it is for, and lets that repository decide what building means.
+    """
+    pnpm = shutil.which("pnpm")
+    if not pnpm:
+        raise DevError("pnpm is not installed — needed to build the client.")
+    return [pnpm, "build:app", str(app)]
+
+
+# ── Running them ─────────────────────────────────────────────────────────────
+
+def _spawn(command: List[str], cwd: Path, env: dict) -> subprocess.Popen:
+    """Start a child in a process group of its own.
+
+    Neither child is the process that does the work: `uv` runs the server,
+    `pnpm` runs vite, and neither forwards a signal to what it started. Given
+    its own group, a child can be stopped whole — and this is the only way the
+    two paths behave alike, since when one process ends by itself there is no
+    terminal signal to reach the other.
+    """
+    group = ({"start_new_session": True} if os.name == "posix"
+             else {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP})
+    return subprocess.Popen(command, cwd=str(cwd),
+                            env={**os.environ, **env}, **group)
+
+
+def _signal_group(process: subprocess.Popen, sig: int) -> None:
+    """Signal a child and everything it started; ignore what is already gone."""
+    if process.poll() is not None:
+        return
+    try:
+        if os.name == "posix":
+            os.killpg(os.getpgid(process.pid), sig)
+        elif sig == signal.SIGTERM:
+            process.terminate()
+        else:
+            process.kill()
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
+def run(app: Optional[str] = None, framework: Optional[str] = None,
+        src: Optional[str] = None, ui: Optional[str] = None,
+        no_server: bool = False, no_client: bool = False) -> int:
+    """Start what was asked for, and keep the two alive together.
+
+    They live and die as one: when either process ends, the other is stopped.
+    A backend that failed to start would otherwise leave a client talking to
+    nothing, which looks like a bug in the application.
+    """
+    if no_server and no_client:
+        raise DevError("Nothing to run: --no-server and --no-client together.")
+
+    app_dir = find_app(app)
+    checkout = find_source_checkout(src)
+    ui_dir = find_ui(ui, app_dir, checkout) if not no_client else None
+
+    processes: List[subprocess.Popen] = []
+
+    if not no_server:
+        server = pick_server(app_dir, framework)
+        command = backend_command(app_dir, server, checkout)
+        print(f"server  {server.name}  →  http://localhost:{read_api_port(app_dir)}", flush=True)
+        if checkout:
+            print(f"        against the library at {checkout}", flush=True)
+        processes.append(_spawn(command, app_dir, {"COFRAME_DEV": "1"}))
+
+    if not no_client:
+        print(f"client  shell  ←  {app_dir}", flush=True)
+        processes.append(_spawn(client_command(), ui_dir,
+                                {"COFRAME_APP_ROOT": str(app_dir)}))
+
+    print("Ctrl-C stops both.\n", flush=True)
+
+    status = 0
+    try:
+        while True:
+            for process in processes:
+                code = process.poll()
+                if code is not None:
+                    status = code
+                    raise _Finished
+            time.sleep(0.2)
+    except (KeyboardInterrupt, _Finished):
+        pass
+    finally:
+        for process in processes:
+            _signal_group(process, signal.SIGTERM)
+        for process in processes:
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                _signal_group(process, signal.SIGKILL)
+                process.wait()
+
+    return status
+
+
+def build_client(app: Optional[str] = None, ui: Optional[str] = None) -> int:
+    """Compile the client of an application into its `static/`.
+
+    The development twin of `run`: same two questions — which application, and
+    where the client checkout is — answered the same way, so an application
+    that can be developed can be built without learning a second set of rules.
+    """
+    app_dir = find_app(app)
+    ui_dir = find_ui(ui, app_dir, find_source_checkout())
+
+    print(f"client  →  {app_dir / 'static'}", flush=True)
+    return subprocess.call(build_command(app_dir), cwd=str(ui_dir))

@@ -414,6 +414,9 @@ examples:
   db-check                              compare the database with the schema (exit 1 if it differs)
   db-sync --dry-run                     show the DDL an alignment would run
   db-sync                               apply it (adds only — never drops, never narrows)
+  dev                                   run this app and its client, together
+  dev /path/to/app --no-client          just the server, on another app
+  build-client                          compile this app's client into static/
         """,
     )
 
@@ -487,6 +490,37 @@ examples:
                    help='Where to write it (default: ./<name>)')
     p.add_argument('--force', action='store_true',
                    help='Write into a directory that already holds files')
+
+    # ── dev ────────────────────────────────────────────────────────────────────
+    # Also without an application loaded: it starts processes, it does not
+    # compose the app — the server it spawns does that for itself.
+    p = sub.add_parser(
+        'dev',
+        help='Start the development processes: the app server and the client',
+    )
+    p.add_argument('app', nargs='?', metavar='APP',
+                   help='Application directory (default: the current one)')
+    p.add_argument('--flask', dest='framework', action='store_const', const='flask',
+                   help='Run the Flask entry point')
+    p.add_argument('--fastapi', dest='framework', action='store_const', const='fastapi',
+                   help='Run the FastAPI entry point')
+    p.add_argument('--src', metavar='PATH',
+                   help='Library checkout to run against (default: $COFRAME_SRC, '
+                        'or the one this command was imported from)')
+    p.add_argument('--ui', metavar='PATH',
+                   help='Client checkout (default: $COFRAME_UI, or the workspace layout)')
+    p.add_argument('--no-server', action='store_true', help='Client only')
+    p.add_argument('--no-client', action='store_true', help='Server only')
+
+    # ── build-client ───────────────────────────────────────────────────────────
+    p = sub.add_parser(
+        'build-client',
+        help="Compile the admin client into the application's static/",
+    )
+    p.add_argument('app', nargs='?', metavar='APP',
+                   help='Application directory (default: the current one)')
+    p.add_argument('--ui', metavar='PATH',
+                   help='Client checkout (default: $COFRAME_UI, or the workspace layout)')
 
     return parser
 
@@ -616,7 +650,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     """
     Entry point of the `coframe` command.
 
-    It carries what can be done **without** an application — today `new`. Every
+    It carries what can be done **without** an application — `new`, `dev`,
+    `build-client`. Every
     other command needs the application loaded, and loading it is the
     application's own business: its `app.py` composes the sequence, registers
     its query behaviours and then calls `run_cli`. Two sequences for the same
@@ -636,6 +671,18 @@ def main(argv: Optional[List[str]] = None) -> None:
             sys.exit(1)
         print_next_steps(target, args.name)
         return
+
+    if args.command in ('dev', 'build-client'):
+        from coframe import dev
+        try:
+            if args.command == 'dev':
+                sys.exit(dev.run(app=args.app, framework=args.framework,
+                                 src=args.src, ui=args.ui,
+                                 no_server=args.no_server, no_client=args.no_client))
+            sys.exit(dev.build_client(app=args.app, ui=args.ui))
+        except dev.DevError as e:
+            print(f'Error: {e}', file=sys.stderr)
+            sys.exit(1)
 
     if args.command:
         print(f'`{args.command}` needs the application loaded: run it from the '

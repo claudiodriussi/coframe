@@ -1,0 +1,185 @@
+"""`coframe dev` — what it finds, and what it refuses to guess.
+
+The command exists to make three facts agree: which application is served,
+which library it runs against, and where the client is. Two of them it derives;
+the third it cannot, and the value of the whole thing rests on the difference
+being visible. So what is tested here is the resolution — not the processes,
+which are the frameworks' own development servers and are not ours to check.
+"""
+import os
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+from coframe import dev
+
+
+def write_app(directory: Path, port: int = 8300, servers=("fastapi-server.py",),
+              standalone: bool = False) -> Path:
+    """An application directory, reduced to what `dev` looks at."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "config.yaml").write_text(
+        yaml.safe_dump({"name": directory.name, "api": {"port": port}}))
+    for server in servers:
+        (directory / server).write_text("# server\n")
+    if standalone:
+        (directory / "pyproject.toml").write_text("[project]\nname='x'\n")
+    return directory
+
+
+def write_ui(directory: Path) -> Path:
+    """A client checkout, recognised by the client every one of them has."""
+    (directory / "apps" / "shell").mkdir(parents=True, exist_ok=True)
+    (directory / "apps" / "shell" / "package.json").write_text("{}")
+    return directory
+
+
+@pytest.fixture(autouse=True)
+def no_inherited_environment(monkeypatch):
+    """The developer's own COFRAME_* must not decide the outcome of a test."""
+    for name in ("COFRAME_SRC", "COFRAME_UI"):
+        monkeypatch.delenv(name, raising=False)
+
+
+# ── The application ──────────────────────────────────────────────────────────
+
+def test_the_current_directory_is_the_default(tmp_path, monkeypatch):
+    app = write_app(tmp_path / "myapp")
+    monkeypatch.chdir(app)
+    assert dev.find_app() == app
+
+
+def test_a_directory_without_config_is_not_an_application(tmp_path):
+    with pytest.raises(dev.DevError, match="no config.yaml"):
+        dev.find_app(str(tmp_path))
+
+
+def test_the_port_is_the_one_the_app_declares(tmp_path):
+    assert dev.read_api_port(write_app(tmp_path / "a", port=8302)) == 8302
+
+
+def test_an_app_that_declares_no_port_gets_the_default(tmp_path):
+    app = tmp_path / "a"
+    app.mkdir()
+    (app / "config.yaml").write_text(yaml.safe_dump({"name": "a"}))
+    assert dev.read_api_port(app) == 8300
+
+
+# ── The entry point ──────────────────────────────────────────────────────────
+
+def test_fastapi_is_preferred_when_nothing_is_asked(tmp_path):
+    app = write_app(tmp_path / "a", servers=("fastapi-server.py", "server.py"))
+    assert dev.pick_server(app).name == "fastapi-server.py"
+
+
+def test_the_scaffold_entry_point_is_taken_when_it_is_all_there_is(tmp_path):
+    app = write_app(tmp_path / "a", servers=("server.py",))
+    assert dev.pick_server(app).name == "server.py"
+
+
+def test_asking_for_flask_takes_the_flask_twin(tmp_path):
+    app = write_app(tmp_path / "a", servers=("fastapi-server.py", "flask-server.py"))
+    assert dev.pick_server(app, "flask").name == "flask-server.py"
+
+
+def test_asking_for_a_framework_that_is_not_there_says_so(tmp_path):
+    app = write_app(tmp_path / "a", servers=("fastapi-server.py",))
+    with pytest.raises(dev.DevError, match="no flask server"):
+        dev.pick_server(app, "flask")
+
+
+# ── The library ──────────────────────────────────────────────────────────────
+
+def test_the_environment_names_the_checkout(tmp_path, monkeypatch):
+    checkout = tmp_path / "coframe"
+    checkout.mkdir()
+    (checkout / "pyproject.toml").write_text("[project]\nname='coframe'\n")
+    monkeypatch.setenv("COFRAME_SRC", str(checkout))
+    assert dev.find_source_checkout() == checkout
+
+
+def test_a_directory_that_is_not_a_checkout_is_refused(tmp_path):
+    with pytest.raises(dev.DevError, match="not a coframe checkout"):
+        dev.find_source_checkout(str(tmp_path))
+
+
+def test_running_from_a_checkout_is_the_default(tmp_path):
+    """This test suite runs from one, which is the case it describes."""
+    found = dev.find_source_checkout()
+    assert found is not None and (found / "pyproject.toml").is_file()
+
+
+# ── The client ───────────────────────────────────────────────────────────────
+
+def test_the_environment_names_the_client(tmp_path, monkeypatch):
+    ui = write_ui(tmp_path / "coframe-ui")
+    monkeypatch.setenv("COFRAME_UI", str(ui))
+    assert dev.find_ui() == ui
+
+
+def test_the_workspace_layout_is_the_fallback(tmp_path):
+    """<ws>/coframe and <ws>/client/svelte — the layout the workspace holds."""
+    src = tmp_path / "coframe"
+    src.mkdir()
+    ui = write_ui(tmp_path / "client" / "svelte")
+    assert dev.find_ui(app=write_app(tmp_path / "app"), src=src) == ui
+
+
+def test_a_client_beside_the_application_is_found(tmp_path):
+    ui = write_ui(tmp_path / "coframe-ui")
+    app = write_app(tmp_path / "myapp")
+    assert dev.find_ui(app=app) == ui
+
+
+def test_not_finding_it_lists_where_it_looked(tmp_path):
+    app = write_app(tmp_path / "myapp")
+    with pytest.raises(dev.DevError) as caught:
+        dev.find_ui(app=app)
+    message = str(caught.value)
+    assert "COFRAME_UI" in message and "--no-client" in message
+    assert str((tmp_path / "coframe-ui").resolve()) in message
+
+
+def test_a_directory_that_is_not_a_client_is_refused(tmp_path):
+    with pytest.raises(dev.DevError, match="not a coframe-ui checkout"):
+        dev.find_ui(str(tmp_path))
+
+
+# ── The commands ─────────────────────────────────────────────────────────────
+
+def test_an_app_with_its_own_environment_runs_through_uv(tmp_path):
+    app = write_app(tmp_path / "a", standalone=True)
+    command = dev.backend_command(app, app / "fastapi-server.py")
+    assert command[1:] == ["run", "fastapi-server.py"]
+    assert command[0].endswith("uv")
+
+
+def test_the_library_checkout_is_layered_on_for_the_run(tmp_path):
+    app = write_app(tmp_path / "a", standalone=True)
+    src = tmp_path / "coframe"
+    command = dev.backend_command(app, app / "fastapi-server.py", src)
+    assert command[2:4] == ["--with-editable", str(src)]
+
+
+def test_a_bench_inside_the_checkout_runs_with_this_interpreter(tmp_path):
+    """No pyproject.toml: no environment of its own to step into."""
+    app = write_app(tmp_path / "devtest")
+    command = dev.backend_command(app, app / "fastapi-server.py", tmp_path / "coframe")
+    assert command == [sys.executable, "fastapi-server.py"]
+
+
+def test_running_nothing_is_refused(tmp_path, monkeypatch):
+    monkeypatch.chdir(write_app(tmp_path / "a"))
+    with pytest.raises(dev.DevError, match="Nothing to run"):
+        dev.run(no_server=True, no_client=True)
+
+
+# ── Building the client ──────────────────────────────────────────────────────
+
+def test_the_build_names_the_application_it_is_for(tmp_path):
+    app = write_app(tmp_path / "a")
+    command = dev.build_command(app)
+    assert command[1:] == ["build:app", str(app)]
+    assert command[0].endswith("pnpm")
