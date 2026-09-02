@@ -77,7 +77,14 @@ library, and nothing on your disk. The next chapters build one that follows
 
 ## 2. The workstation: three repositories
 
+**Not inside `hello`.** That directory is an application, and an application
+holds no repositories. Leave it — it stays where it is, and you can come back to
+it or delete it — and make a directory for the workstation:
+
 ```bash
+cd ..                       # out of hello
+mkdir coframe-station && cd coframe-station
+
 git clone https://github.com/claudiodriussi/coframe.git
 git clone https://github.com/claudiodriussi/coframe-ui.git
 git clone https://github.com/claudiodriussi/coframe-commons.git
@@ -89,38 +96,58 @@ git clone https://github.com/claudiodriussi/coframe-commons.git
 | `coframe-ui/` | the client library and the generic shell |
 | `coframe-commons/` | the shared plugins: types, mixins, the party model |
 
-Put them side by side. **Nothing depends on that arrangement** except one
-convenience: the client finds the `devtest` bench by looking for `coframe/devtest`
-up to three levels above itself. Your own applications say where they are, and
-can live anywhere.
+What you end up with, once chapter 3 adds an application of its own:
 
-Then the environment:
+```
+coframe-station/
+├── coframe/
+├── coframe-ui/
+├── coframe-commons/
+└── bookshop/           the application, a sibling of the three
+```
+
+**Nothing in the framework depends on that arrangement.** Two conveniences do:
+the client finds the `devtest` bench by looking for `coframe/devtest` up to three
+levels above itself, and an application that declares a shared plugin root writes
+the path to it — which is shorter when they are siblings. Your applications say
+where they are, and can live anywhere.
+
+Then the environment, still from `coframe-station/`:
 
 ```bash
 uv venv
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
 uv pip install -e "./coframe[dev]"     # the library, editable, plus the tests
 (cd coframe-ui && pnpm install)        # only if you compile a client
 ```
 
+That venv is the workstation's: it is what gives you the `coframe` command, and
+the chapters below assume it is active. It is **not** the environment your
+applications run in — each of those has a `.venv` of its own, made by `uv sync`.
+
 `[dev]` brings pytest and both web frameworks. An application installs only the
 one it serves with — `coframe[flask]` or `coframe[fastapi]`.
 
-> **Careful with `uv` inside an active venv**: `uv pip install` targets
-> `$VIRTUAL_ENV`, not the directory you are in. Use `env -u VIRTUAL_ENV uv ...`,
-> or deactivate first.
+> **If another venv was already active**, deactivate it first: `uv pip install`
+> targets `$VIRTUAL_ENV`, not the directory you are in, so it would install into
+> that one. `env -u VIRTUAL_ENV uv ...` does the same job without deactivating.
 
 **What you should see.** The `coframe` command exists, and lists what it can do:
 
 ```bash
-.venv/bin/coframe --help    # or `coframe --help`, with the venv activated
+coframe --help              # without the venv activated: .venv/bin/coframe --help
 ```
 
 ---
 
 ## 3. An application against your sources
 
+From `coframe-station/`, so that the application lands beside the three
+repositories — an application can live anywhere, and this one is a sibling only
+to keep the path it writes in chapter 5 short:
+
 ```bash
-coframe new bookshop        # anywhere on disk — it need not sit next to the repos
+coframe new bookshop
 cd bookshop
 uv sync
 ```
