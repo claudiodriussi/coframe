@@ -43,13 +43,21 @@ uvx --from "coframe @ git+https://github.com/claudiodriussi/coframe" \
 cd hello
 uv sync                     # creates .venv and installs
 uv run app.py db-sync       # creates the database from the YAML schema
-uv run server_flask.py      # http://localhost:8300 — admin/admin
+uv run server_flask.py      # the API on http://localhost:8300
 ```
 
 **What you should see.** `db-sync` prints the SQL it ran — one `CREATE TABLE
-users`, because an application is born knowing only who logs into it. The server
-prints its port. Open it and log in with `admin` / `admin`; the API alone answers
-this:
+users`, because an application is born knowing only who logs into it. Then, at
+<http://localhost:8300/>, the server says what it is and what it hasn't got:
+
+```json
+{"application": "hello", "api": "coframe/",
+ "client": "not built — run `coframe build-client`"}
+```
+
+**There is no page yet, and that is the right answer.** A client is compiled from
+the client repository, which you have not cloned — chapter 4 does that. What is
+already complete is the API, and it answers:
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' \
@@ -57,6 +65,9 @@ curl -X POST -H 'Content-Type: application/json' \
      http://localhost:8300/coframe/auth/login
 # {"status": "success", "data": {"token": "eyJ..."}}
 ```
+
+Keep that token: `-H "Authorization: Bearer <token>"` is how every other call
+identifies itself, and the next chapters use it.
 
 That application takes coframe from the repository at `main`: it follows the
 library, and nothing on your disk. The next chapters build one that follows

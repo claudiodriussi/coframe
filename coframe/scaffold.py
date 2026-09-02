@@ -645,10 +645,12 @@ SERVERS = {
 
 EXTRAS = {"flask": "flask", "fastapi": "fastapi", "both": "flask,fastapi"}
 
+# The port serves the API; until a client is built, its root says so rather
+# than showing a page. Credentials belong to the API too — admin/admin.
 RUN = {
-    "flask": "    uv run server_flask.py      http://localhost:8300 — admin/admin",
-    "fastapi": "    uv run server_fastapi.py    http://localhost:8300 — admin/admin",
-    "both": ("    uv run server_flask.py      Flask   — http://localhost:8300, admin/admin\n"
+    "flask": "    uv run server_flask.py      the API on http://localhost:8300",
+    "fastapi": "    uv run server_fastapi.py    the API on http://localhost:8300",
+    "both": ("    uv run server_flask.py      Flask   — the API on http://localhost:8300\n"
              "    uv run server_fastapi.py    FastAPI — the same four routes, /docs too"),
 }
 
