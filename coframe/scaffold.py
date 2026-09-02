@@ -496,6 +496,9 @@ PLUGIN_MODEL = '''# The schema of {{name}}, declared once and only here.
 #         default: 0
 #         label: "Quantity"
 
+# Replace this line — do not add a second `tables:` above it. YAML keeps the
+# last of two keys with the same name and says nothing, so the tables you wrote
+# would be silently discarded in favour of this empty one.
 tables: {}
 '''
 

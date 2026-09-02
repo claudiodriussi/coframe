@@ -182,7 +182,11 @@ Stop the server with Ctrl-C: from here on the schema changes, and the server
 only ever looks at it.
 
 Everything an application *does* lives in its plugins. Open
-`plugins/myapp/model.yaml` and declare a table:
+`plugins/myapp/model.yaml`: it holds a commented-out example and an empty
+`tables: {}`. **Replace the whole file** — that line included, and not by adding
+your tables above it: YAML keeps the last of two keys with the same name without
+complaining, so the table you wrote would lose to the empty one and `db-sync`
+would report nothing to do.
 
 ```yaml
 tables:
