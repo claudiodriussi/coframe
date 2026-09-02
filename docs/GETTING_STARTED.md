@@ -149,6 +149,14 @@ which is what to run before believing an application is portable.
 
 ### It runs
 
+**Open a second terminal now.** A server holds the one it runs in until you stop
+it with Ctrl-C, and from here on you need both at once: one for the process, one
+for the commands — `db-sync`, the calls below, and later the client build. Both
+sit in the application directory. Later, `coframe dev` takes the first terminal
+in the same way, server and client together.
+
+In the first terminal:
+
 ```bash
 uv run app.py db-sync       # creates the database from the YAML schema
 uv run server_flask.py      # the API on http://localhost:8300
@@ -173,8 +181,9 @@ curl -X POST -H 'Content-Type: application/json' \
 # {"status": "success", "data": {"token": "eyJ..."}}
 ```
 
-Every other call carries that token, so keep it in a variable — the chapters
-below assume `$TOKEN` holds it:
+Every other call carries that token, so keep it in a variable — in the second
+terminal, the one you make the calls from, because a shell variable belongs to
+the shell that set it. The chapters below assume `$TOKEN` holds it:
 
 ```bash
 TOKEN=$(curl -s -X POST -H 'Content-Type: application/json' \
@@ -191,8 +200,9 @@ line again in the shell you are calling from, and look at what the login replies
 
 ### The first table
 
-Stop the server with Ctrl-C: from here on the schema changes, and the server
-only ever looks at it.
+Stop the server — Ctrl-C in the first terminal. It builds its model at startup
+and only ever looks at the schema, so a schema about to change wants it down;
+you will start it again in a moment.
 
 Everything an application *does* lives in its plugins. Open
 `plugins/myapp/model.yaml`: it holds a commented-out example and an empty
