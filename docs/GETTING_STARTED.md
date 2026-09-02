@@ -61,7 +61,7 @@ coframe-station/
 ├── coframe/
 ├── coframe-ui/
 ├── coframe-commons/
-└── bookshop/           the application, a sibling of the three
+└── myapp/              the application, a sibling of the three
 ```
 
 **Nothing in the framework depends on that arrangement.** Two conveniences do:
@@ -105,8 +105,8 @@ repositories — an application can live anywhere, and this one is a sibling onl
 to keep the path it writes in chapter 4 short:
 
 ```bash
-coframe new bookshop
-cd bookshop
+coframe new myapp
+cd myapp
 uv sync
 ```
 
@@ -143,7 +143,7 @@ application is born knowing only who logs into it. Then, at
 <http://localhost:8300/>, the server says what it is and what it hasn't got:
 
 ```json
-{"application": "bookshop", "api": "coframe/",
+{"application": "myapp", "api": "coframe/",
  "client": "not built — run `coframe build-client`"}
 ```
 
@@ -166,7 +166,7 @@ Stop the server with Ctrl-C: from here on the schema changes, and the server
 only ever looks at it.
 
 Everything an application *does* lives in its plugins. Open
-`plugins/bookshop/model.yaml` and declare a table:
+`plugins/myapp/model.yaml` and declare a table:
 
 ```yaml
 tables:
@@ -255,7 +255,7 @@ Both commands look for the client repository next to your coframe checkout;
 coframe dev
 #   server  server_fastapi.py  →  http://localhost:8300
 #           against the library at /…/coframe
-#   client  shell              ←  /…/bookshop        http://localhost:5174
+#   client  shell              ←  /…/myapp           http://localhost:5174
 ```
 
 The client is served by vite on a port of its own, so the backend runs with
@@ -282,8 +282,8 @@ The long forms, if you need them:
 
 ```bash
 cd coframe-ui
-COFRAME_APP_ROOT=/path/to/bookshop pnpm --filter shell dev    # localhost:5174
-pnpm build:app /path/to/bookshop                              # → bookshop/static/
+COFRAME_APP_ROOT=/path/to/myapp pnpm --filter shell dev    # localhost:5174
+pnpm build:app /path/to/myapp                              # → myapp/static/
 ```
 
 ---
@@ -295,7 +295,7 @@ pnpm build:app /path/to/bookshop                              # → bookshop/sta
 integration:
 
 ```yaml
-# bookshop/config.yaml
+# myapp/config.yaml
 plugins:
   - path: ../coframe-commons/plugins
     include: [common]
