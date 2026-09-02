@@ -276,9 +276,16 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/jso
              "navigator": true}}
 ```
 
-`_auto: true` — nobody wrote that descriptor. A list and a form exist for every
-table, and are replaced by a declared page the day the generated one is not
-enough.
+**Nobody wrote that.** The client knows nothing about `Book`: it draws whatever
+the server hands it, and what the server hands it is the JSON above — a *page
+descriptor*, data rather than code. No page is declared under the id
+`book_list`, so coframe built one from the schema you had just written, and
+marked it `_auto: true` so that you can tell which it is.
+
+Two ids answer for every table, `{table}_list` and `{table}_form`. The day the
+generated one is not enough — a different order of columns, a filter, a layout —
+declare a page under that same id in your plugin's YAML: it is served in place of
+the generated one, and nothing else changes, the client least of all.
 
 ---
 
