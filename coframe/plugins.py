@@ -89,6 +89,8 @@ class PluginsManager:
         self.sorted: List[str] = []
         self.original_handlers = None
         self.merge_handlers: Dict[str, Any] = {}
+        # The application config, once loaded: an input to what is generated.
+        self.config_file: Optional[Path] = None
 
         # Everything an application declares by a relative path — plugin roots,
         # the sqlite file, the log, the generated model — hangs from the
@@ -173,6 +175,7 @@ class PluginsManager:
             "timezone": "",
         }
         self.app_root = Path(config).resolve().parent
+        self.config_file = Path(config).resolve()
 
         with open(config) as f:
             data = yaml.safe_load(f)
@@ -769,10 +772,19 @@ class PluginsManager:
         already in the database. The failure is confusing and silent, which is
         why the package counts.
 
+        **The application config is the third.** It decides which plugin roots
+        are read and which plugins are taken from them, so adding a shared root
+        changes the model without touching a single plugin file — and a root
+        cloned last week is older than the model generated yesterday. Left out,
+        that edit regenerates nothing and the schema check answers "aligned"
+        against a model that never saw the new tables.
+
         Returns:
-            float: The timestamp of the most recent file, plugins and core
+            float: The timestamp of the most recent input: config, plugins, core
         """
         latest_timestamp = _core_timestamp()
+        if self.config_file is not None and self.config_file.is_file():
+            latest_timestamp = max(latest_timestamp, self.config_file.stat().st_mtime)
         for name, plugin in self.plugins.items():
             if plugin.timestamp > latest_timestamp:
                 latest_timestamp = plugin.timestamp
