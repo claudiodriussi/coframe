@@ -47,11 +47,15 @@ description: ""
 log_file: "data/{{name}}.log"
 
 # Plugin roots, in order. Each entry is a directory holding plugin directories,
-# named as a path or as `{ path, include }` — which takes part of a root, and
-# leaves the rest of it inert. Add the shared plugins here when you want them:
+# named as a path or as `{ path, include }` — which takes part of a root and
+# leaves the rest of it inert.
+#
+# A path is relative to this file, or absolute: this application is free to live
+# anywhere, and says where the roots it uses are. Add the shared plugins by
+# replacing the line below, e.g.
 #
 #   plugins:
-#     - path: ../commons/plugins
+#     - path: /path/to/coframe-commons/plugins
 #       include: [common, partners]
 #     - plugins
 #
