@@ -240,6 +240,37 @@ def test_a_rebuild_does_not_carry_out_a_refused_drop(engine):
         assert conn.execute(sa.text('SELECT note FROM book')).scalar() == 'keep'
 
 
+def test_widening_a_decorated_string_is_still_a_widening(engine):
+    """`case: upper` wraps the column in a TypeDecorator.
+
+    It is not an instance of String, so an unwrapped comparison called a plain
+    widening a decision to take by hand — and with `on_startup: error` that
+    stops the server over an ALTER that SQLite cannot even run.
+    """
+    from coframe.db import CaseString
+
+    md = base_metadata()
+    md.tables['book'].c.title.type = CaseString(200, case='upper')
+
+    diff = diff_schema(engine, md)
+
+    assert [c.kind for c in diff.safe] == ['widen_type']
+    assert diff.refused == []
+
+
+def test_narrowing_a_decorated_string_is_still_refused(engine):
+    """The unwrapping must not cost the refusal in the other direction."""
+    from coframe.db import CaseString
+
+    md = base_metadata()
+    md.tables['book'].c.title.type = CaseString(10, case='upper')
+
+    diff = diff_schema(engine, md)
+
+    assert diff.safe == []
+    assert 'not a widening' in diff.refused[0].reason
+
+
 def test_narrowing_a_type_is_refused(engine):
     md = base_metadata()
     md.tables['book'].c.title.type = sa.String(10)

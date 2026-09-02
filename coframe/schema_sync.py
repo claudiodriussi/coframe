@@ -124,6 +124,20 @@ def _int_rank(type_: Any) -> int:
     return 2
 
 
+def _storage_type(type_: Any) -> Any:
+    """
+    What a type is stored as, past any decorator.
+
+    A TypeDecorator — `CaseString`, for one — is not an instance of the type it
+    stores as, so every comparison below would miss it and report a widening as
+    a decision to take by hand. What it wraps is what has to hold the data;
+    upper-casing a value on write does not change what fits.
+    """
+    while isinstance(type_, sa.types.TypeDecorator):
+        type_ = getattr(type_, 'impl_instance', type_.impl)
+    return type_
+
+
 def _is_widening(old: Any, new: Any) -> bool:
     """
     True when the new type can hold every value the old one could.
@@ -132,6 +146,8 @@ def _is_widening(old: Any, new: Any) -> bool:
     reported rather than applied, so a false negative costs a manual statement
     while a false positive would cost data.
     """
+    old, new = _storage_type(old), _storage_type(new)
+
     # Enum is a String subclass but its value set is not a length — never guess.
     if isinstance(old, sa.Enum) or isinstance(new, sa.Enum):
         return False
