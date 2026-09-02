@@ -50,6 +50,15 @@ git clone https://github.com/claudiodriussi/coframe-ui.git
 git clone https://github.com/claudiodriussi/coframe-commons.git
 ```
 
+> **If git asks for a username**, on a repository that is public: GitHub served
+> the ref advertisement and refused the fetch itself — `POST git-upload-pack` →
+> `401 www-authenticate: Basic realm="GitHub"`. That is its anonymous rate limit,
+> counted per IP, and it has nothing to do with permissions. Wait a few minutes,
+> or clone as yourself if you have a GitHub account: `gh repo clone
+> claudiodriussi/coframe`, or the SSH form `git@github.com:claudiodriussi/coframe.git`
+> once you have a key. `GIT_TERMINAL_PROMPT=0` in front of the command shows the
+> real error instead of the prompt.
+
 | directory | what it is |
 |---|---|
 | `coframe/` | the library: plugin system, model generation, dispatcher, CLI |
@@ -110,14 +119,30 @@ coframe --help              # without the venv activated: .venv/bin/coframe --he
 ## 2. Your first application
 
 From `coframe-station/`, so that the application lands beside the three
-repositories — an application can live anywhere, and this one is a sibling only
-to keep the path it writes in chapter 4 short:
+repositories. **An application is free to live anywhere** — nothing looks for it,
+and it is the one that says where things are: the library comes from its own
+environment, and the shared plugins from a path it writes in chapter 4, relative
+to itself or absolute. A sibling here only keeps that path short and the tree
+easy to read.
 
 ```bash
 coframe new myapp
 cd myapp
-uv sync
+deactivate                  # the workstation venv has done its job
+uv sync                     # this application's own .venv
 ```
+
+The workstation venv was needed for one thing, `coframe new`, and that is done:
+from here an application runs in **its own** `.venv`, and `uv run` finds
+everything there — the `coframe` command included, because coframe is a
+dependency of the application too. Chapter 5 activates the workstation one again
+for the library's tests.
+
+> Leaving it active does no harm, but every `uv run` then says `VIRTUAL_ENV …
+> does not match the project environment path .venv and will be ignored`. That
+> is uv telling you it used the application's environment — which is the one that
+> must run. The warning is the reason for the `deactivate` above, not a problem
+> to solve.
 
 `coframe new` knows where the coframe that ran it lives. Yours is a checkout, so
 the generated `pyproject.toml` carries a block that an application created from
@@ -140,22 +165,7 @@ uv run python -c "import coframe; print(coframe.__file__)"
 `uv sync --no-sources` resolves the way a machine without that checkout would —
 which is what to run before believing an application is portable.
 
-> **uv warns that `VIRTUAL_ENV` does not match, and it is right.** From here on
-> you are inside an application, and an application runs in *its own* `.venv` —
-> the warning is uv saying it ignored the workstation's and used this one, which
-> is what you want. `deactivate` silences it: inside an application you no longer
-> need the workstation environment, because `uv run` finds everything in this
-> one, the `coframe` command included.
-
 ### It runs
-
-**Open a second terminal now.** A server holds the one it runs in until you stop
-it with Ctrl-C, and from here on you need both at once: one for the process, one
-for the commands — `db-sync`, the calls below, and later the client build. Both
-sit in the application directory. Later, `coframe dev` takes the first terminal
-in the same way, server and client together.
-
-In the first terminal:
 
 ```bash
 uv run app.py db-sync       # creates the database from the YAML schema
@@ -172,7 +182,14 @@ application is born knowing only who logs into it. Then, at
 ```
 
 **There is no page yet, and that is the right answer**: a client is compiled in
-chapter 3. What is already complete is the API, and it answers:
+chapter 3. What is already complete is the API, and it answers.
+
+**Open a second terminal now and `cd` to the application** — the server holds
+the first one until Ctrl-C, and everything from here is typed in the second.
+Nothing to activate in it: `uv run` finds this application's environment on its
+own. In chapter 3, `coframe dev` takes the first terminal the same way.
+
+Log in as `admin` / `admin`, the user a generated application seeds for itself:
 
 ```bash
 curl -X POST -H 'Content-Type: application/json' \
@@ -181,9 +198,9 @@ curl -X POST -H 'Content-Type: application/json' \
 # {"status": "success", "data": {"token": "eyJ..."}}
 ```
 
-Every other call carries that token, so keep it in a variable — in the second
-terminal, the one you make the calls from, because a shell variable belongs to
-the shell that set it. The chapters below assume `$TOKEN` holds it:
+Every other call carries that token, so keep it in a variable — in this same
+terminal, since a shell variable belongs to the shell that set it. The chapters
+below assume `$TOKEN` holds it:
 
 ```bash
 TOKEN=$(curl -s -X POST -H 'Content-Type: application/json' \
@@ -287,6 +304,37 @@ generated one is not enough — a different order of columns, a filter, a layout
 declare a page under that same id in your plugin's YAML: it is served in place of
 the generated one, and nothing else changes, the client least of all.
 
+### And a way in
+
+A table is reachable by the API the moment it is declared, but nothing puts it in
+front of a person: that is the menu's job, and the generated one only knows about
+users. `plugins/myapp/menu.yaml` ends with a commented example — replace that
+line with:
+
+```yaml
+  books: { label: Books, icon: book, parent: masters, order: 20, action: stack_push, panel: book_list }
+```
+
+`panel: book_list` is the id of the page you just asked for, `parent: masters`
+hangs the item under the group the file already declares, and the icon is a
+[lucide](https://lucide.dev) name. Restart the server and ask what the menu is:
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{}' http://localhost:8300/coframe/endpoint/get_menu
+```
+
+```json
+{"label": "myapp", "id": "main", "items": [
+  {"label": "Masters", "icon": "database", "children": [
+    {"label": "Users", "panel": "user_list", "action": "stack_push", …},
+    {"label": "Books", "panel": "book_list", "action": "stack_push", …}]}]}
+```
+
+That is what the client will draw in chapter 3, and every plugin adds its own
+items to a group declared elsewhere by naming its parent — which is how a menu
+grows without anyone editing one central file.
+
 ---
 
 ## 3. The client, in its two forms
@@ -302,7 +350,10 @@ Both commands look for the client repository next to your coframe checkout —
 from the application's own environment, where coframe is a dependency; with the
 workstation venv active, plain `coframe …` works too.
 
-**In development** — two processes, two origins:
+**In development** — two processes, two origins. **Stop the server of chapter 2
+first**: `coframe dev` starts one itself, and two cannot hold the same port —
+it checks, and says so, rather than letting uvicorn fail underneath. Then, in
+that same first terminal:
 
 ```bash
 uv run coframe dev
@@ -311,11 +362,29 @@ uv run coframe dev
 #   client  shell              ←  /…/myapp           http://localhost:5174
 ```
 
+**Open <http://localhost:5174> and log in with `admin` / `admin`.** This is the
+first page of the whole road: the menu, and the list and form of the table you
+declared, drawn from the descriptors the server sends.
+
+Those credentials are seeded by a generated application the first time it runs,
+and only while the `users` table is empty — so that there is a way in, not as a
+mechanism: in service the first account is made by hand and the seed does
+nothing. Which also means it is a development password, and until you replace it
+it is the whole security of this application.
+
 The client is served by vite on a port of its own, so the backend runs with
 `COFRAME_DEV=1`: CORS, and the refreshed token exposed in a header that a browser
-would otherwise hide from JS across origins. Ctrl-C stops both.
+would otherwise hide from JS across origins. Ctrl-C stops both — and if either
+one dies, the other is stopped with it, because a client talking to nothing looks
+like a bug in the application.
 
-**Compiled** — one process, one origin:
+> The first run in a fresh clone warns that it *cannot find base config file
+> "./.svelte-kit/tsconfig.json"*. SvelteKit writes that file while starting, so
+> the warning is about something that exists a second later, and it does not
+> come back.
+
+**Compiled** — one process, one origin. Stop `coframe dev` first, for the same
+reason, then:
 
 ```bash
 uv run coframe build-client   # → static/, which this application's server serves
@@ -325,17 +394,48 @@ uv run server_flask.py        # http://localhost:8300 — client and API togethe
 No CORS is involved, because there is only one origin. When something works in
 one form and not in the other, that difference is the first place to look.
 
+Served this way the application answers on the network too —
+`http://<this machine's address>:8300` from another machine — because the
+compiled client calls whatever origin served it, and no address is baked in.
+
 > A client of your own is possible — `coframe-ui/apps/devtest` is one, and it
 > hosts the playground — but it is only needed for what plugins cannot
 > contribute. Today it lives inside the client repository: `@coframe/ui` is
 > consumed as a workspace package, so a client outside that checkout has no way
 > to depend on it.
 
-The long forms, if you need them:
+### What `coframe dev` does
+
+One command, four decisions — worth knowing, because each of them is something
+you may want to make yourself:
+
+1. **It picks the entry point.** With both servers present it takes
+   `server_fastapi.py`; `--flask` asks for the other. The line it prints names
+   the file it chose, which is the answer to *"which one is running?"*
+2. **It starts that server in the application's own environment** (`uv run`),
+   with `COFRAME_DEV=1` — and layers the library checkout on top for the run
+   only, which is what the second line of its output says.
+3. **It starts the shell** in the client repository, pointed here by
+   `COFRAME_APP_ROOT`.
+4. **It keeps the two together**, and takes both down when either one stops.
+
+The same thing by hand, in two terminals — no magic, and the way to run only one
+half:
 
 ```bash
-cd coframe-ui
+# terminal 1 — the server, told it is in development
+COFRAME_DEV=1 uv run server_flask.py           # or server_fastapi.py
+
+# terminal 2 — the client, told which application it serves
+cd ../coframe-ui
 COFRAME_APP_ROOT=/path/to/myapp pnpm --filter shell dev    # localhost:5174
+```
+
+`coframe dev --no-client` and `--no-server` run one half with the other left to
+you. And the compiled build has a long form too:
+
+```bash
+cd ../coframe-ui
 pnpm build:app /path/to/myapp                              # → myapp/static/
 ```
 
@@ -343,9 +443,17 @@ pnpm build:app /path/to/myapp                              # → myapp/static/
 
 ## 4. Using what isn't yours: the shared plugins
 
+**Stop what is running first** — the server, or `coframe dev`. A plugin root is
+read once, when a process starts: the backend builds its model from it, and the
+client build derives its aliases and its component globs from the same list. Add
+a root under a running process and neither notices; you get an application that
+looks unchanged and a client that cannot resolve what the server now sends.
+
 `coframe-commons` is not a Python dependency and is never installed. It is a
 **plugin root**, and an application reaches it by path — which is the whole
-integration:
+integration. In `config.yaml`, **replace the `plugins: [plugins]` line** — the
+commented example above it says the same thing, but the path is only right when
+the shared checkout sits where this manual put it:
 
 ```yaml
 # myapp/config.yaml
@@ -354,6 +462,10 @@ plugins:
     include: [common]
   - plugins
 ```
+
+That path is relative to `config.yaml`. An application somewhere else says so —
+`path: /home/you/src/coframe-commons/plugins` works just as well, and is what a
+deployment usually writes.
 
 `include` is positive on purpose: what a shared root gains over time stays inert
 until an application asks for it by name. Dependencies are followed for you —
@@ -418,11 +530,31 @@ the types know is already in it — with no UI written anywhere:
 The proof that this setup is reproducible is everything above, done in an empty
 directory, without opening any other file. In addition:
 
+**Open a new terminal for this.** Not to be tidy: a check that passes because of
+something the previous terminal happened to have — a variable, a venv, a
+directory you were standing in — has verified that session, not the workstation.
+Start from the workstation directory, and take the walk:
+
 ```bash
-cd coframe         && pytest                     # 444 tests
-cd coframe-ui      && pnpm test                  # 124 tests
-cd coframe/devtest && python server_fastapi.py   # the library's bench, port 8300
+cd coframe-station
+source .venv/bin/activate       # for pytest and the bench: both want the library
+
+cd coframe
+pytest                          # the library
+
+cd ../coframe-ui
+pnpm test                       # the client library
+
+cd ../coframe/devtest
+python server_fastapi.py        # the bench — http://localhost:8300, Ctrl-C to stop
+
+cd ../..
 ```
+
+What you are looking for is **no failures** — the counts move with the code, and
+a number written here would be wrong within a month. The bench answers on 8300
+with the same info JSON as chapter 2, saying no client is built: `pnpm build` in
+`coframe-ui` compiles one into `coframe/devtest/static/` if you want to see it.
 
 And the proof worth twice the others, because no already-working machine can give
 it: **clone the three repositories into an empty directory on a machine that has
