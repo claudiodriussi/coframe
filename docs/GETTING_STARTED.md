@@ -173,8 +173,21 @@ curl -X POST -H 'Content-Type: application/json' \
 # {"status": "success", "data": {"token": "eyJ..."}}
 ```
 
-Keep that token: `-H "Authorization: Bearer <token>"` is how every other call
-identifies itself, and the chapters below use it.
+Every other call carries that token, so keep it in a variable — the chapters
+below assume `$TOKEN` holds it:
+
+```bash
+TOKEN=$(curl -s -X POST -H 'Content-Type: application/json' \
+        -d '{"username":"admin","password":"admin"}' \
+        http://localhost:8300/coframe/auth/login \
+        | python3 -c 'import sys, json; print(json.load(sys.stdin)["data"]["token"])')
+
+echo "$TOKEN" | cut -c1-28        # eyJhbGciOiJIUzI1NiIsInR5cCI6
+```
+
+A token lasts a day by default, so this one sees the manual out. If a call
+answers `Invalid token: Not enough segments`, the variable is empty — run the
+line again in the shell you are calling from, and look at what the login replies.
 
 ### The first table
 
