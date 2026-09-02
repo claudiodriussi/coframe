@@ -46,13 +46,17 @@ version: 0.1.0
 description: ""
 log_file: "data/{{name}}.log"
 
-# Plugin roots, in order. Each entry is a directory holding plugin directories.
-# Add the shared plugins here when you want them:
+# Plugin roots, in order. Each entry is a directory holding plugin directories,
+# named as a path or as `{ path, include }` — which takes part of a root, and
+# leaves the rest of it inert. Add the shared plugins here when you want them:
 #
 #   plugins:
 #     - path: ../commons/plugins
-#       include: [common, users, partners]
+#       include: [common, partners]
 #     - plugins
+#
+# Not `users`: this application has one of its own, and a name provided by two
+# roots is refused.
 plugins: [plugins]
 
 db_engine: "sqlite:///data/{{name}}.sqlite"
