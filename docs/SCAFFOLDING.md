@@ -1,9 +1,15 @@
-# Coframe App Scaffolding — Getting Started
+# The Anatomy of an Application
 
-*The 10-minute view: what a Coframe application is made of and how to run it.
-For how plugins declare the data model and UI, see [PLUGIN_MODEL.md](PLUGIN_MODEL.md).*
+*What a Coframe application is made of: the files, the bootstrap sequence they
+share, and the servers. To walk the road instead — from an empty machine to an
+application with a compiled client — see
+[GETTING_STARTED.md](GETTING_STARTED.md); for how plugins declare the data model
+and the UI, [PLUGIN_MODEL.md](PLUGIN_MODEL.md).*
 
-*Last revised: 2026-07-12.*
+> **The files below are written for you by `coframe new`.** This document
+> explains what they are, and is worth reading when one of them has to change.
+
+*Last revised: 2026-07-12; re-framed 2026-09-02.*
 
 ---
 

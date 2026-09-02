@@ -22,10 +22,15 @@
 
 ## Installation
 
+**New here?** [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) walks the whole
+road from an empty machine: the prerequisites, an application that runs, the
+three repositories, the client in both its forms, and how the setup is verified.
+The rest of this section is the short answer for those who only need the library.
+
 ### Prerequisites
 
-- Python 3.11 or higher
-- Required dependencies (see requirements.txt)
+- Python 3.11 or higher — `uv` will install one if you have none
+- git: dependencies come from repositories, there is no index to publish to yet
 
 ### As a dependency
 
@@ -57,11 +62,13 @@ Clone it and install in editable mode, so the sources stay live:
 ```bash
 git clone https://github.com/claudiodriussi/coframe.git
 cd coframe
-python -m venv .venv               # or python3 / py, depending on your system
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+uv venv && uv pip install -e ".[dev]"    # or: python -m venv .venv; pip install -e ".[dev]"
 pytest
 ```
+
+A workstation that also builds clients and consumes the shared plugins needs the
+other two repositories: see
+[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) § 2.
 
 ## Usage
 
@@ -76,9 +83,9 @@ The `devtest` directory contains examples to help you understand the framework:
    ```
    this will generate the `model.py` SQLAlchemy model and the `devtest.sqlite` database with some data
 
-2. Start the Flask server:
+2. Start either server — the same four routes, two frameworks:
    ```bash
-   python server_flask.py
+   python server_flask.py       # or: python server_fastapi.py
    ```
 
 3. Open the Jupyter notebook to test API functionality:
@@ -95,12 +102,16 @@ The `devtest` directory contains examples to help you understand the framework:
 
 ### Building Your App
 
-1. Create your plugins in a dedicated directory
-2. Define your data model in YAML files
-3. Add custom code for business logic
-4. Configure the system via `config.yaml`
-5. Generate the model code and initialize the database
-6. Start the server
+```bash
+coframe new myapp && cd myapp
+uv sync
+uv run app.py db-sync        # create the database from the YAML schema
+uv run server_flask.py       # http://localhost:8300 — admin/admin
+```
+
+The schema goes in `plugins/<name>/model.yaml`, the domain operations in
+`plugins/<name>/*.py` as `@endpoint`. Step by step, with the client and the
+shared plugins: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
 ## Architecture
 
