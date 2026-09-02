@@ -7,6 +7,7 @@ being visible. So what is tested here is the resolution — not the processes,
 which are the frameworks' own development servers and are not ours to check.
 """
 import os
+import socket
 import sys
 from pathlib import Path
 
@@ -65,6 +66,25 @@ def test_an_app_that_declares_no_port_gets_the_default(tmp_path):
     app.mkdir()
     (app / "config.yaml").write_text(yaml.safe_dump({"name": "a"}))
     assert dev.read_api_port(app) == 8300
+
+
+def test_a_free_port_is_free(tmp_path):
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        port = taken.getsockname()[1]
+    assert dev.port_in_use(port) is False
+
+
+def test_a_port_someone_is_listening_on_is_in_use(tmp_path):
+    """The check that keeps `coframe dev` from starting a server that cannot bind.
+
+    Without it the reason — one line from uvicorn — is buried between the
+    client's startup and the death of both processes.
+    """
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        assert dev.port_in_use(listener.getsockname()[1]) is True
 
 
 # ── The entry point ──────────────────────────────────────────────────────────

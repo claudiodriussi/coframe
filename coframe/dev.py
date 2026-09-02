@@ -24,6 +24,7 @@ application's `static/`, which its own server serves at the root.
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -68,6 +69,18 @@ def find_app(given: Optional[str] = None) -> Path:
             f"{app} holds no config.yaml — an application directory does.\n"
             f"Give one: coframe dev /path/to/app")
     return app
+
+
+def port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    """True when something already answers on that port.
+
+    Asked before starting anything: a server that cannot bind takes the client
+    down with it, and the one line saying why scrolls past between the client's
+    startup and the failure of both.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.25)
+        return probe.connect_ex((host, port)) == 0
 
 
 def read_api_port(app: Path, default: int = 8300) -> int:
@@ -239,8 +252,14 @@ def run(app: Optional[str] = None, framework: Optional[str] = None,
 
     if not no_server:
         server = pick_server(app_dir, framework)
+        port = read_api_port(app_dir)
+        if port_in_use(port):
+            raise DevError(
+                f"Port {port} is already in use — this application's server is "
+                f"probably already running.\nStop it (Ctrl-C in its terminal), "
+                f"or run the client alone: coframe dev --no-server")
         command = backend_command(app_dir, server, checkout)
-        print(f"server  {server.name}  →  http://localhost:{read_api_port(app_dir)}", flush=True)
+        print(f"server  {server.name}  →  http://localhost:{port}", flush=True)
         if checkout:
             print(f"        against the library at {checkout}", flush=True)
         processes.append(_spawn(command, app_dir, {"COFRAME_DEV": "1"}))
