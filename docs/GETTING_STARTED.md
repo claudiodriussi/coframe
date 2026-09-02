@@ -140,6 +140,13 @@ uv run python -c "import coframe; print(coframe.__file__)"
 `uv sync --no-sources` resolves the way a machine without that checkout would —
 which is what to run before believing an application is portable.
 
+> **uv warns that `VIRTUAL_ENV` does not match, and it is right.** From here on
+> you are inside an application, and an application runs in *its own* `.venv` —
+> the warning is uv saying it ignored the workstation's and used this one, which
+> is what you want. `deactivate` silences it: inside an application you no longer
+> need the workstation environment, because `uv run` finds everything in this
+> one, the `coframe` command included.
+
 ### It runs
 
 ```bash
@@ -255,13 +262,16 @@ An application does not own a client. It contributes interface through the
 compiles them in. **That is why the shell is the norm**: what makes an
 application look like itself travels in its plugins.
 
-Both commands look for the client repository next to your coframe checkout;
-`COFRAME_UI=/path/to/coframe-ui` when it is elsewhere.
+Both commands look for the client repository next to your coframe checkout —
+`coframe-station/coframe-ui`, in the layout of chapter 1 — and take
+`COFRAME_UI=/path/to/coframe-ui` when it is somewhere else. `uv run` runs them
+from the application's own environment, where coframe is a dependency; with the
+workstation venv active, plain `coframe …` works too.
 
 **In development** — two processes, two origins:
 
 ```bash
-coframe dev
+uv run coframe dev
 #   server  server_fastapi.py  →  http://localhost:8300
 #           against the library at /…/coframe
 #   client  shell              ←  /…/myapp           http://localhost:5174
@@ -274,8 +284,8 @@ would otherwise hide from JS across origins. Ctrl-C stops both.
 **Compiled** — one process, one origin:
 
 ```bash
-coframe build-client        # → static/, which this application's server serves
-uv run server_flask.py      # http://localhost:8300 — client and API together
+uv run coframe build-client   # → static/, which this application's server serves
+uv run server_flask.py        # http://localhost:8300 — client and API together
 ```
 
 No CORS is involved, because there is only one origin. When something works in
