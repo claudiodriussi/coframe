@@ -27,7 +27,9 @@ for what is expected of macOS and Windows.*
 | **uv** | it installs Python too, so Python is not a prerequisite of its own |
 | **Node** | `^20.19` or `>=22.12`, the floor vite declares; `corepack enable` gives you pnpm |
 
-Only the client needs Node. If you never compile a client, git and uv are enough.
+Node is only for the client — and chapter 3 compiles one, so on this road it is
+not optional. Skip it only if you will never build a client, and the API is all
+you want.
 
 Don't have them? → [Appendix A](#appendix-a--prerequisites-by-platform). Don't
 want uv? → [Appendix C](#appendix-c--without-uv), and read why it is the paved
@@ -76,7 +78,10 @@ Then the environment, still from `coframe-station/`:
 uv venv
 source .venv/bin/activate              # Windows: .venv\Scripts\activate
 uv pip install -e "./coframe[dev]"     # the library, editable, plus the tests
-(cd coframe-ui && pnpm install)        # only if you compile a client
+
+cd coframe-ui
+pnpm install                           # the client workspace, once
+cd ..
 ```
 
 That venv is the workstation's: it is what gives you the `coframe` command, and
@@ -85,6 +90,10 @@ applications run in — each of those has a `.venv` of its own, made by `uv sync
 
 `[dev]` brings pytest and both web frameworks. An application installs only the
 one it serves with — `coframe[flask]` or `coframe[fastapi]`.
+
+`pnpm install` sets up the whole client workspace — the UI library and the two
+clients that consume it — in one go, and it is what chapter 3 compiles with. It
+is only skippable by someone who will never build a client.
 
 > **If another venv was already active**, deactivate it first: `uv pip install`
 > targets `$VIRTUAL_ENV`, not the directory you are in, so it would install into
