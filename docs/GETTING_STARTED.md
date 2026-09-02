@@ -1,18 +1,18 @@
 # Getting Started
 
-How to put Coframe on your machine, write an application that runs, and compile
-the client it is served with — starting from nothing but git, Node and uv.
+How to put Coframe on your machine, write an application that runs against your
+own sources, and compile the client it is served with — starting from nothing but
+git, Node and uv.
 
 The criterion of this document is hard: **no step may require knowledge that is
 not written here.** If you have to *know* something to get through it, that is
 not a hiccup in your setup — it is a defect in this text, and worth reporting.
 
-There are two arrivals, and the first does not require the second:
-
-| | you want to | you need |
-|---|---|---|
-| **Try it** | see an application run, write a schema, get a UI | uv, and nothing on disk |
-| **A workstation** | develop applications, shared plugins, or the library itself | the three repositories, Node, uv |
+The road below builds a **workstation**: the three repositories on disk, and an
+application that resolves the library from your working copy, so that editing the
+library and using it are the same act. If you only want to see it run, one
+command does that without cloning anything —
+[Appendix B](#appendix-b--without-cloning-anything).
 
 *Last revised: 2026-09-02. Walked on Linux; see [Appendix A](#appendix-a--prerequisites-by-platform)
 for what is expected of macOS and Windows.*
@@ -30,59 +30,17 @@ for what is expected of macOS and Windows.*
 Only the client needs Node. If you never compile a client, git and uv are enough.
 
 Don't have them? → [Appendix A](#appendix-a--prerequisites-by-platform). Don't
-want uv? → [Appendix B](#appendix-b--without-uv), and read why it is the paved
+want uv? → [Appendix C](#appendix-c--without-uv), and read why it is the paved
 road before leaving it.
 
 ---
 
-## 1. A first application, before you clone anything
+## 1. The workstation: three repositories
+
+Make a directory to hold them — the name is yours, `coframe-station` here — and
+clone the three into it:
 
 ```bash
-uvx --from "coframe @ git+https://github.com/claudiodriussi/coframe" \
-    coframe new hello
-cd hello
-uv sync                     # creates .venv and installs
-uv run app.py db-sync       # creates the database from the YAML schema
-uv run server_flask.py      # the API on http://localhost:8300
-```
-
-**What you should see.** `db-sync` prints the SQL it ran — one `CREATE TABLE
-users`, because an application is born knowing only who logs into it. Then, at
-<http://localhost:8300/>, the server says what it is and what it hasn't got:
-
-```json
-{"application": "hello", "api": "coframe/",
- "client": "not built — run `coframe build-client`"}
-```
-
-**There is no page yet, and that is the right answer.** A client is compiled from
-the client repository, which you have not cloned — chapter 4 does that. What is
-already complete is the API, and it answers:
-
-```bash
-curl -X POST -H 'Content-Type: application/json' \
-     -d '{"username":"admin","password":"admin"}' \
-     http://localhost:8300/coframe/auth/login
-# {"status": "success", "data": {"token": "eyJ..."}}
-```
-
-Keep that token: `-H "Authorization: Bearer <token>"` is how every other call
-identifies itself, and the next chapters use it.
-
-That application takes coframe from the repository at `main`: it follows the
-library, and nothing on your disk. The next chapters build one that follows
-*your sources* instead.
-
----
-
-## 2. The workstation: three repositories
-
-**Not inside `hello`.** That directory is an application, and an application
-holds no repositories. Leave it — it stays where it is, and you can come back to
-it or delete it — and make a directory for the workstation:
-
-```bash
-cd ..                       # out of hello
 mkdir coframe-station && cd coframe-station
 
 git clone https://github.com/claudiodriussi/coframe.git
@@ -96,7 +54,7 @@ git clone https://github.com/claudiodriussi/coframe-commons.git
 | `coframe-ui/` | the client library and the generic shell |
 | `coframe-commons/` | the shared plugins: types, mixins, the party model |
 
-What you end up with, once chapter 3 adds an application of its own:
+What you end up with, once chapter 2 adds an application of its own:
 
 ```
 coframe-station/
@@ -140,11 +98,11 @@ coframe --help              # without the venv activated: .venv/bin/coframe --he
 
 ---
 
-## 3. An application against your sources
+## 2. Your first application
 
 From `coframe-station/`, so that the application lands beside the three
 repositories — an application can live anywhere, and this one is a sibling only
-to keep the path it writes in chapter 5 short:
+to keep the path it writes in chapter 4 short:
 
 ```bash
 coframe new bookshop
@@ -152,8 +110,9 @@ cd bookshop
 uv sync
 ```
 
-Run from a checkout, `coframe new` writes a block the one in chapter 1 did not
-have:
+`coframe new` knows where the coframe that ran it lives. Yours is a checkout, so
+the generated `pyproject.toml` carries a block that an application created from
+the published library would not have:
 
 ```toml
 [tool.uv.sources]
@@ -172,7 +131,39 @@ uv run python -c "import coframe; print(coframe.__file__)"
 `uv sync --no-sources` resolves the way a machine without that checkout would —
 which is what to run before believing an application is portable.
 
+### It runs
+
+```bash
+uv run app.py db-sync       # creates the database from the YAML schema
+uv run server_flask.py      # the API on http://localhost:8300
+```
+
+`db-sync` prints the SQL it ran — one `CREATE TABLE users`, because an
+application is born knowing only who logs into it. Then, at
+<http://localhost:8300/>, the server says what it is and what it hasn't got:
+
+```json
+{"application": "bookshop", "api": "coframe/",
+ "client": "not built — run `coframe build-client`"}
+```
+
+**There is no page yet, and that is the right answer**: a client is compiled in
+chapter 3. What is already complete is the API, and it answers:
+
+```bash
+curl -X POST -H 'Content-Type: application/json' \
+     -d '{"username":"admin","password":"admin"}' \
+     http://localhost:8300/coframe/auth/login
+# {"status": "success", "data": {"token": "eyJ..."}}
+```
+
+Keep that token: `-H "Authorization: Bearer <token>"` is how every other call
+identifies itself, and the chapters below use it.
+
 ### The first table
+
+Stop the server with Ctrl-C: from here on the schema changes, and the server
+only ever looks at it.
 
 Everything an application *does* lives in its plugins. Open
 `plugins/bookshop/model.yaml` and declare a table:
@@ -248,7 +239,7 @@ enough.
 
 ---
 
-## 4. The client, in its two forms
+## 3. The client, in its two forms
 
 An application does not own a client. It contributes interface through the
 `.svelte` files of its plugins, and the shell — the only re-pointable client —
@@ -297,7 +288,7 @@ pnpm build:app /path/to/bookshop                              # → bookshop/sta
 
 ---
 
-## 5. Using what isn't yours: the shared plugins
+## 4. Using what isn't yours: the shared plugins
 
 `coframe-commons` is not a Python dependency and is never installed. It is a
 **plugin root**, and an application reaches it by path — which is the whole
@@ -369,7 +360,7 @@ the types know is already in it — with no UI written anywhere:
 
 ---
 
-## 6. Verifying the workstation
+## 5. Verifying the workstation
 
 The proof that this setup is reproducible is everything above, done in an empty
 directory, without opening any other file. In addition:
@@ -420,7 +411,30 @@ Nothing in this setup requires symbolic links, so Developer Mode is not needed.
 
 ---
 
-## Appendix B — without uv
+## Appendix B — without cloning anything
+
+To see an application run without building a workstation, one command is enough:
+
+```bash
+uvx --from "coframe @ git+https://github.com/claudiodriussi/coframe" \
+    coframe new hello
+cd hello
+uv sync
+uv run app.py db-sync
+uv run server_flask.py      # the API on http://localhost:8300
+```
+
+What you get is the same application chapter 2 builds, with one difference that
+matters: it resolves coframe from the repository at `main`, not from a checkout,
+so there is nothing on your disk to edit. uv downloads the library into its cache
+and into that application's environment; no copy of it is yours.
+
+Good for a look. For anything else — a client, the shared plugins, a library you
+can change — start at [chapter 1](#1-the-workstation-three-repositories).
+
+---
+
+## Appendix C — without uv
 
 Everything except `coframe dev` works with a plain venv:
 
@@ -447,7 +461,7 @@ packages depend on each other with `workspace:*`, which npm cannot install.
 
 ---
 
-## Appendix C — the two benches
+## Appendix D — the two benches
 
 ```bash
 cd coframe/devtest      && python server_fastapi.py   # 8300 — the library's bench
