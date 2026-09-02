@@ -53,8 +53,8 @@ srv.register_fastapi(app, coframe_app, plugins, SECRET_KEY)
 
 
 # A built client, when there is one — mounted last so the API routes win.
-if os.path.isdir("static_client"):
-    app.mount("/", StaticFiles(directory="static_client", html=True), name="client")
+if os.path.isdir("static"):
+    app.mount("/", StaticFiles(directory="static", html=True), name="client")
 
 
 if __name__ == "__main__":

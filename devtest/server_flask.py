@@ -31,7 +31,9 @@ devtest.seed(coframe_app, model)
 # HS256, and a warning nobody can act on is a warning people learn to skip.
 SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key-not-for-service")
 
-app = Flask(__name__)
+# `static_folder=None`: devtest's `static/` is the compiled client, served by
+# the catch-all below, not Flask's own /static route.
+app = Flask(__name__, static_folder=None)
 app.config["SECRET_KEY"] = SECRET_KEY
 # expose_headers: the refresh token travels in a response header, and a
 # browser hides those from JS across origins — which is what dev is, with
@@ -46,14 +48,14 @@ srv.register_flask(app, coframe_app, plugins, SECRET_KEY)
 
 # A built client, when there is one — registered last so the API routes win.
 # The catch-all serves index.html for unknown paths, as a SPA needs.
-if os.path.isdir("static_client"):
+if os.path.isdir("static"):
 
     @app.route("/", defaults={"path": ""})
     @app.route("/<path:path>")
     def client(path):
-        if path and os.path.isfile(os.path.join("static_client", path)):
-            return send_from_directory("static_client", path)
-        return send_from_directory("static_client", "index.html")
+        if path and os.path.isfile(os.path.join("static", path)):
+            return send_from_directory("static", path)
+        return send_from_directory("static", "index.html")
 
 
 if __name__ == "__main__":

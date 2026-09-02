@@ -8,6 +8,8 @@ wheels/
 *.egg-info
 
 devtest/data
+# the compiled client, built by `pnpm build` in the client repository
+devtest/static/
 devtest/model*.py
 devtest/*.log
 *.sqlite
