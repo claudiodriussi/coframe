@@ -62,6 +62,35 @@ class CaseString(sqlalchemy.types.TypeDecorator):
         return value.upper() if self.case == 'upper' else value.lower()
 
 
+# Attributes that describe ONE column and cannot be shared by the parts of a
+# composite: its identity, its storage, and the words that name it. Everything
+# else a composite column declares — `editable`, and whatever an application
+# writes for itself — speaks about the whole address, so it reaches every part.
+_COMPOSITE_PRIVATE = {
+    'name', 'type', 'prefix', 'foreign_key', 'many_to_many', 'virtual',
+    # words that name one column, never five
+    'label', 'help',
+    # storage and constraints: `unique: true` on a composite would otherwise
+    # make each of the parts unique on its own, which nobody means
+    'primary_key', 'autoincrement', 'unique', 'nullable', 'index', 'default',
+    'onupdate', 'length', 'precision', 'scale', 'timezone',
+}
+
+
+def _shared_composite_attrs(column: Dict[str, Any]) -> Dict[str, Any]:
+    """What a composite column says about all of its parts.
+
+    Without this a composite is mute: `editable: false` on an address declared
+    as `type: Address` reached nothing, because each part was built from the
+    *type's* definition alone — so a form let someone type into columns meant to
+    be read-only, and nothing said otherwise.
+
+    The part's own declaration still wins: a type that says something about one
+    of its columns knows more than the table that happens to use the type.
+    """
+    return {k: v for k, v in column.items() if k not in _COMPOSITE_PRIVATE}
+
+
 class DB:
     """
     Database schema manager that handles types, tables, and columns defined in plugins.
@@ -257,8 +286,9 @@ class DB:
                 # Handle composite types
                 if col.db_type and col.db_type.columns:
                     prefix = column.get('prefix', "")
+                    shared = _shared_composite_attrs(column)
                     for type_column in col.db_type.columns:
-                        composed_col = DbColumn(type_column.attributes, self)
+                        composed_col = DbColumn({**shared, **type_column.attributes}, self)
                         composed_col.name = prefix + composed_col.name
                         composed_col.resolve(f"table: {table_name}")
                         self.tables[table_name].columns.append(composed_col)
