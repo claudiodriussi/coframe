@@ -1255,14 +1255,28 @@ class FilterBuilder:
         """
         Apply WHERE filters to the query.
 
+        `filters` holds its conditions under `conditions`, and a shape this
+        cannot read is refused rather than ignored: a filter that silently does
+        not filter answers with the whole table, and the caller cannot tell that
+        from a query that legitimately matched everything. The endpoint `db` has
+        a filter DSL of its own — flat, and under another key — so writing one
+        where the other is expected is the mistake this catches.
+
+        An empty `filters` stays silent: it says nothing, and nothing is what it
+        means.
+
         Args:
             query: SQLAlchemy query object
             filters_def: Filter definitions
 
         Returns:
             Modified query with filters applied
+
+        Raises:
+            ValueError: if filters_def says something this cannot read
         """
-        if 'conditions' not in filters_def:
+        self._require_conditions(filters_def, 'filters')
+        if not filters_def:
             return query
 
         filter_conditions = self._build_filter_conditions(filters_def['conditions'])
@@ -1270,6 +1284,24 @@ class FilterBuilder:
             query = query.where(filter_conditions)
 
         return query
+
+    @staticmethod
+    def _require_conditions(spec: Any, key: str) -> None:
+        """Refuse a filter block whose conditions cannot be found."""
+        if not spec:
+            return
+        if not isinstance(spec, dict):
+            raise ValueError(
+                f"'{key}' must be an object holding 'conditions', "
+                f"not {type(spec).__name__}"
+            )
+        if 'conditions' not in spec:
+            raise ValueError(
+                f"'{key}' has no 'conditions' — expected "
+                f"{{\'{key}\': {{\'conditions\': [{{\'field\': value}}]}}}}, "
+                f"got the keys {sorted(spec)}. The endpoint `db` takes flat "
+                f"filters under \'query\' instead; the two are not interchangeable."
+            )
 
     def apply_having(self, query: Select, having_def: Dict[str, Any]) -> Select:
         """
@@ -1282,7 +1314,8 @@ class FilterBuilder:
         Returns:
             Modified query with HAVING filters applied
         """
-        if 'conditions' not in having_def:
+        self._require_conditions(having_def, 'having')
+        if not having_def:
             return query
 
         having_conditions = self._build_filter_conditions(having_def['conditions'])
