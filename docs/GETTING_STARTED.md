@@ -372,11 +372,11 @@ mechanism: in service the first account is made by hand and the seed does
 nothing. Which also means it is a development password, and until you replace it
 it is the whole security of this application.
 
-The client is served by vite on a port of its own, so the backend runs with
-`COFRAME_DEV=1`: CORS, and the refreshed token exposed in a header that a browser
-would otherwise hide from JS across origins. Ctrl-C stops both — and if either
-one dies, the other is stopped with it, because a client talking to nothing looks
-like a bug in the application.
+The client is served by vite on a port of its own, but the browser never sees
+two origins: vite proxies `/coframe/*` to the backend, on the port `config.yaml`
+declares, so no server enables CORS — in development as in service. Ctrl-C stops
+both — and if either one dies, the other is stopped with it, because a client
+talking to nothing looks like a bug in the application.
 
 > The first run in a fresh clone warns that it *cannot find base config file
 > "./.svelte-kit/tsconfig.json"*. SvelteKit writes that file while starting, so
@@ -391,8 +391,9 @@ uv run coframe build-client   # → static/, which this application's server ser
 uv run server_flask.py        # http://localhost:8300 — client and API together
 ```
 
-No CORS is involved, because there is only one origin. When something works in
-one form and not in the other, that difference is the first place to look.
+One origin, as in development — only now it is the backend that serves the
+page. When something works in one form and not in the other, the difference
+between the two is the first place to look.
 
 Served this way the application answers on the network too —
 `http://<this machine's address>:8300` from another machine — because the
@@ -412,9 +413,9 @@ you may want to make yourself:
 1. **It picks the entry point.** With both servers present it takes
    `server_fastapi.py`; `--flask` asks for the other. The line it prints names
    the file it chose, which is the answer to *"which one is running?"*
-2. **It starts that server in the application's own environment** (`uv run`),
-   with `COFRAME_DEV=1` — and layers the library checkout on top for the run
-   only, which is what the second line of its output says.
+2. **It starts that server in the application's own environment** (`uv run`) —
+   and layers the library checkout on top for the run only, which is what the
+   second line of its output says.
 3. **It starts the shell** in the client repository, pointed here by
    `COFRAME_APP_ROOT`.
 4. **It keeps the two together**, and takes both down when either one stops.
@@ -423,8 +424,8 @@ The same thing by hand, in two terminals — no magic, and the way to run only o
 half:
 
 ```bash
-# terminal 1 — the server, told it is in development
-COFRAME_DEV=1 uv run server_flask.py           # or server_fastapi.py
+# terminal 1 — the server
+uv run server_flask.py                         # or server_fastapi.py
 
 # terminal 2 — the client, told which application it serves
 cd ../coframe-ui

@@ -13,7 +13,6 @@ Run from this directory:  python server_fastapi.py
 import os
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import devtest  # also puts the coframe package on sys.path  # noqa: E402
@@ -37,14 +36,6 @@ app = FastAPI(
     title="Coframe devtest",
     description="Sandbox app of the framework",
     version=plugins.config.get("version", "0.0.0"),
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # ── Routes ──────────────────────────────────────────────────────────────────

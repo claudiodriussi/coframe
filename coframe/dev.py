@@ -1,10 +1,13 @@
 """coframe dev — the processes a development session needs, started together.
 
-A session is two processes that must agree on three things: which application
-is being served, that the browser may talk to it from another port, and which
-copy of the library is running. Started by hand they agree only as long as
-nobody mistypes; started here they cannot disagree, because each fact is read
-from one place.
+A session is two processes that must agree on two things: which application
+is being served, and which copy of the library is running. Started by hand
+they agree only as long as nobody mistypes; started here they cannot disagree,
+because each fact is read from one place.
+
+The browser sees one origin, in development as in service: the Vite server
+proxies the API to the backend on the port config.yaml declares, so neither
+process needs to know about the other's port and no server enables CORS.
 
 What the command knows by itself, and what has to be told:
 
@@ -16,10 +19,10 @@ What the command knows by itself, and what has to be told:
   the client         the only thing nobody can derive: `--ui`, `$COFRAME_UI`,
                      or the workspace layout, where it sits beside the library
 
-Nothing here belongs in production: `COFRAME_DEV=1` opens CORS, and a server
-started this way is the development server of its framework. What does belong
-there is the artifact — `build_client` compiles the same client into the
-application's `static/`, which its own server serves at the root.
+Nothing here belongs in production: a server started this way is the
+development server of its framework. What does belong there is the artifact —
+`build_client` compiles the same client into the application's `static/`,
+which its own server serves at the root.
 """
 import os
 import shutil
@@ -262,7 +265,7 @@ def run(app: Optional[str] = None, framework: Optional[str] = None,
         print(f"server  {server.name}  →  http://localhost:{port}", flush=True)
         if checkout:
             print(f"        against the library at {checkout}", flush=True)
-        processes.append(_spawn(command, app_dir, {"COFRAME_DEV": "1"}))
+        processes.append(_spawn(command, app_dir, {}))
 
     if not no_client:
         print(f"client  shell  ←  {app_dir}", flush=True)

@@ -12,7 +12,6 @@ Run from this directory:  python server_flask.py
 import os
 
 from flask import Flask, send_from_directory
-from flask_cors import CORS
 
 import devtest  # also puts the coframe package on sys.path  # noqa: E402
 import coframe.server_utils as srv  # noqa: E402
@@ -35,11 +34,6 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key-not-for-servic
 # the catch-all below, not Flask's own /static route.
 app = Flask(__name__, static_folder=None)
 app.config["SECRET_KEY"] = SECRET_KEY
-# expose_headers: the refresh token travels in a response header, and a
-# browser hides those from JS across origins — which is what dev is, with
-# the Vite server on a port of its own. Without it the client never sees a
-# refreshed token in development, silently.
-CORS(app, expose_headers=["X-New-Token"])
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 

@@ -257,26 +257,6 @@ coframe_bp = Blueprint("coframe", __name__)
 auth = srv.register_flask(coframe_bp, coframe_app, plugins, SECRET_KEY)
 flask_app.register_blueprint(coframe_bp)
 
-# ── The client in development ────────────────────────────────────────────────
-#
-# The Vite dev server runs on a port of its own, so the browser calls this one
-# cross-origin and the request needs CORS. Off unless asked: in service the
-# client is served by this very process, same origin, and nobody needs it.
-#
-#   COFRAME_DEV=1 python server_flask.py
-#   coframe dev                    (both processes, from the app directory)
-#
-# The alternative is Vite's proxy, already configured in the shared config: set
-# VITE_API_BASE_URL= (empty) and the calls go to the dev server's own origin.
-
-if os.environ.get("COFRAME_DEV"):
-    from flask_cors import CORS
-
-    prefix = plugins.config.get("api", {}).get("prefix", "coframe")
-    CORS(flask_app, resources={rf"/{prefix}/*": {"origins": "*"}},
-         expose_headers=["X-New-Token"])
-    print("CORS enabled for development — do not do this in service")
-
 # ── The compiled client ──────────────────────────────────────────────────────
 #
 # Build it into static/, pointed at this application:  coframe build-client
@@ -357,29 +337,6 @@ fastapi_app = FastAPI(
 # a target just as well, the day this process also serves something else.
 
 srv.register_fastapi(fastapi_app, coframe_app, plugins, SECRET_KEY)
-
-# ── The client in development ────────────────────────────────────────────────
-#
-# The Vite dev server runs on a port of its own, so the browser calls this one
-# cross-origin and the request needs CORS. Off unless asked: in service the
-# client is served by this very process, same origin, and nobody needs it.
-#
-#   COFRAME_DEV=1 python server_fastapi.py
-#   coframe dev                    (both processes, from the app directory)
-
-if os.environ.get("COFRAME_DEV"):
-    from fastapi.middleware.cors import CORSMiddleware
-
-    prefix = plugins.config.get("api", {}).get("prefix", "coframe")
-    fastapi_app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=".*",
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["X-New-Token"],
-    )
-    print("CORS enabled for development — do not do this in service")
 
 # ── The compiled client ──────────────────────────────────────────────────────
 #
