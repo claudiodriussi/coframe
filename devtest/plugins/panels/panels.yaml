@@ -350,16 +350,17 @@ views:
         align: center
         formatter: price_color
       - field: status
-    # One entry point for everything Archivable offers: the server answers
-    # with a menu (active / archived / all, and the verb that fits the active
-    # row). Book carries the mixin; the command is declared here because a
-    # mixin's commands are not injected (navigator.md §4h).
+    # One entry point for everything Archivable offers, in the [⚡] menu: the
+    # server answers with a menu of its own (active / archived / all, and the
+    # verb that fits the active row). Book carries the mixin; the command is
+    # declared here because a mixin's commands are not injected (navigator.md
+    # §4h). `key` runs it from the keyboard while the grid has the focus.
     navigator:
       commands:
         - id: archive
           label: Archive
           scope: global
-          toolbar: true
+          key: a
           endpoint: archivable
     actions:
       row:
