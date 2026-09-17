@@ -95,23 +95,25 @@ def _flip(data, archive: bool):
         return {'status': 'error', 'code': 400, 'message': _('No record given')}
 
     app = coframe.utils.get_app()
-    changed = 0
+    touched = []
     with app.get_session() as session:
         for record_id in ids:
             record = session.get(model, record_id)
             if record is None or record.is_archived == archive:
                 continue
             record.archive() if archive else record.unarchive()
-            changed += 1
+            touched.append(record_id)
         session.commit()
 
-    if changed == 0:
+    if not touched:
         message = _('Already archived') if archive else _('Already active')
     elif archive:
-        message = _f('{n} archived', n=changed)
+        message = _f('{n} archived', n=len(touched))
     else:
-        message = _f('{n} restored', n=changed)
-    return {'status': 'success', 'data': {'message': message}}
+        message = _f('{n} restored', n=len(touched))
+    # The keys the view should look at again: it re-asks its own query for
+    # them and learns whether they still belong to what it shows.
+    return {'status': 'success', 'data': {'message': message, 'touched': touched}}
 
 
 @endpoint('archive')
