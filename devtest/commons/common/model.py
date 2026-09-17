@@ -1,3 +1,6 @@
+from coframe.querybuilder import filters_mention
+
+
 class Archivable:
     """
     Mixin that adds soft-delete (archive) behaviour to a table.
@@ -42,8 +45,10 @@ class Archivable:
         value = getattr(model_class, '_cf_archive_value', True)
         if query_def.get('include_archived'):
             return query
-        if field in query_def.get('filters', {}):
-            return query  # caller filters explicitly — don't interfere
+        # The caller conditions the column itself: what they wrote is what
+        # they want. The query builder owns the filter syntax, so it answers.
+        if filters_mention(query_def.get('filters'), model_class.__name__, field):
+            return query
         col = getattr(model_class, field, None)
         if col is not None:
             query = query.where(col == value)

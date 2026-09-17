@@ -63,6 +63,32 @@ def _is_aggregated(query_def: Dict[str, Any]) -> bool:
     return any(isinstance(expr, str) and '(' in expr for expr in select_def)
 
 
+def filters_mention(filters_def: Any, table: str, column: str) -> bool:
+    """
+    Whether a `filters` block conditions the main table's `column` anywhere.
+
+    A query behavior that adds an implicit condition (Archivable's `active =
+    True`) steps aside when the caller already conditions that column: what the
+    caller wrote is what the caller wants. The syntax is this module's, so the
+    question is answered here in every form a condition can take — a concise
+    key, bare or qualified as `Table.column`, a verbose dict, and both kinds of
+    group — and a behavior asks instead of parsing. A qualified mention of the
+    same column on another table (`Author.active`) is not a mention of this one.
+    """
+    def seen(node: Any) -> bool:
+        if isinstance(node, list):
+            return any(seen(item) for item in node)
+        if not isinstance(node, dict):
+            return False
+        if 'conditions' in node:
+            return seen(node['conditions'])
+        if 'column' in node and 'op' in node:
+            return node['column'] == column and node.get('table') in (None, table)
+        return any(key == column or key == f'{table}.{column}' for key in node)
+
+    return seen(filters_def) if filters_def else False
+
+
 def _secret_names(model_class) -> set:
     """Names of the columns of a model that are never sent to a client."""
     return secret_columns(table_definition(model_class))
