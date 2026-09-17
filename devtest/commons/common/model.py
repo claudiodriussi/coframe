@@ -40,11 +40,22 @@ class Archivable:
 
     @classmethod
     def apply(cls, model_class, query_def: dict, query):
-        """Add implicit WHERE active=True unless caller opts out."""
+        """
+        Add implicit WHERE active=True unless the caller says otherwise.
+
+        `archived` in the query definition picks the view — `'only'` for the
+        archived rows, `'all'` for everything, absent for the default. It is
+        what the `archivable` command sets, and a view carries it without
+        reading it. `include_archived: true` is the older spelling of `'all'`.
+        """
         field = getattr(model_class, '_cf_archive_field')
         value = getattr(model_class, '_cf_archive_value', True)
-        if query_def.get('include_archived'):
+        archived = query_def.get('archived')
+        if archived == 'all' or query_def.get('include_archived'):
             return query
+        if archived == 'only':
+            col = getattr(model_class, field, None)
+            return query.where(col != value) if col is not None else query
         # The caller conditions the column itself: what they wrote is what
         # they want. The query builder owns the filter syntax, so it answers.
         if filters_mention(query_def.get('filters'), model_class.__name__, field):

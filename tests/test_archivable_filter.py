@@ -73,6 +73,13 @@ def test_include_archived_shows_everything(session):
     assert titles(session, {'include_archived': True}) == ['Dune', 'Emma']
 
 
+def test_archived_picks_the_view(session):
+    """What the `archivable` command sets: a word the view carries unread."""
+    assert titles(session, {'archived': 'all'}) == ['Dune', 'Emma']
+    assert titles(session, {'archived': 'only'}) == ['Emma']
+    assert titles(session, {'archived': None}) == ['Dune']
+
+
 def test_a_rule_on_the_column_is_obeyed_as_written(session):
     """What the rule editor sends: the concise form under `conditions`."""
     assert titles(session, {'filters': {'conditions': [{'active': False}]}}) == ['Emma']

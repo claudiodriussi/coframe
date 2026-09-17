@@ -1717,7 +1717,19 @@
      "$plugin": "panels"
     }
    ],
-   "navigator": true,
+   "navigator": {
+    "commands": [
+     {
+      "id": "archive",
+      "label": "Archive",
+      "scope": "global",
+      "toolbar": true,
+      "endpoint": "archivable",
+      "$plugin": "panels"
+     }
+    ],
+    "$plugin": "panels"
+   },
    "actions": {
     "row": [
      {

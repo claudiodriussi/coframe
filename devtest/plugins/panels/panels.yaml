@@ -350,7 +350,17 @@ views:
         align: center
         formatter: price_color
       - field: status
-    navigator: true
+    # One entry point for everything Archivable offers: the server answers
+    # with a menu (active / archived / all, and the verb that fits the active
+    # row). Book carries the mixin; the command is declared here because a
+    # mixin's commands are not injected (navigator.md §4h).
+    navigator:
+      commands:
+        - id: archive
+          label: Archive
+          scope: global
+          toolbar: true
+          endpoint: archivable
     actions:
       row:
         - id: edit
