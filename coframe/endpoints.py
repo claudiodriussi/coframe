@@ -1,4 +1,5 @@
 import importlib.util
+import logging
 import time
 import uuid
 import traceback as _traceback
@@ -145,6 +146,24 @@ class CommandResult:
         import json
         data = json.loads(json_str)
         return cls.from_dict(data)
+
+
+_log = logging.getLogger('coframe')
+
+
+def _param_names(parameters: Any) -> str:
+    """The shape of a request without its values: keys, and keys of `data`."""
+    if not isinstance(parameters, dict):
+        return type(parameters).__name__
+    parts = []
+    for key, value in parameters.items():
+        if isinstance(value, dict):
+            parts.append(f"{key}{{{','.join(map(str, value))}}}")
+        elif isinstance(value, (list, tuple)):
+            parts.append(f"{key}[{len(value)}]")
+        else:
+            parts.append(str(key))
+    return ' '.join(parts)
 
 
 class Command:
@@ -343,7 +362,20 @@ class CommandProcessor:
             The result, always as a CommandResult — an endpoint that raises
             produces a 500 rather than an exception escaping to the server.
         """
+        # One line per request, and the traceback where it can be found again:
+        # the client shows an error once and the dialog closes, the log is what
+        # remains. Who listens is the application's choice (server_utils.
+        # setup_logging); this only speaks. Parameter *names* at DEBUG, never
+        # their values — a `db update` on a user carries the password.
+        who = (command.context or {}).get('username') or '-'
+        started = time.perf_counter()
+        if _log.isEnabledFor(logging.DEBUG):
+            _log.debug('%s by %s params=%s [%s]', command.operation, who,
+                       _param_names(command.parameters), command.request_id)
+
         if command.operation not in self.endpoints:
+            _log.warning("%s by %s: no such operation [%s]", command.operation, who,
+                         command.request_id)
             return CommandResult(status="error",
                                  message=f"Operation '{command.operation}' not found",
                                  request_id=command.request_id,
@@ -359,20 +391,23 @@ class CommandProcessor:
 
             # An endpoint may either return its own envelope or a plain payload
             if isinstance(result_data, dict) and "status" in result_data:
-                return CommandResult(
+                result = CommandResult(
                     status=result_data.get("status"),
                     data=result_data.get("data"),
                     message=result_data.get("message"),
                     request_id=command.request_id,
                     code=result_data.get("code", 200)
                 )
-            return CommandResult(
-                status="success",
-                data=result_data,
-                request_id=command.request_id
-            )
+            else:
+                result = CommandResult(
+                    status="success",
+                    data=result_data,
+                    request_id=command.request_id
+                )
 
         except Exception as e:
+            _log.exception('%s by %s failed after %dms [%s]', command.operation, who,
+                           (time.perf_counter() - started) * 1000, command.request_id)
             return CommandResult(
                 status="error",
                 message=str(e),
@@ -381,6 +416,14 @@ class CommandProcessor:
                 error_type=type(e).__name__,
                 traceback=_traceback.format_exc()
             )
+
+        # An endpoint that refused (its own error envelope) is not a failure of
+        # the server, but it is something the person who asked will report.
+        level = logging.INFO if result.status == 'success' else logging.WARNING
+        _log.log(level, '%s by %s → %s %s in %dms [%s]', command.operation, who,
+                 result.status, result.code, (time.perf_counter() - started) * 1000,
+                 command.request_id)
+        return result
 
     def send(self, command_dict: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -10,6 +10,7 @@ brand-new thread, so thread-local state started empty by construction. Serving
 requests from a reused pool thread removes that guarantee, and only an explicit
 set on every dispatch keeps one user's context out of the next user's request.
 """
+import logging
 import pytest
 
 from coframe.db import BaseApp
@@ -121,3 +122,49 @@ def test_endpoint_decorator_registers_a_dispatchable_operation(processor):
         assert processor.send({'operation': 'decorated'})['data'] == 'ok'
     finally:
         _ENDPOINTS.pop('decorated', None)
+
+
+# ── What the dispatcher says ───────────────────────────────────────────────
+# The client shows an error once and the dialog closes; the log is what
+# remains. One line per request, the traceback on a failure, and the request
+# id on both so what a person reports can be found again. Parameter values
+# never: a `db update` on a user carries the password.
+
+def test_a_request_leaves_one_line_with_who_and_how_long(processor, caplog):
+    with caplog.at_level(logging.INFO, logger='coframe'):
+        result = processor.send({'operation': 'echo', 'parameters': {'a': 1},
+                                 'context': {'username': 'rossi'}, 'request_id': 'req-1'})
+    lines = [r for r in caplog.records if r.name == 'coframe']
+    assert len(lines) == 1
+    assert lines[0].levelno == logging.INFO
+    assert 'echo by rossi → success 200' in lines[0].getMessage()
+    assert 'ms [req-1]' in lines[0].getMessage()
+    assert result['request_id'] == 'req-1'
+
+
+def test_a_failure_logs_the_traceback_under_the_request_id(processor, caplog):
+    with caplog.at_level(logging.INFO, logger='coframe'):
+        processor.send({'operation': 'boom', 'request_id': 'req-2'})
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1
+    assert 'boom by - failed' in errors[0].getMessage() and '[req-2]' in errors[0].getMessage()
+    assert errors[0].exc_text and 'KeyError' in errors[0].exc_text
+
+
+def test_a_refusal_is_a_warning_not_a_failure(processor, caplog):
+    with caplog.at_level(logging.INFO, logger='coframe'):
+        processor.send({'operation': 'shaped'})
+        processor.send({'operation': 'nowhere'})
+    levels = [(r.levelno, r.getMessage().split(' ')[0]) for r in caplog.records if r.name == 'coframe']
+    assert (logging.WARNING, 'shaped') in levels
+    assert (logging.WARNING, 'nowhere') in levels
+    assert not any(lvl == logging.ERROR for lvl, _ in levels)
+
+
+def test_parameter_values_are_never_logged(processor, caplog):
+    with caplog.at_level(logging.DEBUG, logger='coframe'):
+        processor.send({'operation': 'echo',
+                        'parameters': {'table': 'User', 'data': {'password': 'hunter2'}, 'ids': [1, 2]}})
+    text = '\n'.join(r.getMessage() for r in caplog.records)
+    assert 'hunter2' not in text
+    assert 'data{password}' in text and 'ids[2]' in text and 'table' in text

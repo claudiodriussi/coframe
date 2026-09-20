@@ -11,6 +11,9 @@ This allows the same logic to be used with Flask, FastAPI, Django, or any other 
 """
 
 from datetime import datetime, timezone, timedelta
+import logging
+import logging.handlers
+import sys
 import traceback as _traceback
 import jwt
 from typing import Dict, Any, Optional, Tuple
@@ -20,13 +23,17 @@ from coframe import apptime
 
 def _error_response(message: str, status_code: int = 500,
                     error_type: Optional[str] = None,
-                    traceback: Optional[str] = None) -> Dict[str, Any]:
+                    traceback: Optional[str] = None,
+                    request_id: Optional[str] = None) -> Dict[str, Any]:
     """Build a uniform error response dict."""
     r: Dict[str, Any] = {'status': 'error', 'message': message, 'status_code': status_code}
     if error_type:
         r['error_type'] = error_type
     if traceback:
         r['traceback'] = traceback
+    # The line in the log that tells the whole story: what a person reports.
+    if request_id:
+        r['request_id'] = request_id
     return r
 
 
@@ -47,8 +54,51 @@ def _error_from_result(result: Dict[str, Any], default_message: str = 'Operation
         message=result.get('message', default_message),
         status_code=status_code,
         error_type=result.get('error_type'),
-        traceback=result.get('traceback')
+        traceback=result.get('traceback'),
+        request_id=result.get('request_id'),
     )
+
+
+# ============================================
+# Logging
+# ============================================
+
+def setup_logging(level: str = 'INFO', file: Optional[str] = None, *,
+                  max_bytes: int = 5 * 1024 * 1024, backups: int = 5) -> logging.Logger:
+    """
+    Make the process's log audible. The library only speaks (`coframe` logger,
+    one line per request, the traceback on a failure); this is where an
+    application decides to listen, once at startup, with values from its
+    environment. Not calling it is a choice too: an application that embeds
+    coframe in a process of its own keeps its own logging.
+
+    Always stdout — under systemd that is journald, at a console it is the
+    terminal, so running by hand and running as a service read the same. The
+    line is short because journald adds the time itself. `file` adds a rotating
+    file with timestamps, for the case "copy it and read it elsewhere".
+
+    Configures the root logger so the application's own loggers flow the same
+    way. Calling it again replaces what it installed, never doubles it.
+    """
+    root = logging.getLogger()
+    for handler in list(root.handlers):
+        if getattr(handler, '_coframe', False):
+            root.removeHandler(handler)
+
+    stdout = logging.StreamHandler(sys.stdout)
+    stdout.setFormatter(logging.Formatter('%(levelname)s %(name)s: %(message)s'))
+    handlers = [stdout]
+    if file:
+        rotating = logging.handlers.RotatingFileHandler(
+            file, maxBytes=max_bytes, backupCount=backups, encoding='utf-8')
+        rotating.setFormatter(logging.Formatter(
+            '%(asctime)s %(levelname)s %(name)s: %(message)s'))
+        handlers.append(rotating)
+    for handler in handlers:
+        handler._coframe = True  # type: ignore[attr-defined]
+        root.addHandler(handler)
+    root.setLevel(getattr(logging, str(level).upper(), logging.INFO))
+    return logging.getLogger('coframe')
 
 
 # ============================================
