@@ -78,3 +78,52 @@ def query_books(data):
         "data": data,
         "code": 200
     }
+
+
+@endpoint('color_chooser')
+def color_chooser(data):
+    """A chain of questions composed by the server, one answer at a time.
+
+    The bench for the result vocabulary (`resultAction.ts`): every answer is
+    data, and the client turns it into a dialog without knowing what a colour
+    is. Three steps, each a call to this same endpoint with the next `step`:
+
+      (none)   → an `endpoint` action with `confirm`: "Do you want to see the
+                 choices?" — yes calls step `list`, no is silence
+      list     → a `choose` whose entries carry the call for step `picked`
+      picked   → the report, "You chose Red"
+
+    Dismissing the menu is not an answer, so nothing happens: a closed menu
+    means nothing, and the server never hears about it.
+    """
+    step = data.get('step')
+    colours = [('red', 'Red'), ('green', 'Green'), ('blue', 'Blue')]
+
+    if step == 'list':
+        return {'status': 'success', 'data': {
+            'action': 'choose',
+            'title': 'Colours',
+            'message': 'Pick one',
+            'options': [
+                {'label': label,
+                 'current': data.get('current') == code,
+                 'then': {'action': 'endpoint', 'op': 'color_chooser',
+                          'params': {'step': 'picked', 'color': code}}}
+                for code, label in colours
+            ],
+        }}
+
+    if step == 'picked':
+        label = dict(colours).get(data.get('color'), '?')
+        return {'status': 'success', 'data': {
+            'message': f'You chose {label}',
+            'detail': f'color = {data.get("color")!r}',
+            'detail_label': 'What the server received',
+        }}
+
+    return {'status': 'success', 'data': {
+        'action': 'endpoint',
+        'op': 'color_chooser',
+        'params': {'step': 'list', 'current': data.get('current')},
+        'confirm': 'Do you want to see the choices?',
+    }}

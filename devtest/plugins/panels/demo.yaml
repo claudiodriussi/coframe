@@ -28,6 +28,15 @@ pages:
       $ref: "views.demo_book_authors_view"
 
 
+  # The msgbox bench: the same chain of questions asked by the component and
+  # composed by the server (library/test.py `color_chooser`). A plugin brings
+  # its own Svelte, and a page reaches it by registry id.
+  msgbox_demo:
+    title: Msgbox demo
+    content:
+      type: plugin
+      component: library.msgboxdemo
+
 views:
   hello_main:
     type: plugin

@@ -867,6 +867,15 @@
    "panel": "hello_demo",
    "$plugin": "panels"
   },
+  "demo_msgbox": {
+   "label": "Msgbox demo",
+   "icon": "message-square",
+   "parent": "playground",
+   "order": 15,
+   "action": "stack_push",
+   "panel": "msgbox_demo",
+   "$plugin": "panels"
+  },
   "demo_panels": {
    "label": "Book panels",
    "icon": "layout",
@@ -1519,6 +1528,15 @@
    },
    "$plugin": "panels"
   },
+  "msgbox_demo": {
+   "title": "Msgbox demo",
+   "content": {
+    "type": "plugin",
+    "component": "library.msgboxdemo",
+    "$plugin": "panels"
+   },
+   "$plugin": "panels"
+  },
   "product_demo_form": {
    "title": "Scheda prodotto",
    "content": {
@@ -1723,7 +1741,7 @@
       "id": "archive",
       "label": "Archive",
       "scope": "global",
-      "toolbar": true,
+      "key": "a",
       "endpoint": "archivable",
       "$plugin": "panels"
      }
