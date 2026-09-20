@@ -13,7 +13,7 @@ Two layers:
                     write output to file or stdout.  Accepts an output_dir
                     so callers can point it at their project's data folder.
 
-Commands needing a live database (db-check, db-sync) are listed in DB_COMMANDS:
+Commands needing a live database (db-check, db-sync, db-backup) are listed in DB_COMMANDS:
 the caller builds the app with an engine for those, and with the schema alone
 for the rest.
 
@@ -335,7 +335,7 @@ def dump_types(app: Any, include_builtin: bool = False) -> Tuple[str, str]:
 
 # Commands that need app.initialize_db() to have run — the others work on the
 # merged schema alone.
-DB_COMMANDS = {'db-check', 'db-sync'}
+DB_COMMANDS = {'db-check', 'db-sync', 'db-backup'}
 
 
 def db_check(app: Any) -> Tuple[str, bool]:
@@ -385,6 +385,46 @@ def db_sync(app: Any, dry_run: bool = False) -> Tuple[str, bool]:
     return '\n'.join(lines), not diff.refused
 
 
+def db_backup(app: Any, dest: Optional[str] = None) -> Tuple[str, str]:
+    """
+    A consistent copy of a SQLite database, taken while the server runs.
+
+    `cp` on a live file is not that: in WAL mode the last writes sit in the
+    `-wal` file until a checkpoint, and a copy taken mid-write can be torn.
+    SQLite's online backup API reads a snapshot through the engine itself, so
+    the result opens cleanly and holds everything committed at that moment —
+    no need to stop the service. Other engines are refused by name: the day an
+    application runs on one, this is where `pg_dump`/`mysqldump` plug in,
+    under the same command.
+
+    Returns:
+        (report, path) — the file written.
+    """
+    import sqlite3
+    from datetime import datetime
+
+    url = app.engine.url
+    if url.get_backend_name() != 'sqlite' or not url.database:
+        raise SystemExit(f'db-backup copies SQLite files; this application uses '
+                         f'{url.get_backend_name()} — use that engine\'s own tool.')
+
+    source = Path(url.database)
+    if dest is None:
+        stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        target = source.with_name(f'{source.stem}-{stamp}{source.suffix}')
+    else:
+        target = Path(dest)
+        if target.is_dir():
+            target = target / source.name
+    if target.resolve() == source.resolve():
+        raise SystemExit('db-backup: the destination is the database itself.')
+
+    with sqlite3.connect(str(source)) as src, sqlite3.connect(str(target)) as out:
+        src.backup(out)
+    size = target.stat().st_size
+    return f'Backup written: {target} ({size:,} bytes)', str(target)
+
+
 # ── CLI parser ─────────────────────────────────────────────────────────────────
 
 def make_parser() -> argparse.ArgumentParser:
@@ -414,6 +454,8 @@ examples:
   db-check                              compare the database with the schema (exit 1 if it differs)
   db-sync --dry-run                     show the DDL an alignment would run
   db-sync                               apply it (adds only — never drops, never narrows)
+  db-backup                             consistent SQLite snapshot next to the database, stamped
+  db-backup /mnt/backup/                a directory, or a file path
   dev                                   run this app and its client, together
   dev /path/to/app --no-client          just the server, on another app
   build-client                          compile this app's client into static/
@@ -477,6 +519,14 @@ examples:
     )
     p.add_argument('--dry-run', action='store_true',
                    help='Print the DDL that would run, without touching the database')
+
+    # ── db-backup ──────────────────────────────────────────────────────────────
+    p = sub.add_parser(
+        'db-backup',
+        help='Consistent snapshot of a SQLite database, safe while the server runs',
+    )
+    p.add_argument('dest', nargs='?',
+                   help='Target file or directory (default: next to the database, timestamped)')
 
     # ── new ────────────────────────────────────────────────────────────────────
     # The one command that runs without an application, hence from the `coframe`
@@ -635,6 +685,10 @@ def run_cli(app: Any, args: argparse.Namespace, output_dir: Path = Path('.')) ->
         print(report)
         if not aligned:
             sys.exit(1)
+
+    elif args.command == 'db-backup':
+        report, _ = db_backup(app, args.dest)
+        print(report)
 
     elif args.command == 'new':
         print('`new` writes a fresh application, so it does not run from one: '
