@@ -171,7 +171,6 @@ class PluginsManager:
             "license": "",
             "plugins": ['plugins'],
             "db_engine": "",
-            "log_file": "",
             "timezone": "",
         }
         self.app_root = Path(config).resolve().parent
@@ -510,7 +509,6 @@ class PluginsManager:
                 continue
 
             if key in replaced:
-                self.logger.debug(f"[{plugin}] Replacing '{key_path}' wholesale")
                 result[key] = new[key]
                 continue
 
@@ -525,7 +523,6 @@ class PluginsManager:
                     )
 
                 if isinstance(v1, dict):
-                    self.logger.debug(f"[{plugin}] Merging dict at key '{key_path}'")
                     result[key] = self._recursive_merge(v1, v2, plugin, current_path + [key])
                     if '$plugin' in v1:
                         result[key]['$plugin'] = v1['$plugin']
@@ -536,7 +533,6 @@ class PluginsManager:
                     # Check if there's a custom merge handler for this path
                     handler = self._get_merge_handler(key_path)
                     if handler:
-                        self.logger.debug(f"[{plugin}] Merging list at key '{key_path}' using custom handler")
                         result[key] = handler(v1, v2, plugin)
                     else:
                         result[key] = self._merge_lists(v1, v2, plugin, key_path)
@@ -546,7 +542,6 @@ class PluginsManager:
                                    f"value overridden: {v1!r} -> {v2!r}", plugin)
                     result[key] = v2
             else:
-                self.logger.debug(f"[{plugin}] Adding new key '{key_path}'")
                 if isinstance(new[key], dict):
                     result[key] = self._recursive_merge({}, new[key], plugin, current_path + [key])
                     result[key]['$plugin'] = plugin
@@ -614,11 +609,9 @@ class PluginsManager:
                     f"({', '.join(self._IDENTITY_KEYS)}): the items are appended and cannot "
                     f"refine the ones already there. Give them an 'id' to make them addressable.",
                     plugin)
-            self.logger.debug(f"[{plugin}] Extending plain list at '{key_path}'")
             merged = base + [item for item in new if item not in base]
             return merged
 
-        self.logger.debug(f"[{plugin}] Smart-merging list at '{key_path}' by '{id_key}'")
 
         # Build an ordered index of base items keyed by identity value.
         # Use a list of (identity, item) pairs to preserve insertion order.
