@@ -98,6 +98,11 @@ def setup_logging(level: str = 'INFO', file: Optional[str] = None, *,
         handler._coframe = True  # type: ignore[attr-defined]
         root.addHandler(handler)
     root.setLevel(getattr(logging, str(level).upper(), logging.INFO))
+    # Third parties whisper: what they say at INFO is their own bookkeeping
+    # (alembic's plugin setup, every SQL statement with echo), and it would
+    # bury the one line per request this exists for. WARNING still passes.
+    for noisy in ('alembic', 'sqlalchemy'):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     return logging.getLogger('coframe')
 
 

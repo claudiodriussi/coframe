@@ -2,12 +2,13 @@ import sys
 import os
 import importlib
 import importlib.util
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Any
 import yaml
 from coframe import apptime
-from coframe.utils import get_logger, set_formatter, logging_to_file, deep_merge
+from coframe.utils import deep_merge
 
 # Merge directives. They belong to the YAML protocol, not to a single function:
 # every one of them is consumed while merging and never reaches a consumer.
@@ -87,7 +88,6 @@ class PluginsManager:
         self.config: Dict[str, Any] = {}
         self.plugins: Dict[str, 'Plugin'] = {}
         self.sorted: List[str] = []
-        self.original_handlers = None
         self.merge_handlers: Dict[str, Any] = {}
         # The application config, once loaded: an input to what is generated.
         self.config_file: Optional[Path] = None
@@ -99,9 +99,9 @@ class PluginsManager:
         # from somewhere else. Set for real by load_config().
         self.app_root: Path = Path.cwd()
 
-        # Initialize logging
-        self.logger = get_logger(logger_name)
-        set_formatter(self.logger, '%(name)s|%(levelname)s|%(message)s')
+        # The library speaks, it does not listen: no handler, no level. An
+        # application that wants the lines calls server_utils.setup_logging.
+        self.logger = logging.getLogger(logger_name)
 
     def add_issue(self, severity: str, code: str, path: str, message: str,
                   plugin: Optional[str] = None) -> None:
@@ -188,10 +188,15 @@ class PluginsManager:
         apptime.set_app_timezone(self.config['timezone'])
         apptime.check_process_timezone()
 
-        # Redirect logging to file if specified in config
-        if self.config['log_file']:
-            self.original_handlers, _ = logging_to_file(
-                self.logger, str(self.resolve_path(self.config['log_file'])))
+        # `log_file` used to redirect this logger alone to a file, truncated at
+        # every start. Where the log goes is the process's choice, made once
+        # for every logger (server_utils.setup_logging, from the environment):
+        # a file named here would be a second, narrower answer to the same
+        # question, so it is not honoured — and said, not ignored.
+        if self.config.get('log_file'):
+            self.logger.warning(
+                "config.yaml 'log_file' is no longer honoured: the log is configured "
+                "by the process (server_utils.setup_logging), not by the library.")
 
     def resolve_path(self, path: Union[str, Path]) -> Path:
         """
@@ -541,7 +546,7 @@ class PluginsManager:
                                    f"value overridden: {v1!r} -> {v2!r}", plugin)
                     result[key] = v2
             else:
-                self.logger.info(f"[{plugin}] Adding new key '{key_path}'")
+                self.logger.debug(f"[{plugin}] Adding new key '{key_path}'")
                 if isinstance(new[key], dict):
                     result[key] = self._recursive_merge({}, new[key], plugin, current_path + [key])
                     result[key]['$plugin'] = plugin

@@ -44,7 +44,6 @@ CONFIG_YAML = '''# {{name}} — app-instance coframe.
 name: {{name}}
 version: 0.1.0
 description: ""
-log_file: "data/{{name}}.log"
 
 # Plugin roots, in order. Each entry is a directory holding plugin directories,
 # named as a path or as `{ path, include }` — which takes part of a root and
@@ -230,6 +229,12 @@ import coframe.server_utils as srv
 
 import app as application
 
+# ── Log ──────────────────────────────────────────────────────────────────────
+# The library speaks (one line per request, the traceback on a failure); the
+# process decides to listen. Always stdout — journald under systemd, the
+# terminal by hand — and a rotating file when the environment names one.
+srv.setup_logging(os.environ.get("LOG_LEVEL", "INFO"), os.environ.get("LOG_FILE") or None)
+
 # ── Application ──────────────────────────────────────────────────────────────
 
 coframe_app, plugins, model = application.setup_db()
@@ -312,6 +317,12 @@ from fastapi.staticfiles import StaticFiles
 import coframe.server_utils as srv
 
 import app as application
+
+# ── Log ──────────────────────────────────────────────────────────────────────
+# The library speaks (one line per request, the traceback on a failure); the
+# process decides to listen. Always stdout — journald under systemd, the
+# terminal by hand — and a rotating file when the environment names one.
+srv.setup_logging(os.environ.get("LOG_LEVEL", "INFO"), os.environ.get("LOG_FILE") or None)
 
 # ── Application ──────────────────────────────────────────────────────────────
 

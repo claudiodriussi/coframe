@@ -62,3 +62,13 @@ def test_an_unknown_level_falls_back_to_info():
         assert logging.getLogger().level == logging.INFO
     finally:
         _teardown()
+
+
+def test_third_parties_are_held_to_warning():
+    try:
+        srv.setup_logging('DEBUG')
+        assert logging.getLogger('alembic').level == logging.WARNING
+        assert logging.getLogger('sqlalchemy').level == logging.WARNING
+        assert logging.getLogger('coframe').getEffectiveLevel() == logging.DEBUG
+    finally:
+        _teardown()
