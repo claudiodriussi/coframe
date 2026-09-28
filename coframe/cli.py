@@ -7,7 +7,8 @@ Two layers:
                     No file I/O, no argparse — fully testable in isolation.
 
   make_parser()     Build and return the ArgumentParser for the coframe CLI.
-                    Add new subparsers here as new commands are implemented.
+                    An application adds its own commands through
+                    `parser.commands` and handles them before run_cli().
 
   run_cli()         Dispatch parsed args to the right dump_* function and
                     write output to file or stdout.  Accepts an output_dir
@@ -434,6 +435,10 @@ def make_parser() -> argparse.ArgumentParser:
     Add new subparsers here as new commands are implemented.
     The parser is intentionally separate from run_cli() so callers
     can inspect or extend it before parsing.
+
+    `parser.commands` is the subparsers action: an application adds its own
+    commands with `parser.commands.add_parser(...)` and dispatches them itself,
+    before handing the rest to run_cli().
     """
     parser = argparse.ArgumentParser(
         prog='coframe',
@@ -463,6 +468,7 @@ examples:
     )
 
     sub = parser.add_subparsers(dest='command', metavar='command')
+    parser.commands = sub
 
     # ── dump-page ──────────────────────────────────────────────────────────────
     p = sub.add_parser(
