@@ -82,6 +82,8 @@ def run_checks(app: Any) -> List[Dict[str, Any]]:
                 continue
             _walk(app, item, f'{section}.{item_id}', None, issues, referenced)
 
+    _check_auto_pages(app, issues)
+
     # Orphan views: defined but never targeted by a $ref
     views = pm.data.get('views') or {}
     for view_id, view in views.items():
@@ -120,6 +122,14 @@ def _walk(app: Any, obj: Any, path: str, plugin: Optional[str],
             _check_collection(app, obj, path, plugin, issues)
 
         for key, value in obj.items():
+            if not isinstance(key, str):
+                # YAML 1.1 reads an unquoted on/off/yes/no as a boolean: `on:`
+                # in a join arrives as `True:` and the condition is lost.
+                issues.append(make_issue(
+                    'warning', 'key-not-string', f'{path}.{key}',
+                    f"key {key!r} is not a string — YAML reads unquoted "
+                    f"on/off/yes/no as booleans: quote it (\"on\":)", plugin))
+                continue
             if key.startswith('$'):
                 continue
             _walk(app, value, f'{path}.{key}', plugin, issues, referenced)
@@ -256,6 +266,24 @@ def _check_fields(fields: List[Any], colnames: Set[str], model: str,
             issues.append(make_issue(
                 'warning', 'field-unknown', f'{path}[{name}]',
                 f"field '{name}' not found in table '{model}'", plugin))
+
+
+def _check_auto_pages(app: Any, issues: List[Dict[str, Any]]) -> None:
+    """A page declaring `$auto` must have a generated page underneath.
+
+    Checked here and not only when the page is opened: the page carries no
+    `source` of its own, so nothing else in the walk would notice.
+    """
+    from coframe.pages import AUTO, resolve_auto_page
+
+    for page_id, page in (app.pm.data.get('pages') or {}).items():
+        if not isinstance(page, dict) or not page.get(AUTO):
+            continue
+        if resolve_auto_page(app, page_id) is None:
+            issues.append(make_issue(
+                'error', 'auto-missing', f'pages.{page_id}',
+                f"declares {AUTO}, but no table answers to '{page_id}' "
+                f"(expected <table>_list or <table>_form)", page.get('$plugin')))
 
 
 def _check_push_target(app: Any, action: Dict[str, Any], path: str,

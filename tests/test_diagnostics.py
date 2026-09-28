@@ -262,3 +262,16 @@ def test_a_collection_naming_a_column_that_does_not_exist():
     app = collections_app({'model': 'Chapter', 'fk': 'nowhere_id'})
     issues = by_code(run_checks(app), 'field-unknown')
     assert any(i['path'].endswith('layout[chapters].fk') for i in issues)
+
+
+def test_an_unquoted_on_is_reported_not_a_crash():
+    """YAML 1.1 reads `on:` as True: the join condition is lost, and check says why."""
+    import yaml
+    joins = yaml.safe_load('- Publisher: {type: left, on: "Book.publisher_id = Publisher.id"}')
+    pm = PluginsManager()
+    pm.merge_dicts({'pages': {'book_list': {'content': {
+        'type': 'table', 'source': {'model': 'Book', 'joins': joins}}}}}, 'bench')
+
+    issues = run_checks(FakeApp(pm, {'Book': FakeTable('id')}))
+    found = by_code(issues, 'key-not-string')
+    assert len(found) == 1 and 'on/off/yes/no' in found[0]['message']

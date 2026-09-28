@@ -302,7 +302,9 @@ marked it `_auto: true` so that you can tell which it is.
 Two ids answer for every table, `{table}_list` and `{table}_form`. The day the
 generated one is not enough — a different order of columns, a filter, a layout —
 declare a page under that same id in your plugin's YAML: it is served in place of
-the generated one, and nothing else changes, the client least of all.
+the generated one, and nothing else changes, the client least of all. When the
+change is small — a title, a command — add `$auto: true` to that page and write
+only what differs: the generated page is its base (`PLUGIN_MODEL.md` § 5.7).
 
 ### And a way in
 

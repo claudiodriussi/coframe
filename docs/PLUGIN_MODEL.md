@@ -412,6 +412,7 @@ These are part of the plugin model:
 |-----|---------|
 | `$plugin` | Attribution: which plugin last contributed this node. Injected by the merge (§ 2.1); drives default cascades and diagnostics, enables fail-loud conflict detection; stripped before the frontend. |
 | `$ref` | Reference: replace this node with the object at the given path, merging sibling keys on top. Resolved server-side — define once, place many (Chapter 5). |
+| `$auto` | On a page: start from the auto-generated page of that id and merge this one on top (§ 5.7). Resolved server-side with the page; never delivered. |
 | `$remove` / `$after` / `$before` | Smart-merge directives (§ 2.3): delete an item — or, on a keyed section, an entry — and insert a new item at a position. Consumed by the merge; never delivered. |
 | `$replace` | On a dict: the listed keys supersede the base's instead of merging with them (§ 2.3). Consumed by the merge; never delivered. |
 
@@ -1569,6 +1570,29 @@ Collections (§ 4.5) are never derived: a collection is not a column, and asking
 which tables hold a foreign key to this one would pull `BookAuthor`, `Loan` and
 `Review` into `Book` with equal right, while only the first belongs inside it.
 An aggregate is declared, or it does not exist.
+
+**Starting from the generated page (`$auto`).** An explicit page replaces the
+generated one whole, which is right for a page that differs and heavy for one
+that differs by a single key. `$auto: true` on an explicit page makes the
+generated page its base: the page is merged on top of it (`deep_merge`, the
+same rules as between plugins), so it names only what changes and the columns
+keep following the schema.
+
+```yaml
+pages:
+  author_list:
+    $auto: true              # the generated author_list, plus:
+    content:
+      navigator:             # replaces the generated `navigator: true`
+        commands:
+          - {id: archive, label: Archive, scope: global, key: a, endpoint: archivable}
+```
+
+A key the page declares wins, a list included: `columns:` written here is the
+whole column list, not an addition to the generated one. `$auto` on an id that
+no table answers to is an error, both when the page is opened and in `check`
+(`auto-missing`), since such a page has no `source` of its own for any other
+check to notice.
 
 ### 5.8 Lookup Mode *(planned)*
 

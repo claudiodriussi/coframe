@@ -15,8 +15,11 @@ against the map it returns. One function, so the two cannot diverge: what the
 client renders and what the server accepts come from the same reading of the same
 descriptor.
 """
+import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from coframe.utils import deep_merge
 
 _JSON_SCALARS = (str, int, float, bool, type(None))
 
@@ -303,11 +306,37 @@ def resolve_auto_page(app: Any, page_id: str) -> Optional[Dict[str, Any]]:
 
 # ── Page resolution ─────────────────────────────────────────────────────────
 
+AUTO = '$auto'
+
+
+def _on_auto(app: Any, page_id: str, page: Dict[str, Any]) -> Dict[str, Any]:
+    """A page declaring `$auto: true` starts from the generated one and merges on top.
+
+    For the page that is almost the generated one: a command in the navigator,
+    a title, with the columns still derived from the schema. Declared, never
+    inferred — an explicit page without `$auto` replaces the generated one whole.
+
+    Raises:
+        ValueError: if no generated page answers to that id
+    """
+    base = resolve_auto_page(app, page_id)
+    if base is None:
+        raise ValueError(f"Page '{page_id}' declares {AUTO}, but no table "
+                         f"answers to that id")
+    base.pop('_auto', None)
+    overlay = copy.deepcopy(page)
+    overlay.pop(AUTO, None)
+    deep_merge(base, overlay)
+    return base
+
+
 def _resolve(app: Any, page_id: str):
     """Return (page, collection map), or (None, {}) if no page answers to that id."""
     page = app.pm.get(f'pages.{page_id}')
     if page is not None:
         resolved = app.pm.resolve_refs(page)
+        if resolved.get(AUTO):
+            resolved = _on_auto(app, page_id, resolved)
         return resolved, resolve_collections(resolved, page_id)
 
     auto = resolve_auto_page(app, page_id)
