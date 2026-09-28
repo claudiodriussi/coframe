@@ -300,3 +300,21 @@ def test_an_alias_keeps_them_apart():
 def test_an_alias_can_collide_too():
     found = by_code(key_collision_app('name', 'Publisher.name as name'), 'field-key-collision')
     assert len(found) == 1
+
+
+def rank_app(rank):
+    pm = PluginsManager()
+    pm.merge_dicts({'pages': {}}, 'bench')
+    table = FakeTable('id', 'name')
+    table.effective_columns[1].attributes['query_rank'] = rank
+    return run_checks(FakeApp(pm, {'Book': table}))
+
+
+@pytest.mark.parametrize('rank', ['top', 'normal', 'low', 'more', 'none'])
+def test_the_query_ranks_on_the_scale_pass(rank):
+    assert not by_code(rank_app(rank), 'query-rank-unknown')
+
+
+def test_a_query_rank_off_the_scale_is_named():
+    found = by_code(rank_app('hight'), 'query-rank-unknown')
+    assert len(found) == 1 and found[0]['path'] == 'tables.Book.name'

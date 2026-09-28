@@ -957,6 +957,7 @@ hybrid carries an SQL expression. A table that declares nothing searchable
 | `help` | string | UI tooltip |
 | `widget` | string | UI widget override |
 | `searchable` | bool | Adds the column to what a text search matches (§ 4.3) |
+| `query_rank` | string | Where the column stands when a query is built — the query editor's fields and its order combo: `top`, `normal` (default), `low`, `more` (behind "Show more"), `none` (never offered). Within a rank the declaration order holds, so a derived plugin moves a field by ranking it, without reordering the base's columns. A value off the scale is an error in `check` |
 | `prefix` | string | Column name prefix when expanding a composite type |
 | `foreign_key` | dict | FK definition: `target`, `relation`, `backref`, `ondelete`, `onupdate`, `constraint` (hard/soft), `owned` (§ 4.5) |
 | `length` | int | String length (for String-based types) |

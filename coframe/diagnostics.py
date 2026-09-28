@@ -83,6 +83,7 @@ def run_checks(app: Any) -> List[Dict[str, Any]]:
             _walk(app, item, f'{section}.{item_id}', None, issues, referenced)
 
     _check_auto_pages(app, issues)
+    _check_query_ranks(app, issues)
 
     # Orphan views: defined but never targeted by a $ref
     views = pm.data.get('views') or {}
@@ -288,6 +289,26 @@ def _check_fields(fields: List[Any], colnames: Set[str], model: str,
             issues.append(make_issue(
                 'warning', 'field-unknown', f'{path}[{name}]',
                 f"field '{name}' not found in table '{model}'", plugin))
+
+
+# Where a column stands when a query is built — the rule editor's field list,
+# the order combo. `normal` is the default and the declaration order within.
+QUERY_RANKS = ('top', 'normal', 'low', 'more', 'none')
+
+
+def _check_query_ranks(app: Any, issues: List[Dict[str, Any]]) -> None:
+    """A `query_rank` outside the scale is an error, not a quiet `normal`.
+
+    The client would place an unknown value like the default, so a typo
+    (`hight`) would leave the field where it was with nothing to say why.
+    """
+    for t_name, table in (getattr(app, 'tables', None) or {}).items():
+        for col in table.effective_columns:
+            rank = col.attributes.get('query_rank')
+            if rank is not None and rank not in QUERY_RANKS:
+                issues.append(make_issue(
+                    'error', 'query-rank-unknown', f'tables.{t_name}.{col.name}',
+                    f"query_rank '{rank}' is not one of {', '.join(QUERY_RANKS)}"))
 
 
 def _check_auto_pages(app: Any, issues: List[Dict[str, Any]]) -> None:
