@@ -1718,6 +1718,25 @@ joins:
 
 Joined fields are referenced as `Model.field` in `columns` and `order_by`.
 
+A column's values reach the grid under one key: the alias when there is one,
+otherwise the field name without its table. `Publisher.name` therefore arrives
+as `name`, and in a view that also shows the book's own `name` the two are one
+column to the client — one of them shows the other's values. Give it an alias:
+
+```yaml
+columns:
+  - field: name
+  - field: Publisher.name as publisher_name
+```
+
+The alias is kept exactly as written (case included), and `check` reports two
+columns of a view that share a key (`field-key-collision`).
+
+A left join keeps the rows with nothing to join, which an inner join drops:
+`- Publisher: {type: left, "on": "Book.publisher_id = Publisher.id"}`. Quote
+`"on"`: YAML reads a bare `on` as the boolean true (`check` says so,
+`key-not-string`).
+
 #### Many-to-many join
 
 ```yaml

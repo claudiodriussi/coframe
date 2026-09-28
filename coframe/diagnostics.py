@@ -158,11 +158,21 @@ def _check_view(app: Any, view: Dict[str, Any], path: str,
 
     colnames = {c.name for c in table.effective_columns}
 
+    keys: Dict[str, str] = {}
     for col in view.get('columns') or []:
         if isinstance(col, dict) and isinstance(col.get('field'), str):
             field = col['field']
             _check_field(app, field, colnames, model,
                          f'{path}.columns[{field}]', plugin, issues)
+            key = _field_key(field)
+            if key in keys:
+                issues.append(make_issue(
+                    'error', 'field-key-collision', f'{path}.columns[{field}]',
+                    f"'{field}' and '{keys[key]}' both arrive as '{key}': the "
+                    f"client cannot tell them apart and one column shows the "
+                    f"other's values — give one an alias ('{field} as ...')", plugin))
+            else:
+                keys[key] = field
 
     _check_fields(view.get('fields') or [], colnames, model,
                   f'{path}.fields', plugin, issues)
@@ -247,6 +257,18 @@ def _check_field(app: Any, field: str, colnames: Set[str], model: str,
         issues.append(make_issue(
             'warning', 'field-unknown', path,
             f"field '{field}' not found in table '{model}'", plugin))
+
+
+def _field_key(field: str) -> str:
+    """The key a column's values arrive under: the alias, else the last segment.
+
+    The same rule as the client's `extractFieldKey` (dataview.query.ts): two
+    columns of a view with the same key are one column to the grid.
+    """
+    as_idx = field.lower().rfind(' as ')
+    if as_idx != -1:
+        return field[as_idx + 4:].strip()
+    return field.rsplit('.', 1)[-1]
 
 
 def _check_fields(fields: List[Any], colnames: Set[str], model: str,

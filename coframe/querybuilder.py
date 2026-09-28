@@ -756,11 +756,14 @@ class SelectBuilder:
             # Apply database-specific replacements if needed
             col_expr = self._apply_database_specific_replacements(col_expr)
 
-            # Check if it contains an alias
-            if " as " in col_expr.lower():
-                expr, alias = col_expr.lower().split(" as ", 1)
-                expr = col_expr[:len(expr)]  # Keep the original case of the expression
-                alias = alias.strip()
+            # Check if it contains an alias: the last " as ", and kept in its
+            # case — it is the key of the column in every record, and the
+            # client finds it by the same rule, exactly as written
+            # (dataview.query extractFieldKey).
+            as_idx = col_expr.lower().rfind(" as ")
+            if as_idx != -1:
+                expr = col_expr[:as_idx]
+                alias = col_expr[as_idx + 4:].strip()
 
                 # Build the expression
                 column = self._parse_expression(expr)

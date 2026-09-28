@@ -275,3 +275,28 @@ def test_an_unquoted_on_is_reported_not_a_crash():
     issues = run_checks(FakeApp(pm, {'Book': FakeTable('id')}))
     found = by_code(issues, 'key-not-string')
     assert len(found) == 1 and 'on/off/yes/no' in found[0]['message']
+
+
+def key_collision_app(*fields):
+    pm = PluginsManager()
+    pm.merge_dicts({'pages': {'book_list': {'content': {
+        'type': 'table', 'source': {'model': 'Book'},
+        'columns': [{'field': f} for f in fields]}}}}, 'bench')
+    tables = {'Book': FakeTable('id', 'name'), 'Publisher': FakeTable('id', 'name')}
+    return run_checks(FakeApp(pm, tables))
+
+
+def test_a_joined_field_named_like_a_column_is_a_collision():
+    """`Publisher.name` and `name` reach the grid under one key: wrong values, no error."""
+    found = by_code(key_collision_app('name', 'Publisher.name'), 'field-key-collision')
+    assert len(found) == 1 and 'Publisher.name' in found[0]['message']
+
+
+def test_an_alias_keeps_them_apart():
+    assert not by_code(key_collision_app('name', 'Publisher.name as publisher_name'),
+                       'field-key-collision')
+
+
+def test_an_alias_can_collide_too():
+    found = by_code(key_collision_app('name', 'Publisher.name as name'), 'field-key-collision')
+    assert len(found) == 1
