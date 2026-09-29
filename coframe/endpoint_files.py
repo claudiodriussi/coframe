@@ -39,7 +39,8 @@ def read_file(data: Dict[str, Any]) -> Dict[str, Any]:
 
     Configuration in config.yaml:
         read_files:
-          allowed_dirs: List of allowed directories (relative or absolute paths)
+          allowed_dirs: Directories that can be read, relative to the app or
+                        absolute. Empty or absent: nothing can be read.
           text_suffix: List of file extensions to be treated as text
 
     Examples:
@@ -87,40 +88,31 @@ def read_file(data: Dict[str, Any]) -> Dict[str, Any]:
         if not file_path:
             return {"status": "error", "message": "File path is required", "code": 400}
 
-        # Get Coframe configuration
         app = coframe.utils.get_app()
-        config = app.pm.config if hasattr(app, 'pm') else {}
-
-        # Get file reading configuration
-        file_config = config.get('read_files', {})
-        allowed_dirs = file_config.get('allowed_dirs', [])
+        pm = app.pm
+        file_config = pm.config.get('read_files', {})
         text_suffixes = file_config.get('text_suffix', ['.txt', '.md', '.xml', '.html', '.css', '.js'])
 
-        # Expand home directory in allowed_dirs if present (e.g., ~/resources)
-        allowed_dirs = [os.path.expanduser(d) for d in allowed_dirs]
+        # Relative paths hang from the application directory, like every other
+        # path config.yaml declares - not from wherever the process was started.
+        allowed_dirs = [pm.resolve_path(os.path.expanduser(d))
+                        for d in file_config.get('allowed_dirs', [])]
 
-        # Make absolute paths from relative ones
-        allowed_dirs = [str(Path(d).absolute()) if not os.path.isabs(d) else d for d in allowed_dirs]
+        # Closed unless configured: an endpoint that hands out files must not
+        # hand out every file the process can read, `.env` included.
+        if not allowed_dirs:
+            return {"status": "error", "code": 403,
+                    "message": "No file can be read: read_files.allowed_dirs is empty"}
 
-        # Determine the base directory
         base_dir = data.get('base_dir')
-        if base_dir:
-            base_dir = os.path.expanduser(base_dir)  # Expand ~ if present
-            full_path = os.path.join(base_dir, file_path)
-        else:
-            # If not specified, use the path as is
-            full_path = file_path
+        full_path = os.path.join(os.path.expanduser(base_dir), file_path) if base_dir else file_path
 
-        # Make sure the path is safe
-        path = Path(os.path.expanduser(full_path)).resolve()
+        # resolve() follows symlinks and '..', so the check below sees the real target
+        path = pm.resolve_path(os.path.expanduser(full_path))
 
-        # Verify that the path is within an allowed directory
-        if allowed_dirs and not is_path_allowed(path, allowed_dirs):
-            return {
-                "status": "error",
-                "message": f"Access to this directory is not allowed. Allowed directories: {', '.join(allowed_dirs)}",
-                "code": 403
-            }
+        if not is_path_allowed(path, allowed_dirs):
+            return {"status": "error", "code": 403,
+                    "message": "Access to this file is not allowed"}
 
         # Check if the file exists
         if not path.exists() or not path.is_file():
@@ -240,22 +232,11 @@ def read_file(data: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "message": str(e), "code": 500}
 
 
-def is_path_allowed(path: Path, allowed_dirs: List[str]) -> bool:
+def is_path_allowed(path: Path, allowed_dirs: List[Path]) -> bool:
     """
-    Check if a path is within allowed directories.
+    True if `path` lies inside one of `allowed_dirs`.
 
-    Args:
-        path: Path to check
-        allowed_dirs: List of allowed directories
-
-    Returns:
-        True if the path is allowed, False otherwise
+    Compared by path components, not by string prefix: `data` must not let
+    `database/` or `data-private/` through. Both sides are expected resolved.
     """
-    path_str = str(path.absolute())
-
-    for allowed_dir in allowed_dirs:
-        allowed_path = Path(allowed_dir).resolve()
-        if path_str.startswith(str(allowed_path)):
-            return True
-
-    return False
+    return any(path.is_relative_to(allowed) for allowed in allowed_dirs)
