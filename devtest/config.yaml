@@ -28,6 +28,11 @@ api:
   prefix: "coframe"  # API prefix - all endpoints will be under /coframe/* (or use "api/v1" for /api/v1/*, etc.)
   port: 8300         # Default Coframe server port (evocative: 8xxx HTTP-like, 3=C of Coframe)
 
+# What coframe is here: the application itself, so its client owns "/" and logs
+# people in (coframe.clientui). An admin of a host would say `role: admin`.
+client:
+  role: app
+
 # DataView pagination defaults
 # page_size: rows loaded per page (overridable per-view via source.limit in YAML)
 # (future) page_size_by_type: per-category overrides matching DATA_MODEL.md §1 tags

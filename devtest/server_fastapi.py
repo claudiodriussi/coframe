@@ -13,7 +13,6 @@ Run from this directory:  python server_fastapi.py
 import os
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 import devtest  # also puts the coframe package on sys.path  # noqa: E402
 import coframe.server_utils as srv  # noqa: E402
@@ -48,9 +47,10 @@ app = FastAPI(
 srv.register_fastapi(app, coframe_app, plugins, SECRET_KEY)
 
 
-# A built client, when there is one — mounted last so the API routes win.
-if os.path.isdir("static"):
-    app.mount("/", StaticFiles(directory="static", html=True), name="client")
+# A built client, when there is one: `clientui/`, mounted where `client:` in
+# config.yaml says - at the root, devtest being the application itself. Last,
+# so the API routes win.
+srv.serve_client_fastapi(app, os.path.dirname(os.path.abspath(__file__)), plugins.config)
 
 
 if __name__ == "__main__":

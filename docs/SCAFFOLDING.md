@@ -183,8 +183,11 @@ Whichever you pick, the shape is identical:
 - **one dispatcher** — `POST /{prefix}/{endpoint}/{op}` — for *everything else*
   (`db`, `query`, `get_page`, `get_menu`, custom endpoints…), delegating to
   `srv.handle_generic_endpoint`;
-- the built Svelte client mounted as static files, so the whole app is served from
-  one origin.
+- the built Svelte client, from `<app>/clientui/`, mounted by `srv.serve_client_flask`
+  / `srv.serve_client_fastapi` where `client:` in config.yaml says — at the root
+  with `role: app` (coframe is the application), under `/admin/` with `role: admin`
+  (coframe is the admin of a host). One origin either way, and `static/` stays the
+  application's own. See `coframe/clientui.py`.
 
 **FastAPI:**
 
@@ -317,5 +320,5 @@ python server.py           # run the API (FastAPI or Flask); uvicorn/gunicorn fo
 # frontend (Svelte client — pnpm workspace, per app)
 cd client/svelte && pnpm install
 pnpm --filter shell dev    # dev server for the chosen app (shell / devtest)
-pnpm --filter shell build  # production build, served by the backend as static
+pnpm build:app <app>       # production build, into <app>/clientui/, mounted by the backend
 ```

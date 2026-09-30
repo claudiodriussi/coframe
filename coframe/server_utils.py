@@ -913,3 +913,80 @@ def register_fastapi(target, coframe_app, plugins, secret_key: str, *,
             new_token=new_token)
 
     return auth
+
+
+# ── The compiled client ──────────────────────────────────────────────────────
+#
+# Where the client is mounted is the application's `client:` section, read by
+# coframe.clientui: "/" when coframe is the application, "/admin/" when it is
+# the admin of a host. The directory is always `<app>/clientui/`, so `static/`
+# stays the application's own, with the route its framework gives it.
+#
+# The client is a single-page application: a path that is not a file is one of
+# its pages, and gets index.html so that a reload or a bookmark lands where it
+# was. Both adapters do exactly that and nothing else — and touch nothing
+# outside the base, like the API adapters above.
+
+def serve_client_flask(target, app_dir, config: Dict[str, Any]) -> bool:
+    """
+    Serve `<app_dir>/clientui/` on a Flask application or Blueprint.
+
+    Returns False, registering nothing, when the client is not built: what to
+    answer then is the application's choice.
+    """
+    from pathlib import Path
+    from flask import redirect, send_from_directory
+    from coframe.clientui import CLIENT_DIR, client_settings
+
+    directory = Path(app_dir) / CLIENT_DIR
+    if not directory.is_dir():
+        return False
+    base = client_settings(config).base
+
+    def client(path=''):
+        if path and (directory / path).is_file():
+            return send_from_directory(directory, path)
+        return send_from_directory(directory, 'index.html')
+
+    target.add_url_rule(f'{base}/', 'coframe_client', client)
+    target.add_url_rule(f'{base}/<path:path>', 'coframe_client_path', client)
+    if base:
+        target.add_url_rule(base, 'coframe_client_base', lambda: redirect(f'{base}/'))
+    return True
+
+
+def serve_client_fastapi(target, app_dir, config: Dict[str, Any]) -> bool:
+    """
+    Mount `<app_dir>/clientui/` on a FastAPI application.
+
+    Call it after the API routes: a client mounted at "/" would otherwise
+    answer before them. Returns False, mounting nothing, when the client is not
+    built.
+    """
+    from pathlib import Path
+    from starlette.exceptions import HTTPException
+    from starlette.staticfiles import StaticFiles
+    from coframe.clientui import CLIENT_DIR, client_settings
+
+    directory = Path(app_dir) / CLIENT_DIR
+    if not directory.is_dir():
+        return False
+    base = client_settings(config).base
+
+    class SinglePageApp(StaticFiles):
+        """StaticFiles answers 404 for a page of the client: give it index.html."""
+
+        async def get_response(self, path, scope):
+            try:
+                response = await super().get_response(path, scope)
+            except HTTPException as e:
+                if e.status_code != 404:
+                    raise
+                return await super().get_response('index.html', scope)
+            if response.status_code == 404:
+                return await super().get_response('index.html', scope)
+            return response
+
+    target.mount(base or '/', SinglePageApp(directory=str(directory), html=True),
+                 name='coframe_client')
+    return True

@@ -21,8 +21,8 @@ What the command knows by itself, and what has to be told:
 
 Nothing here belongs in production: a server started this way is the
 development server of its framework. What does belong there is the artifact —
-`build_client` compiles the same client into the application's `static/`,
-which its own server serves at the root.
+`build_client` compiles the same client into the application's `clientui/`,
+which its own server mounts where `client:` in config.yaml says (coframe.clientui).
 """
 import os
 import shutil
@@ -35,6 +35,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import yaml
+
+from coframe.clientui import CLIENT_DIR
 
 # The client repository, recognised by the one client every checkout has.
 UI_MARKER = Path("apps") / "shell" / "package.json"
@@ -299,7 +301,7 @@ def run(app: Optional[str] = None, framework: Optional[str] = None,
 
 
 def build_client(app: Optional[str] = None, ui: Optional[str] = None) -> int:
-    """Compile the client of an application into its `static/`.
+    """Compile the client of an application into its `clientui/`.
 
     The development twin of `run`: same two questions — which application, and
     where the client checkout is — answered the same way, so an application
@@ -308,5 +310,5 @@ def build_client(app: Optional[str] = None, ui: Optional[str] = None) -> int:
     app_dir = find_app(app)
     ui_dir = find_ui(ui, app_dir, find_source_checkout())
 
-    print(f"client  →  {app_dir / 'static'}", flush=True)
+    print(f"client  →  {app_dir / CLIENT_DIR}", flush=True)
     return subprocess.call(build_command(app_dir), cwd=str(ui_dir))

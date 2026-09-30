@@ -84,6 +84,7 @@ def run_checks(app: Any) -> List[Dict[str, Any]]:
 
     _check_auto_pages(app, issues)
     _check_query_ranks(app, issues)
+    _check_client(app, issues)
 
     # Orphan views: defined but never targeted by a $ref
     views = pm.data.get('views') or {}
@@ -309,6 +310,28 @@ def _check_query_ranks(app: Any, issues: List[Dict[str, Any]]) -> None:
                 issues.append(make_issue(
                     'error', 'query-rank-unknown', f'tables.{t_name}.{col.name}',
                     f"query_rank '{rank}' is not one of {', '.join(QUERY_RANKS)}"))
+
+
+def _check_client(app: Any, issues: List[Dict[str, Any]]) -> None:
+    """The `client:` section: where the client is mounted and who logs in.
+
+    A role or a path the servers cannot use is an error: the client would be
+    mounted where nobody looks. A login page with `role: app` is only a warning
+    - the application has no host to send people to, and the key is simply
+    unused, which is worth knowing but breaks nothing.
+    """
+    from coframe.clientui import client_settings
+
+    try:
+        settings = client_settings(app.pm.config)
+    except ValueError as e:
+        issues.append(make_issue('error', 'client-config', 'config.client', str(e)))
+        return
+    if settings.role == 'app' and settings.login:
+        issues.append(make_issue(
+            'warning', 'client-login-without-host', 'config.client.login',
+            "client.login names a host login page, but with role 'app' coframe "
+            "is the application and logs people in itself"))
 
 
 def _check_auto_pages(app: Any, issues: List[Dict[str, Any]]) -> None:

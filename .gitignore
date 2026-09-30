@@ -9,7 +9,7 @@ wheels/
 
 devtest/data
 # the compiled client, built by `pnpm build` in the client repository
-devtest/static/
+devtest/clientui/
 devtest/model*.py
 devtest/*.log
 *.sqlite

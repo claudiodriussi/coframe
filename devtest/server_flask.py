@@ -11,7 +11,7 @@ Run from this directory:  python server_flask.py
 """
 import os
 
-from flask import Flask, send_from_directory
+from flask import Flask
 
 import devtest  # also puts the coframe package on sys.path  # noqa: E402
 import coframe.server_utils as srv  # noqa: E402
@@ -34,9 +34,7 @@ devtest.seed(coframe_app, model)
 # HS256, and a warning nobody can act on is a warning people learn to skip.
 SECRET_KEY = os.environ.get("SECRET_KEY", "development-secret-key-not-for-service")
 
-# `static_folder=None`: devtest's `static/` is the compiled client, served by
-# the catch-all below, not Flask's own /static route.
-app = Flask(__name__, static_folder=None)
+app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
 
 # ── Routes ──────────────────────────────────────────────────────────────────
@@ -44,16 +42,9 @@ app.config["SECRET_KEY"] = SECRET_KEY
 srv.register_flask(app, coframe_app, plugins, SECRET_KEY)
 
 
-# A built client, when there is one — registered last so the API routes win.
-# The catch-all serves index.html for unknown paths, as a SPA needs.
-if os.path.isdir("static"):
-
-    @app.route("/", defaults={"path": ""})
-    @app.route("/<path:path>")
-    def client(path):
-        if path and os.path.isfile(os.path.join("static", path)):
-            return send_from_directory("static", path)
-        return send_from_directory("static", "index.html")
+# A built client, when there is one: `clientui/`, mounted where `client:` in
+# config.yaml says - at the root, devtest being the application itself.
+srv.serve_client_flask(app, os.path.dirname(os.path.abspath(__file__)), plugins.config)
 
 
 if __name__ == "__main__":
