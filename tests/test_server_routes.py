@@ -49,6 +49,10 @@ def coframe_app():
     register('mixed_keys', lambda params: {1: 'one', 'two': 2})
     register('boom', _raise)
     register('who', lambda params: BaseApp.get_context())
+    # A refusal with something to say: the field errors of a form.
+    register('refuse', lambda params: {
+        'status': 'error', 'code': 400, 'message': 'not changed',
+        'data': {'errors': {'confirm': 'the two do not match'}}})
 
     cp = CommandProcessor()
     cp.endpoints = dict(_ENDPOINTS)
@@ -382,6 +386,18 @@ def test_both_frameworks_report_a_failure_the_same(flask_client, fastapi_client)
 
     assert flask_res.status_code == fastapi_res.status_code
     assert flask_res.get_json()['message'] == fastapi_res.json()['message']
+
+
+def test_both_frameworks_carry_the_field_errors_of_a_refusal(flask_client, fastapi_client):
+    """A form shows each error under its field: the errors travel in `data`."""
+    flask_res = flask_client.post('/coframe/endpoint/refuse', json={}, headers=bearer())
+    fastapi_res = fastapi_client.post('/coframe/endpoint/refuse', json={},
+                                      headers=bearer())
+
+    expected = {'errors': {'confirm': 'the two do not match'}}
+    assert flask_res.get_json()['data'] == expected
+    assert fastapi_res.json()['data'] == expected
+    assert flask_res.status_code == fastapi_res.status_code
 
 
 def test_fastapi_keys_of_mixed_type_do_not_raise(fastapi_client):

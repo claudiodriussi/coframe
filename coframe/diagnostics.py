@@ -85,6 +85,7 @@ def run_checks(app: Any) -> List[Dict[str, Any]]:
     _check_auto_pages(app, issues)
     _check_query_ranks(app, issues)
     _check_client(app, issues)
+    _check_validators(app, issues)
 
     # Orphan views: defined but never targeted by a $ref
     views = pm.data.get('views') or {}
@@ -310,6 +311,25 @@ def _check_query_ranks(app: Any, issues: List[Dict[str, Any]]) -> None:
                 issues.append(make_issue(
                     'error', 'query-rank-unknown', f'tables.{t_name}.{col.name}',
                     f"query_rank '{rank}' is not one of {', '.join(QUERY_RANKS)}"))
+
+
+def _check_validators(app: Any, issues: List[Dict[str, Any]]) -> None:
+    """A `validate:` nobody registered is an error: every write to that column
+    would fail, and the column says it is checked when it is not.
+
+    Checked after the plugins are loaded, which is when their validators register.
+    """
+    from coframe.transforms import validator_names
+
+    known = validator_names()
+    for t_name, table in (getattr(app, 'tables', None) or {}).items():
+        for col in table.effective_columns:
+            name = col.attributes.get('validate')
+            if name and name not in known:
+                issues.append(make_issue(
+                    'error', 'validator-unknown', f'tables.{t_name}.{col.name}',
+                    f"validate '{name}' is not a registered validator "
+                    f"(known: {', '.join(sorted(known))})"))
 
 
 def _check_client(app: Any, issues: List[Dict[str, Any]]) -> None:

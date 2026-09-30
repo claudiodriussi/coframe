@@ -56,7 +56,7 @@ class CommandResult:
 
         Args:
             status: The status of the result ("success" or "error")
-            data: The payload data (for success status)
+            data: The payload: the result, or what a refusal has to say about it
             message: Error message (for error status)
             request_id: Unique identifier of the request
             code: Status code (similar to HTTP status codes)
@@ -96,6 +96,10 @@ class CommandResult:
                 result["message"] = self.message
         else:
             result["message"] = self.message or "Unknown error"
+            # A refusal can say what to fix: the field errors of a form, the
+            # detail of a report. The client reads them from `data` either way.
+            if self.data is not None:
+                result["data"] = self.data
             if self.error_type:
                 result["error_type"] = self.error_type
             if self.traceback:

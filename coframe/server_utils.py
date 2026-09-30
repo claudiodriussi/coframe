@@ -24,9 +24,13 @@ from coframe import apptime
 def _error_response(message: str, status_code: int = 500,
                     error_type: Optional[str] = None,
                     traceback: Optional[str] = None,
-                    request_id: Optional[str] = None) -> Dict[str, Any]:
+                    request_id: Optional[str] = None,
+                    data: Any = None) -> Dict[str, Any]:
     """Build a uniform error response dict."""
     r: Dict[str, Any] = {'status': 'error', 'message': message, 'status_code': status_code}
+    # What a refusal has to say beyond its message - the field errors of a form.
+    if data is not None:
+        r['data'] = data
     if error_type:
         r['error_type'] = error_type
     if traceback:
@@ -56,6 +60,7 @@ def _error_from_result(result: Dict[str, Any], default_message: str = 'Operation
         error_type=result.get('error_type'),
         traceback=result.get('traceback'),
         request_id=result.get('request_id'),
+        data=result.get('data'),
     )
 
 

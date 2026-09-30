@@ -61,6 +61,21 @@ def test_a_shaped_dict_is_passed_through(processor):
     assert result['message'] == 'nope'
 
 
+def test_a_refusal_keeps_what_it_has_to_say(processor):
+    """The field errors of a form travel in `data`, on an error as on a success."""
+    _ENDPOINTS['refuse'] = lambda params: {
+        'status': 'error', 'code': 400, 'message': 'not changed',
+        'data': {'errors': {'confirm': 'the two do not match'}}}
+    processor.endpoints['refuse'] = _ENDPOINTS['refuse']
+    try:
+        result = processor.send({'operation': 'refuse', 'parameters': {}})
+    finally:
+        _ENDPOINTS.pop('refuse', None)
+
+    assert result['status'] == 'error'
+    assert result['data'] == {'errors': {'confirm': 'the two do not match'}}
+
+
 def test_unknown_operation_is_a_404(processor):
     result = processor.send({'operation': 'nowhere'})
 

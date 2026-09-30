@@ -51,7 +51,7 @@ know how they were stored. Apps register their own transforms with
 register_write_transform() — same spirit as add_query_behavior.
 """
 import re
-from typing import Callable, Optional, Set
+from typing import Callable, Dict, Optional, Set
 
 import bcrypt
 
@@ -136,3 +136,58 @@ def get_write_transform(name: str) -> Optional[Callable]:
 def transform_names() -> Set[str]:
     """All registered transform names."""
     return set(_TRANSFORMS)
+
+
+# ── Validators ───────────────────────────────────────────────────────────────
+#
+# `validate: <name>` on a column (or on its type) names a rule the value must
+# pass on its way in, before any transform: a password long enough, an email
+# with an @. The CRUD endpoints apply it and answer with the errors by field, so
+# a form shows each one under the field it is about.
+#
+# A validator is `func(value, values) -> Optional[str]`: the message when the
+# value breaks the rule, None when it passes. `values` is everything written in
+# the same call, for a rule that looks at a neighbour (a password that must not
+# contain the username). An empty value is not validated: whether it may be
+# empty is `nullable`'s business.
+
+class ValidationError(ValueError):
+    """Values that break a rule their column declares, as {field: message}."""
+
+    def __init__(self, errors: Dict[str, str]):
+        self.errors = errors
+        super().__init__('; '.join(f'{field}: {message}' for field, message in errors.items()))
+
+
+def email_validator(value, values) -> Optional[str]:
+    """An address with something on both sides of a single @, and no spaces.
+
+    Deliberately loose: the only proof that an address works is a message that
+    arrives, and a stricter pattern refuses real addresses (`poller@localhost`).
+    """
+    from coframe.i18n import _
+    if not _EMAIL.match(str(value)):
+        return _('Not a valid email address')
+    return None
+
+
+_EMAIL = re.compile(r'^[^@\s]+@[^@\s]+$')
+
+_VALIDATORS: dict = {
+    'email_validator': email_validator,
+}
+
+
+def register_validator(name: str, func: Callable) -> None:
+    """Register a validator, referenced in YAML as `validate: <name>`."""
+    _VALIDATORS[name] = func
+
+
+def get_validator(name: str) -> Optional[Callable]:
+    """Return the validator for a name, or None if unknown."""
+    return _VALIDATORS.get(name)
+
+
+def validator_names() -> Set[str]:
+    """All registered validator names."""
+    return set(_VALIDATORS)

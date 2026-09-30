@@ -76,27 +76,42 @@ def write_values(db_table, record_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Prepare incoming values for storage, following what the columns declare.
 
-    Two rules, both from `coframe.transforms`:
+    Three rules, all from `coframe.transforms`:
     - a `secret` column arriving empty is dropped — it is never read back, so a
       client cannot echo it, and an empty value means "leave it alone" rather
       than "clear it";
+    - a column with `validate` gets its value checked against that rule, and
+      every value that fails is reported, by field, before anything is written;
     - a column with `on_write` gets its value passed through that transform, so
       what reaches the database is the stored form (a hash, a canonical code).
 
     Raises:
-        ValueError: if a column names a transform nobody registered
+        ValidationError: the values that break their rule, as {field: message}
+        ValueError: if a column names a validator or a transform nobody registered
     """
     if db_table is None:
         return dict(record_data)
 
     attributes = {col.name: col.attributes for col in db_table.effective_columns}
     result = {}
+    errors = {}
     for key, value in record_data.items():
         attrs = attributes.get(key, {})
         is_empty = value is None or value == ''
 
         if attrs.get('secret') and is_empty:
             continue
+
+        validator_name = attrs.get('validate')
+        if validator_name and not is_empty:
+            validator = coframe.transforms.get_validator(validator_name)
+            if validator is None:
+                raise ValueError(
+                    f"Column '{key}' names an unknown validator: '{validator_name}'")
+            problem = validator(value, record_data)
+            if problem:
+                errors[key] = problem
+                continue
 
         transform_name = attrs.get('on_write')
         if transform_name and not is_empty:
@@ -107,6 +122,9 @@ def write_values(db_table, record_data: Dict[str, Any]) -> Dict[str, Any]:
             value = transform(value)
 
         result[key] = value
+
+    if errors:
+        raise coframe.transforms.ValidationError(errors)
 
     return result
 
@@ -196,6 +214,12 @@ def coerce_value(model_class, key: str, value: Any) -> Any:
     return value
 
 
+def _invalid(error) -> Dict[str, Any]:
+    """A write refused by a column's rule: the errors go back by field."""
+    return {"status": "error", "code": 400, "message": _('Some values are not valid'),
+            "data": {"errors": error.errors}}
+
+
 def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Dict[str, Any]:
     """Handle CREATE operations"""
     record_data = params.get('data')
@@ -222,6 +246,8 @@ def handle_create(app, model_class, params: Dict[str, Any], db_table=None) -> Di
                 "message": _('Record created successfully'),
                 "code": 201
             }
+    except coframe.transforms.ValidationError as e:
+        return _invalid(e)
     except Exception as e:
         return {"status": "error", "message": f"Creation failed: {str(e)}", "code": 400}
 
@@ -236,7 +262,10 @@ def handle_update(app, model_class, params: Dict[str, Any], db_table=None) -> Di
     if not record_data:
         return {"status": "error", "message": _('No data provided for update'), "code": 400}
 
-    record_data = write_values(db_table, record_data)
+    try:
+        record_data = write_values(db_table, record_data)
+    except coframe.transforms.ValidationError as e:
+        return _invalid(e)
 
     with app.get_session() as session:
         # Find the record
