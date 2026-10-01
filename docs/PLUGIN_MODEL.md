@@ -432,7 +432,7 @@ SQLAlchemy calls it on every insert:
 
 | Token | Meaning |
 |-------|---------|
-| `$op_date` | The operator's working date, taken from the request context at insert time (today's date when the context carries none). Built in, because the core is also its producer — `auth` puts it in the context at login. |
+| `$op_date` | The operator's working date: the one the user chose (`update_context`), otherwise today, read at insert time. Built in, because the core owns it: the token carries it only when the user set one. |
 
 An unknown token is refused at generation time, naming the ones that are
 registered. Applications add their own with `register_default()`, in the same

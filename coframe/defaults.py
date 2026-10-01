@@ -13,11 +13,11 @@ the registered callable and emits the needed import into the generated model.
 SQLAlchemy then calls it per insert, so it reflects the operator's current
 op_date each time.
 
-`op_date` is built in — the core also injects it into the auth context at login
-(see server_utils.handle_auth), so producer and consumer live in the same place;
-it is a framework value, not app policy, so it belongs here rather than in a
-commons plugin. Apps may register their own system defaults via
-register_default() (same spirit as add_query_behavior).
+`op_date` is built in: the context carries it only when the user has set a date
+(update_context), otherwise it is today, read at each call. It is a framework
+value, not app policy, so it belongs here rather than in a commons plugin. Apps
+may register their own system defaults via register_default() (same spirit as
+add_query_behavior).
 """
 from datetime import date, datetime
 from typing import Callable, Optional, Set

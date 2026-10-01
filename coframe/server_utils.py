@@ -18,8 +18,6 @@ import traceback as _traceback
 import jwt
 from typing import Dict, Any, Optional, Tuple
 
-from coframe import apptime
-
 
 def _error_response(message: str, status_code: int = 500,
                     error_type: Optional[str] = None,
@@ -262,13 +260,9 @@ def handle_auth(
                 'username': user_data.get('username'),
                 'exp': now + timedelta(hours=jwt_expiration_hours),
                 'last_refresh': now.timestamp(),  # Track last refresh for auto-refresh
-                # Operational ("working") date — a framework context field, always
-                # present, so every endpoint can read it via the context (default
-                # date for new records, accounting period selection, ...). The user
-                # can override it via update_context; the merged value survives
-                # auto-refresh. Default = today in the organisation's timezone,
-                # which is the machine's only when the app declares none.
-                'op_date': apptime.today().isoformat(),
+                # No op_date: absent means today, read per request by
+                # defaults.op_date(). A token outlives the day it was issued on,
+                # so it carries only a date the user chose (update_context).
             }
 
             # Add context fields to payload
@@ -335,7 +329,8 @@ def handle_update_context(
 
     Args:
         current_context: Current user context from JWT
-        updates: Fields to update in context (filtered against the allowlist)
+        updates: Fields to update in context (filtered against the allowlist);
+            a None value removes the field
         secret_key: JWT secret key
         jwt_expiration_hours: Token expiration in hours
         allowed_fields: App-defined fields the client may set. Framework fields
@@ -354,9 +349,14 @@ def handle_update_context(
             allowed |= set(allowed_fields)
         filtered = {k: v for k, v in (updates or {}).items() if k in allowed}
 
-        # Merge the filtered updates into current context
+        # Merge the filtered updates into current context; None removes the
+        # field (op_date: None = back to following today).
         new_context = {**current_context}
-        new_context.update(filtered)
+        for key, value in filtered.items():
+            if value is None:
+                new_context.pop(key, None)
+            else:
+                new_context[key] = value
 
         # Remove 'exp' and 'iat' if present
         new_context.pop('exp', None)

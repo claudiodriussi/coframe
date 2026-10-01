@@ -593,13 +593,18 @@ def update_context(data):
 
         # Only allow the client to set framework fields (op_date, ...) + this
         # app's custom context fields. Identity columns stay server-authoritative.
-        # Same allowlist as the /auth/update_context route.
+        # Same allowlist as the /auth/update_context route, and the same None
+        # = remove the field.
         app = coframe.utils.get_app()
         allowed = set(server_utils.FRAMEWORK_UPDATABLE_FIELDS) | set(
             server_utils.custom_context_fields(app.pm.config)
         )
         for field in allowed:
-            if field in data:
+            if field not in data:
+                continue
+            if data[field] is None:
+                current_context.pop(field, None)
+            else:
                 current_context[field] = data[field]
 
         # Update the context in the current thread
