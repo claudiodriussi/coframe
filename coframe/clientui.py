@@ -9,10 +9,13 @@ Coframe has two natures, and an application says which one it has in the
                           # admin: coframe is the admin of a host application,
                           #        mounted under /admin/; "/" belongs to the host
       login: /login       # the host's login page; absent = the client's own login
+      logout: /logout     # the host's page that ends its session
       base: /backoffice   # only to mount somewhere else than the role says
 
 The login is a second axis, not a consequence of the role: a host may have no
 users of its own (a public showcase), and then its admin logs people in itself.
+With a host login the client takes its token from the host's session, so
+leaving has to end that session too: that is what `logout` points to.
 
 The compiled client always lives in `<app>/clientui/`: the directory says what it
 is, the configuration says where it is mounted. `static/` stays the host's, with
@@ -33,8 +36,9 @@ CLIENT_DIR = 'clientui'
 
 class ClientSettings(NamedTuple):
     role: str
-    base: str             # '' for the root, otherwise '/path' without a trailing slash
-    login: Optional[str]  # the host's login page, or None when the client logs in
+    base: str              # '' for the root, otherwise '/path' without a trailing slash
+    login: Optional[str]   # the host's login page, or None when the client logs in
+    logout: Optional[str]  # the host's page that ends its session
 
 
 def client_settings(config: Dict[str, Any]) -> ClientSettings:
@@ -56,8 +60,14 @@ def client_settings(config: Dict[str, Any]) -> ClientSettings:
         raise ValueError(f"client.base '{base}' must start with '/'")
     base = base.rstrip('/')
 
-    login = section.get('login') or None
-    if login is not None and not str(login).startswith('/'):
-        raise ValueError(f"client.login '{login}' must be a path starting with '/'")
+    login = _page(section, 'login')
+    logout = _page(section, 'logout')
+    return ClientSettings(role, base, login, logout)
 
-    return ClientSettings(role, base, login)
+
+def _page(section: Dict[str, Any], key: str) -> Optional[str]:
+    """A page of the host, as a path: the client prefixes the backend in dev."""
+    page = section.get(key) or None
+    if page is not None and not str(page).startswith('/'):
+        raise ValueError(f"client.{key} '{page}' must be a path starting with '/'")
+    return page

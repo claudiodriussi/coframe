@@ -338,7 +338,8 @@ def _check_client(app: Any, issues: List[Dict[str, Any]]) -> None:
     A role or a path the servers cannot use is an error: the client would be
     mounted where nobody looks. A login page with `role: app` is only a warning
     - the application has no host to send people to, and the key is simply
-    unused, which is worth knowing but breaks nothing.
+    unused, which is worth knowing but breaks nothing. So is a host login
+    without a logout: leaving would not end the host's session.
     """
     from coframe.clientui import client_settings
 
@@ -352,6 +353,12 @@ def _check_client(app: Any, issues: List[Dict[str, Any]]) -> None:
             'warning', 'client-login-without-host', 'config.client.login',
             "client.login names a host login page, but with role 'app' coframe "
             "is the application and logs people in itself"))
+    elif settings.login and not settings.logout:
+        issues.append(make_issue(
+            'warning', 'client-login-without-logout', 'config.client.logout',
+            "client.login sends people to the host's login, but there is no "
+            "client.logout: leaving the client keeps the host's session, and "
+            "the next visit gets a token again without asking"))
 
 
 def _check_auto_pages(app: Any, issues: List[Dict[str, Any]]) -> None:

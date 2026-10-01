@@ -18,11 +18,12 @@ from coframe.clientui import client_settings
 # -- The rule -----------------------------------------------------------------------
 
 @pytest.mark.parametrize("section, expected", [
-    (None, ('app', '', None)),
-    ({'role': 'admin'}, ('admin', '/admin', None)),
-    ({'role': 'admin', 'login': '/login'}, ('admin', '/admin', '/login')),
-    ({'role': 'admin', 'base': '/backoffice/'}, ('admin', '/backoffice', None)),
-    ({'role': 'app', 'base': '/'}, ('app', '', None)),
+    (None, ('app', '', None, None)),
+    ({'role': 'admin'}, ('admin', '/admin', None, None)),
+    ({'role': 'admin', 'login': '/login', 'logout': '/logout'},
+     ('admin', '/admin', '/login', '/logout')),
+    ({'role': 'admin', 'base': '/backoffice/'}, ('admin', '/backoffice', None, None)),
+    ({'role': 'app', 'base': '/'}, ('app', '', None, None)),
 ])
 def test_the_role_gives_the_defaults(section, expected):
     config = {} if section is None else {'client': section}
@@ -33,6 +34,7 @@ def test_the_role_gives_the_defaults(section, expected):
     ({'role': 'backoffice'}, "client.role 'backoffice'"),
     ({'base': 'admin'}, "must start with '/'"),
     ({'role': 'admin', 'login': 'login'}, "client.login 'login'"),
+    ({'role': 'admin', 'logout': 'logout'}, "client.logout 'logout'"),
 ])
 def test_a_mount_nobody_would_find_is_refused(section, message):
     with pytest.raises(ValueError, match=message):
@@ -48,8 +50,16 @@ def _issues(config):
 def test_check_reports_a_login_page_the_application_has_no_host_for():
     assert _issues({'client': {'role': 'app', 'login': '/login'}}) == [
         ('warning', 'client-login-without-host')]
-    assert _issues({'client': {'role': 'admin', 'login': '/login'}}) == []
+    assert _issues({'client': {'role': 'admin', 'login': '/login',
+                               'logout': '/logout'}}) == []
     assert _issues({'client': {'role': 'nope'}}) == [('error', 'client-config')]
+
+
+def test_check_reports_a_host_login_nobody_can_leave():
+    """Without a logout, leaving the client keeps the host's session, and
+    auth/token hands a token back at once."""
+    assert _issues({'client': {'role': 'admin', 'login': '/login'}}) == [
+        ('warning', 'client-login-without-logout')]
 
 
 # -- Serving it ---------------------------------------------------------------------

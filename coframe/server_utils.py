@@ -16,7 +16,7 @@ import logging.handlers
 import sys
 import traceback as _traceback
 import jwt
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 
 def _error_response(message: str, status_code: int = 500,
@@ -212,6 +212,63 @@ def extract_bearer_token(authorization_header: Optional[str]) -> Tuple[Optional[
 # Authentication Handlers
 # ============================================
 
+def issue_token(user_data: Dict[str, Any],
+                secret_key: str,
+                jwt_expiration_hours: int = 24,
+                context_fields: Optional[list] = None) -> Dict[str, Any]:
+    """
+    Sign a user context into a JWT: the answer of a successful login.
+
+    Only `username` and the configured `context_fields` go into the token.
+    No op_date: absent means today, read per request by defaults.op_date(); a
+    token outlives the day it was issued on, so it carries only a date the
+    user chose (update_context).
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        'username': user_data.get('username'),
+        'exp': now + timedelta(hours=jwt_expiration_hours),
+        'last_refresh': now.timestamp(),  # Track last refresh for auto-refresh
+    }
+    for field in context_fields or []:
+        if field in user_data:
+            payload[field] = user_data[field]
+
+    return {
+        'status': 'success',
+        'data': {
+            'token': jwt.encode(payload, secret_key, algorithm='HS256'),
+            'user': user_data
+        },
+        'status_code': 200
+    }
+
+
+# auth/token is authenticated by the host's cookie, which a cross-site page can
+# make the browser send. A form can only post form or text bodies; JSON needs a
+# CORS preflight the browser will not pass, so requiring it is what keeps
+# another origin from minting a token (and its answer is unreadable there).
+HOST_TOKEN_NOT_JSON = {'status': 'error', 'message': 'auth/token takes a JSON body'}
+
+
+def handle_host_token(host_session, request, auth: 'AuthMiddleware') -> Dict[str, Any]:
+    """
+    Answer `auth/token`: a JWT for the user the host's session says is in.
+
+    The host logs people in and keeps its own session; coframe only asks it,
+    through `host_session(request) -> context | None`, who the user is, and
+    signs that context as the login would. No session is a 401, which the
+    client turns into a redirect to the host's login page.
+    """
+    try:
+        context = host_session(request)
+    except Exception as e:
+        return _error_from_exc(e)
+    if not context:
+        return {'status': 'error', 'message': 'No host session',
+                'status_code': 401}
+    return auth.issue_token(context)
+
 def handle_auth(
     command_processor,
     data: Dict[str, Any],
@@ -251,37 +308,9 @@ def handle_auth(
         result = command_processor.send(command)
 
         if result.get('status') == 'success':
-            # Extract user context from auth result
             user_data = result.get('data', {}).get('context', {})
-
-            # Build JWT payload
-            now = datetime.now(timezone.utc)
-            payload = {
-                'username': user_data.get('username'),
-                'exp': now + timedelta(hours=jwt_expiration_hours),
-                'last_refresh': now.timestamp(),  # Track last refresh for auto-refresh
-                # No op_date: absent means today, read per request by
-                # defaults.op_date(). A token outlives the day it was issued on,
-                # so it carries only a date the user chose (update_context).
-            }
-
-            # Add context fields to payload
-            if context_fields:
-                for field in context_fields:
-                    if field in user_data:
-                        payload[field] = user_data[field]
-
-            # Generate token
-            token = jwt.encode(payload, secret_key, algorithm='HS256')
-
-            return {
-                'status': 'success',
-                'data': {
-                    'token': token,
-                    'user': user_data
-                },
-                'status_code': 200
-            }
+            return issue_token(user_data, secret_key, jwt_expiration_hours,
+                               context_fields)
         else:
             return {
                 'status': 'error',
@@ -599,6 +628,11 @@ class AuthMiddleware:
             self.context_fields
         )
 
+    def issue_token(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Sign a context the caller vouches for, with this app's settings."""
+        return issue_token(user_data, self.secret_key,
+                           self.jwt_expiration_hours, self.context_fields)
+
     def update_context(self, current_context: Dict[str, Any],
                        updates: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -629,14 +663,19 @@ def get_app_info(plugins_config: Dict[str, Any], api_prefix: str) -> Dict[str, A
         api_prefix: API prefix (e.g., '/coframe' or '/api/v1')
 
     Returns:
-        Dict with app information
+        Dict with app information. `client` is the `client:` section, read by
+        the client at startup: who logs people in follows config.yaml without
+        rebuilding it.
     """
+    from coframe.clientui import client_settings
+
     return {
         'status': 'success',
         'data': {
             'application': plugins_config.get('name', 'Unknown'),
             'version': plugins_config.get('version', '0.0.0'),
             'description': plugins_config.get('description', ''),
+            'client': client_settings(plugins_config)._asdict(),
             'coframe_api_prefix': api_prefix,
             'available_endpoints': {
                 'home': '/',
@@ -698,7 +737,9 @@ def _prefixes(plugins_config: Dict[str, Any],
 def register_flask(target, coframe_app, plugins, secret_key: str, *,
                    prefix: Optional[str] = None,
                    endpoint_prefix: Optional[str] = None,
-                   auth: Optional['AuthMiddleware'] = None) -> 'AuthMiddleware':
+                   auth: Optional['AuthMiddleware'] = None,
+                   host_session: Optional[Callable[[Any], Optional[Dict[str, Any]]]] = None
+                   ) -> 'AuthMiddleware':
     """
     Register coframe's routes on a Flask application or Blueprint.
 
@@ -715,6 +756,10 @@ def register_flask(target, coframe_app, plugins, secret_key: str, *,
         auth:            an AuthMiddleware to share with the rest of the
                          process — a server-rendered page that logs a person in
                          through the same identity passes the one it has
+        host_session:    `host_session(request) -> context | None`, how a host
+                         that logs people in itself (`client.login`) says who is
+                         in. With it, `POST {prefix}/auth/token` signs that
+                         context into a JWT; the dispatcher stays Bearer only.
 
     Returns:
         The AuthMiddleware in use, so the caller can authenticate by other
@@ -803,6 +848,14 @@ def register_flask(target, coframe_app, plugins, secret_key: str, *,
     def coframe_update_context():
         return reply(auth.update_context(g.user_context, request.json))
 
+    if host_session is not None:
+        @target.route(f'{prefix}/auth/token', methods=['POST'])
+        def coframe_host_token():
+            """A JWT for the user of the host's session (see handle_host_token)."""
+            if not request.is_json:
+                return reply(HOST_TOKEN_NOT_JSON, 415)
+            return reply(handle_host_token(host_session, request, auth))
+
     @target.route(f'{prefix}/{endpoint_prefix}/<operation>', methods=['POST'])
     @authenticated
     def coframe_dispatch(operation: str):
@@ -816,11 +869,13 @@ def register_flask(target, coframe_app, plugins, secret_key: str, *,
 def register_fastapi(target, coframe_app, plugins, secret_key: str, *,
                      prefix: Optional[str] = None,
                      endpoint_prefix: Optional[str] = None,
-                     auth: Optional['AuthMiddleware'] = None) -> 'AuthMiddleware':
+                     auth: Optional['AuthMiddleware'] = None,
+                     host_session: Optional[Callable[[Any], Optional[Dict[str, Any]]]] = None
+                     ) -> 'AuthMiddleware':
     """
     Register coframe's routes on a FastAPI application or APIRouter.
 
-    Same arguments and same four routes as `register_flask`, answering byte for
+    Same arguments and same routes as `register_flask`, answering byte for
     byte the same — which is the property the pair exists to hold.
 
     Nothing here is application-wide, and that is what lets an APIRouter be a
@@ -906,6 +961,15 @@ def register_fastapi(target, coframe_app, plugins, secret_key: str, *,
         if refused is not None:
             return refused
         return reply(auth.update_context(user, data), new_token=new_token)
+
+    if host_session is not None:
+        @target.post(f'{prefix}/auth/token', dependencies=cleanup)
+        def coframe_host_token(request: Request):
+            """A JWT for the user of the host's session (see handle_host_token)."""
+            content_type = request.headers.get('content-type', '')
+            if not content_type.startswith('application/json'):
+                return reply(HOST_TOKEN_NOT_JSON, 415)
+            return reply(handle_host_token(host_session, request, auth))
 
     @target.post(f'{prefix}/{endpoint_prefix}/{{operation}}', dependencies=cleanup)
     def coframe_dispatch(operation: str, data: dict, request: Request):
