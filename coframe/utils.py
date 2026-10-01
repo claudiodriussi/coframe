@@ -3,6 +3,7 @@ import importlib
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from sqlalchemy import inspection
+from sqlalchemy.sql import sqltypes
 
 
 def autoimport(file: str, package: str) -> None:
@@ -142,6 +143,39 @@ def secret_columns(db_table) -> frozenset:
     if db_table is None:
         return frozenset()
     return db_table.secret_columns
+
+
+_TEMPORAL_PARSERS = (
+    (sqltypes.DateTime, datetime.datetime.fromisoformat),
+    (sqltypes.Date, lambda s: datetime.date.fromisoformat(s[:10])),
+    (sqltypes.Time, datetime.time.fromisoformat),
+)
+
+
+def coerce_temporal(column, value):
+    """
+    Turn ISO strings into the date/time objects a temporal column compares with.
+
+    A filter value arrives from JSON as text. Bound as text, SQLite compares it
+    with the stored text, and the two spellings differ: stored values use a
+    space between date and time, a browser sends a 'T', so every timestamp of a
+    day sorts before that day's '2026-09-29T08:10' and ranges miss it silently.
+    Other values and columns pass through unchanged; a list is coerced item by
+    item (between, in).
+    """
+    kind = getattr(column, 'type', None)
+    if isinstance(kind, sqltypes.TypeDecorator):
+        kind = kind.impl
+    parse = next((p for t, p in _TEMPORAL_PARSERS if isinstance(kind, t)), None)
+    if parse is None:
+        return value
+
+    def one(v):
+        return parse(v) if isinstance(v, str) and v else v
+
+    if isinstance(value, (list, tuple)):
+        return [one(v) for v in value]
+    return one(value)
 
 
 def search_info(db_table) -> dict:

@@ -393,6 +393,7 @@ def build_filters(model_class, query_filters: Dict[str, Any]) -> Optional[Any]:
             raise ValueError(f"Column '{field}' is not filterable")
 
         column = getattr(model_class, field)
+        value = coframe.utils.coerce_temporal(column, value)
 
         if operator == 'eq':
             conditions.append(column == value)
