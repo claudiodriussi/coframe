@@ -21,7 +21,7 @@ from sqlalchemy.sql import Select
 from sqlalchemy.sql.elements import ClauseElement
 from sqlalchemy.ext.declarative import DeclarativeMeta
 
-from coframe.utils import coerce_temporal, search_info, secret_columns, table_definition
+from coframe.utils import coerce_temporal, search_info, secret_columns, table_definition, temporal_condition
 
 # The escape character LIKE patterns are built with. Postgres already reads a
 # backslash this way; stating it makes every backend agree, and makes the
@@ -1740,6 +1740,9 @@ class FilterBuilder:
         Raises:
             ValueError: If operator is not supported or between operator is used incorrectly
         """
+        period = temporal_condition(column, op, value)
+        if period is not None:
+            return period
         value = coerce_temporal(column, value)
         if op == 'eq':
             return column == value

@@ -2,7 +2,7 @@ import datetime
 import importlib
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
-from sqlalchemy import inspection
+from sqlalchemy import and_, inspection, or_
 from sqlalchemy.sql import sqltypes
 
 
@@ -176,6 +176,78 @@ def coerce_temporal(column, value):
     if isinstance(value, (list, tuple)):
         return [one(v) for v in value]
     return one(value)
+
+
+# Precision of an ISO datetime string, read from its length: a day, a minute
+# ('2026-09-29T08:10') or a second. Anything finer is an instant.
+_SPAN_STEPS = {
+    10: datetime.timedelta(days=1),
+    16: datetime.timedelta(minutes=1),
+    19: datetime.timedelta(seconds=1),
+}
+
+
+def _datetime_span(value):
+    """(start, end) of the period an ISO string names, end excluded; None for an instant."""
+    if not isinstance(value, str):
+        return None
+    step = _SPAN_STEPS.get(len(value))
+    if step is None:
+        return None
+    start = datetime.datetime.fromisoformat(value)
+    return start, start + step
+
+
+def temporal_condition(column, op: str, value):
+    """
+    A filter on a DateTime column whose value is a period, or None.
+
+    A value counts for its precision: '2026-09-29' is the whole day, '08:10'
+    the whole minute. Equality becomes "within the period", and each bound
+    takes the side of the period that keeps it inclusive: `le 30/9` ends where
+    1/10 starts, so nobody writes 23:59 and loses 23:59:30. The upper end is
+    always excluded, which is what makes consecutive periods tile exactly.
+
+    Returns None when the column is not a DateTime, the operator is not a
+    comparison, or a value is an instant: the caller then compares as usual.
+    """
+    kind = getattr(column, 'type', None)
+    if isinstance(kind, sqltypes.TypeDecorator):
+        kind = kind.impl
+    if not isinstance(kind, sqltypes.DateTime):
+        return None
+
+    if op == 'between':
+        if not isinstance(value, (list, tuple)) or len(value) != 2:
+            return None
+        lo, hi = _datetime_span(value[0]), _datetime_span(value[1])
+        if lo is None or hi is None:
+            return None
+        return and_(column >= lo[0], column < hi[1])
+
+    if op == 'in':
+        spans = [_datetime_span(v) for v in value] if isinstance(value, (list, tuple)) else [None]
+        if not spans or None in spans:
+            return None
+        return or_(*(and_(column >= s, column < e) for s, e in spans))
+
+    span = _datetime_span(value)
+    if span is None:
+        return None
+    start, end = span
+    if op == 'eq':
+        return and_(column >= start, column < end)
+    if op == 'ne':
+        return or_(column < start, column >= end)
+    if op == 'lt':
+        return column < start
+    if op == 'le':
+        return column < end
+    if op == 'gt':
+        return column >= end
+    if op == 'ge':
+        return column >= start
+    return None
 
 
 def search_info(db_table) -> dict:

@@ -319,6 +319,10 @@ def handle_delete(app, model_class, params: Dict[str, Any], db_table=None) -> Di
             return {"status": "error", "message": f"Deletion failed: {str(e)}", "code": 400}
 
 
+# build_filters spells some operators differently from the querybuilder
+_PERIOD_OPS = {'neq': 'ne', 'gte': 'ge', 'lte': 'le'}
+
+
 def build_filters(model_class, query_filters: Dict[str, Any]) -> Optional[Any]:
     """
     Build SQLAlchemy filter conditions from query parameters.
@@ -393,6 +397,11 @@ def build_filters(model_class, query_filters: Dict[str, Any]) -> Optional[Any]:
             raise ValueError(f"Column '{field}' is not filterable")
 
         column = getattr(model_class, field)
+        period = coframe.utils.temporal_condition(
+            column, _PERIOD_OPS.get(operator, operator), value)
+        if period is not None:
+            conditions.append(period)
+            continue
         value = coframe.utils.coerce_temporal(column, value)
 
         if operator == 'eq':

@@ -69,8 +69,41 @@ def test_datetime_single_bounds(session):
     assert ids(session, [{'start': ['lt', '2026-09-30T00:00']}]) == [1]
 
 
-def test_datetime_equality_is_an_instant(session):
+def test_datetime_equality_is_the_minute(session):
     assert ids(session, [{'start': '2026-09-30T09:00'}]) == [2]
+    assert ids(session, [{'start': '2026-09-29T18:15'}]) == [1]   # stored 18:15:18
+
+
+# ── A value counts for its precision: a day, a minute ──────────────────────
+
+def test_date_on_datetime_is_the_whole_day(session):
+    assert ids(session, [{'start': '2026-09-29'}]) == [1]
+    assert ids(session, [{'start': ['ne', '2026-09-29']}]) == [2, 3]
+
+
+def test_range_of_days_includes_the_last_day(session):
+    assert ids(session, [{'start': ['between', '2026-09-29', '2026-09-30']}]) == [1, 2]
+
+
+def test_one_sided_bounds_by_day(session):
+    assert ids(session, [{'start': ['le', '2026-09-30']}]) == [1, 2]
+    assert ids(session, [{'start': ['gt', '2026-09-30']}]) == [3]
+    assert ids(session, [{'start': ['ge', '2026-09-30']}]) == [2, 3]
+    assert ids(session, [{'start': ['lt', '2026-09-30']}]) == [1]
+
+
+def test_upper_minute_is_inclusive(session):
+    # 18:15 as the end keeps 18:15:18: no 23:59 trick needed for the end of a day
+    assert ids(session, [{'start': ['between', '2026-09-29T08:00', '2026-09-29T18:15']}]) == [1]
+    assert ids(session, [{'start': ['between', '2026-09-29T08:00', '2026-09-29T18:14']}]) == []
+
+
+def test_days_in_a_list(session):
+    assert ids(session, [{'start': ['in', ['2026-09-29', '2026-10-01']]}]) == [1, 3]
+
+
+def test_instant_compares_exactly(session):
+    assert ids(session, [{'start': '2026-09-29T18:15:18.000001'}]) == []
 
 
 def test_date_and_time_columns(session):
@@ -87,3 +120,5 @@ def test_db_endpoint_filters(session):
     clause = build_filters(Visit, {'start__gte': '2026-09-29T08:10', 'start__lte': '2026-09-30T23:10'})
     found = session.query(Visit.id).filter(clause).order_by(Visit.id).all()
     assert [r[0] for r in found] == [1, 2]
+    clause = build_filters(Visit, {'start': '2026-09-30'})
+    assert [r[0] for r in session.query(Visit.id).filter(clause)] == [2]
